@@ -22,7 +22,6 @@ graph TD
         KtorServer -->|Exposed ORM| PostgreSQL[(PostgreSQL Database)]
         KtorServer -->|Local File System| Disk[Uploaded Files Directory]
     end
-end
 ```
 
 ---
