@@ -8,7 +8,7 @@ CollabSphere is a premium, local-first team collaboration platform consisting of
 
 ```mermaid
 graph TD
-    subgraph Android Client (Local-First)
+    subgraph "Android Client (Local-First)"
         UI[Jetpack Compose UI] --> VM[ViewModels]
         VM --> Repo[Repositories]
         Repo --> Room[(Room Local SQLite)]
@@ -16,7 +16,7 @@ graph TD
         Repo --> KtorClient[Ktor Client REST/WS]
     end
 
-    subgraph Backend Services
+    subgraph "Backend Services"
         KtorClient -->|REST / WebSocket| KtorServer[Ktor Backend Server]
         WorkMgr -->|REST| KtorServer
         KtorServer -->|Exposed ORM| PostgreSQL[(PostgreSQL Database)]
