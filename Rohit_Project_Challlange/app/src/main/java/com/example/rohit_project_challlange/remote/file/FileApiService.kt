@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.file
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.file.FileResponse
 import com.example.rohit_project_challlange.dto.file.FileSyncDto
 import io.ktor.client.*
@@ -12,7 +13,7 @@ import java.io.File
 
 class FileApiService(private val client: HttpClient) {
 
-    private val baseUrl = "http://10.238.3.93:8080/api/file"
+    private val baseUrl = "${AppConfig.BASE_URL}/api/file"
 
     suspend fun uploadFile(
         userId: Int,

@@ -41,7 +41,7 @@ class DmSyncWorker(
             val connectUserId = if (senderId != -1) senderId else savedUserId
 
             if (connectUserId != -1) {
-                apiService.connect("http://10.238.3.93:8080", connectUserId.toLong())
+                apiService.connect(com.example.rohit_project_challlange.AppConfig.BASE_URL, connectUserId.toLong())
             }
 
             when (actionType) {

@@ -35,11 +35,7 @@ class DmApiService(
             session = null
         }
 
-        val cleanBaseUrl = if (baseUrl.startsWith("http://10.0.2.2")) {
-            "http://10.238.3.93:8080"
-        } else {
-            baseUrl
-        }
+        val cleanBaseUrl = baseUrl
 
         val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://")
 

@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.task
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.task.TaskRequest
 import com.example.rohit_project_challlange.dto.task.TaskResponse
 import com.example.rohit_project_challlange.dto.task.TaskSyncDto
@@ -10,7 +11,7 @@ import io.ktor.http.*
 
 class TaskApiService(private val client: HttpClient) {
 
-    private val baseUrl = "http://10.238.3.93:8080/api/tasks"
+    private val baseUrl = "${AppConfig.BASE_URL}/api/tasks"
 
     suspend fun createTask(createdByUserId: Int, request: TaskRequest): TaskResponse {
         return client.post(baseUrl) {

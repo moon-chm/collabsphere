@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.note
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.notes.NotesRequest
 import com.example.rohit_project_challlange.dto.notes.NotesResponse
 import com.example.rohit_project_challlange.dto.notes.NotesSyncDto
@@ -11,7 +12,7 @@ import io.ktor.http.*
 
 class NoteApiService(private val client: HttpClient) {
 
-    private val baseUrl = "http://10.238.3.93:8080/api/notes"
+    private val baseUrl = "${AppConfig.BASE_URL}/api/notes"
 
     suspend fun createNotes(request: NotesRequest): NotesResponse {
         return client.post(baseUrl) {

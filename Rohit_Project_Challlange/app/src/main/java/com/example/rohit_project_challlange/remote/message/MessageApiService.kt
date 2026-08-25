@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.message
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.message.MessageRequest
 import com.example.rohit_project_challlange.dto.message.MessageResponse
 import com.example.rohit_project_challlange.dto.message.MessageSyncDto
@@ -11,7 +12,7 @@ import io.ktor.http.*
 
 class MessageApiService(private val client: HttpClient) {
 
-    private val baseUrl = "http://10.238.3.93:8080/api/message"
+    private val baseUrl = "${AppConfig.BASE_URL}/api/message"
 
     suspend fun createMessage(request: MessageRequest): MessageResponse {
         return client.post(baseUrl) {

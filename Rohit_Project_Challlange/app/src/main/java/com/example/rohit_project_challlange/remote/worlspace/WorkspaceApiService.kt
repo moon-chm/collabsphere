@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.worlspace
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.workspace.AddMemberRequest
 import com.example.rohit_project_challlange.dto.workspace.MemberResponse
 import com.example.rohit_project_challlange.dto.workspace.WorkspaceRequest
@@ -13,7 +14,7 @@ import io.ktor.http.*
 
 class WorkspaceApiService(
     private val client: HttpClient,
-    private val baseUrl: String = "http://10.238.3.93:8080/api/workspace"
+    private val baseUrl: String = "${AppConfig.BASE_URL}/api/workspace"
 ) {
 
     suspend fun createWorkspace(

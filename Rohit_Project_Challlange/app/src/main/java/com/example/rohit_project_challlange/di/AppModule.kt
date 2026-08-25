@@ -38,6 +38,7 @@ import com.example.rohit_project_challlange.model.task.TaskSyncWorker
 import com.example.rohit_project_challlange.model.workspace.WorkspaceSyncWorker
 import com.example.rohit_project_challlange.remote.file.FileApiService
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -69,12 +70,18 @@ val databaseModule = module {
 val networkModule = module {
     single(named("RegularHttpClient")) {
         HttpClient(OkHttp) {
+            expectSuccess = false
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
                     isLenient = true
                     coerceInputValues = true
                 })
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 15000
+                socketTimeoutMillis = 15000
             }
         }
     }

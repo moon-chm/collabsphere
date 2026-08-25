@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.login
 
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.login.LoginRequest
 import com.example.rohit_project_challlange.dto.login.RegisterRequest
 import com.example.rohit_project_challlange.dto.login.LoginResponse
@@ -8,6 +9,7 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,7 +17,7 @@ import kotlinx.coroutines.withContext
 class LoginApiService(private val client: HttpClient) {
 
     suspend fun login(request: LoginRequest): LoginResponse = withContext(Dispatchers.IO) {
-        client.post("http://10.238.3.93:8080/api/login") {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/login") {
             contentType(ContentType.Application.Json)
             setBody(request)
             timeout {
@@ -23,11 +25,18 @@ class LoginApiService(private val client: HttpClient) {
                 connectTimeoutMillis = 15000
                 socketTimeoutMillis = 15000
             }
-        }.body()
+        }
+
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Login failed (${response.status})" })
+        }
     }
 
     suspend fun register(request: RegisterRequest): LoginResponse = withContext(Dispatchers.IO) {
-        client.post("http://10.238.3.93:8080/api/register") {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/register") {
             contentType(ContentType.Application.Json)
             setBody(request)
             timeout {
@@ -35,6 +44,13 @@ class LoginApiService(private val client: HttpClient) {
                 connectTimeoutMillis = 15000
                 socketTimeoutMillis = 15000
             }
-        }.body()
+        }
+
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Registration failed (${response.status})" })
+        }
     }
 }

@@ -1091,7 +1091,8 @@ fun Application.configureRouting() {
                     physicalFile.writeBytes(fileBytes)
 
                     val generatedFileLocation = physicalFile.absolutePath
-                    val generatedUrl = "http://10.238.3.93:8080/api/file/download/$uniqueFileName"
+                    val host = call.request.headers["Host"] ?: "127.0.0.1:8080"
+                    val generatedUrl = "http://$host/api/file/download/$uniqueFileName"
                     val fileSize = physicalFile.length()
                     val finalMimeType = contentType ?: "application/octet-stream"
                     val currentTimeMil = System.currentTimeMillis()

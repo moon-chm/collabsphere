@@ -1,5 +1,6 @@
 package com.example.rohit_project_challlange.remote.channel
 
+import com.example.rohit_project_challlange.AppConfig
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.timeout
@@ -11,7 +12,7 @@ import com.example.rohit_project_challlange.dto.channel.ChannelSyncDto
 
 class ChannelApiService(private val client: HttpClient) {
 
-    private val baseUrl = "http://10.238.3.93:8080/api/channels"
+    private val baseUrl = "${AppConfig.BASE_URL}/api/channels"
 
     suspend fun createChannel(request: ChannelRequest): ChannelResponse {
         return client.post(baseUrl) {

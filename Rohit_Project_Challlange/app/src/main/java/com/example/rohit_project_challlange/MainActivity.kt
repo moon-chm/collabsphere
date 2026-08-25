@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(savedUserId) {
                         if (savedUserId != -1) {
                             dashboardViewModel.updateUserId(savedUserId)
-                            dmViewModel.initWebSocketConnection("http://10.238.3.93:8080", savedUserId.toLong())
+                            dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, savedUserId.toLong())
                         }
                     }
 
@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
                         if (loggedInUserId != 0L && loggedInUserId.toInt() != savedUserId) {
                             userPreferences.saveUserId(loggedInUserId.toInt())
                             dashboardViewModel.updateUserId(loggedInUserId.toInt())
-                            dmViewModel.initWebSocketConnection("http://10.238.3.93:8080", loggedInUserId)
+                            dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, loggedInUserId)
                         }
                     }
 
