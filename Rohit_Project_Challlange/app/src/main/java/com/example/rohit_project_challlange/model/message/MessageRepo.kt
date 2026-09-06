@@ -26,8 +26,11 @@ class MessageRepo(
     private val dataStore: DataStore<Preferences>
 ) {
     companion object {
-        private val LAST_SYNC_KEY = longPreferencesKey("messages_last_sync_time")
+        private const val LAST_SYNC_KEY_PREFIX = "messages_last_sync_time_"
     }
+
+    private fun getSyncKey(workspaceId: Int, channelId: Int) =
+        longPreferencesKey("${LAST_SYNC_KEY_PREFIX}${workspaceId}_$channelId")
 
     suspend fun sendMessageToUser(message: MessageEntity): Long = withContext(Dispatchers.IO) {
         return@withContext try {
@@ -136,7 +139,8 @@ class MessageRepo(
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
         while (isActive) {
             try {
-                val lastSyncTime = dataStore.data.map { it[LAST_SYNC_KEY] ?: 0L }.first()
+                val syncKey = getSyncKey(workspaceId, channelId)
+                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
                 val updates = apiService.getMessageUpdates(workspaceId, channelId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
@@ -164,7 +168,7 @@ class MessageRepo(
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
-                        preferences[LAST_SYNC_KEY] = newestTimestamp
+                        preferences[syncKey] = newestTimestamp
                     }
                 }
             } catch (e: Exception) {

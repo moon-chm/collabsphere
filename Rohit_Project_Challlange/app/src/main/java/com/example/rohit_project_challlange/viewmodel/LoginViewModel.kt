@@ -35,9 +35,19 @@ class LoginViewModel(
     init {
         viewModelScope.launch {
             val savedId = userPreferences.userIdFlow.first()
+            val savedName = userPreferences.userNameFlow.first()
+            val savedEmail = userPreferences.userEmailFlow.first()
             if (savedId != -1) {
                 _loggedInUserId.value = savedId.toLong()
+                _loggedInUserName.value = savedName
+                _loggedInUserEmail.value = savedEmail
                 _isLoggedIn.value = true
+
+                val localUser = repo.getUserById(savedId)
+                if (localUser != null) {
+                    if (savedName.isEmpty()) _loggedInUserName.value = localUser.userName
+                    if (savedEmail.isEmpty()) _loggedInUserEmail.value = localUser.email
+                }
             }
         }
     }
@@ -59,7 +69,7 @@ class LoginViewModel(
         viewModelScope.launch {
             repo.loginRemote(trimmedEmail, trimmedPassword)
                 .onSuccess { user ->
-                    userPreferences.saveUserId(user.id)
+                    userPreferences.saveUserSession(user.id, user.userName, user.email)
                     _loggedInUserId.value = user.id.toLong()
                     _loggedInUserName.value = user.userName
                     _loggedInUserEmail.value = user.email
@@ -104,7 +114,7 @@ class LoginViewModel(
         viewModelScope.launch {
             repo.registerRemote(trimmedEmail, trimmedUserName, trimmedPassword)
                 .onSuccess { userResponse ->
-                    userPreferences.saveUserId(userResponse.id)
+                    userPreferences.saveUserSession(userResponse.id, userResponse.userName, userResponse.email)
                     _loggedInUserId.value = userResponse.id.toLong()
                     _loggedInUserName.value = userResponse.userName
                     _loggedInUserEmail.value = userResponse.email
@@ -130,6 +140,9 @@ class LoginViewModel(
 
     fun updateLoggedInUserName(newName: String) {
         _loggedInUserName.value = newName
+        viewModelScope.launch {
+            userPreferences.updateUserName(newName)
+        }
     }
 
     fun clearLoginStatus() {

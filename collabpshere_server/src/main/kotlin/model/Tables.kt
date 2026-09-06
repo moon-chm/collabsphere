@@ -37,7 +37,7 @@ object ChannelsTable : Table("channels") {
     val channelName = varchar("channel_name", 255)
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
     val description = text("description")
-    val updatedAt = long("updated_at") 
+    val updatedAt = long("updated_at").default(System.currentTimeMillis()) 
     val isDeleted = bool("is_deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)
@@ -69,7 +69,7 @@ object MessageTable : Table("message") {
     val content = text("content")
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(0L)
+    val updatedAt = long("updated_at").default(System.currentTimeMillis())
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -81,7 +81,7 @@ object NotesTable : Table("notes") {
     val notesName = varchar("notes_name", 255)
     val notesDescription = text("description")
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(0L)
+    val updatedAt = long("updated_at").default(System.currentTimeMillis())
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -95,7 +95,7 @@ object TasksTable : Table("task") {
     val taskDescription = text("task_description")
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(0L)
+    val updatedAt = long("updated_at").default(System.currentTimeMillis())
 
     override val primaryKey = PrimaryKey(id)
 }

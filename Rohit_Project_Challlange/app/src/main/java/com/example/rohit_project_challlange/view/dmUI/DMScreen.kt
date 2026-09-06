@@ -33,7 +33,7 @@ fun DMScreen(
     viewModel: DmViewModel,
     workspaceId: Int,
     currentUserId: Long,
-    baseUrl: String = "${com.example.rohit_project_challlange.AppConfig.BASE_URL}/api/chat",
+    baseUrl: String = com.example.rohit_project_challlange.AppConfig.BASE_URL,
     onExitModule: () -> Unit
 ) {
     val workspaceMembers by viewModel.workspaceMembers.collectAsStateWithLifecycle()

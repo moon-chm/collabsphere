@@ -21,3 +21,11 @@ data class RegisterRequest(
     val password: String,
     val userName: String
 )
+
+@Serializable
+data class UpdateProfileRequest(
+    val userId: Int,
+    val userName: String,
+    val currentPassword: String? = null,
+    val newPassword: String? = null
+)

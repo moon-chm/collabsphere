@@ -60,10 +60,6 @@ fun RegistrationScreen(
             isLoading = false
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viewModel.clearLoginStatus()
-
-            if (it.contains("successful", ignoreCase = true)) {
-                onNavigateToLogin()
-            }
         }
     }
 

@@ -26,8 +26,11 @@ class ChannelRepo(
     private val dataStore: DataStore<Preferences>
 ) {
     companion object {
-        private val LAST_SYNC_KEY = longPreferencesKey("channels_last_sync_time")
+        private const val LAST_SYNC_KEY_PREFIX = "channels_last_sync_time_"
     }
+
+    private fun getSyncKey(workspaceId: Int) =
+        longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
 
     suspend fun addchanneltoscreen(
         workspaceId: Int,
@@ -107,7 +110,8 @@ class ChannelRepo(
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         while (isActive) {
             try {
-                val lastSyncTime = dataStore.data.map { it[LAST_SYNC_KEY] ?: 0L }.first()
+                val syncKey = getSyncKey(workspaceId)
+                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
                 val updates = apiService.getChannelUpdates(workspaceId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
@@ -132,7 +136,7 @@ class ChannelRepo(
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
-                        preferences[LAST_SYNC_KEY] = newestTimestamp
+                        preferences[syncKey] = newestTimestamp
                     }
                 }
             } catch (e: Exception) {

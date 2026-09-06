@@ -107,6 +107,41 @@ fun Application.configureRouting() {
             }
         }
 
+        post("/api/user/profile") {
+            try {
+                val request = call.receive<UpdateProfileRequest>()
+                val isSuccess = dbQuery {
+                    val userRow = UsersTable.selectAll().where { UsersTable.id eq request.userId }.singleOrNull()
+                    if (userRow == null) {
+                        false
+                    } else {
+                        if (!request.newPassword.isNullOrBlank() && !request.currentPassword.isNullOrBlank()) {
+                            if (userRow[UsersTable.password] != request.currentPassword) {
+                                return@dbQuery false
+                            }
+                            UsersTable.update({ UsersTable.id eq request.userId }) {
+                                it[username] = request.userName
+                                it[password] = request.newPassword
+                            }
+                        } else {
+                            UsersTable.update({ UsersTable.id eq request.userId }) {
+                                it[username] = request.userName
+                            }
+                        }
+                        true
+                    }
+                }
+
+                if (isSuccess) {
+                    call.respond(HttpStatusCode.OK, true)
+                } else {
+                    call.respond(HttpStatusCode.BadRequest, false)
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, false)
+            }
+        }
+
         route("/api/workspace") {
 
             post("/create") {
@@ -305,10 +340,14 @@ fun Application.configureRouting() {
             delete("/delete") {
                 try {
                     val workspaceId = call.request.queryParameters["workspaceId"]?.toIntOrNull()
-                        ?: return@delete call.respond(
+                    val workspaceName = call.request.queryParameters["workspaceName"]
+
+                    if (workspaceId == null && workspaceName.isNullOrBlank()) {
+                        return@delete call.respond(
                             HttpStatusCode.BadRequest,
-                            "Missing or invalid workspaceId"
+                            "Missing workspaceId or workspaceName"
                         )
+                    }
 
                     val userId = call.request.queryParameters["userId"]?.toIntOrNull()
                         ?: return@delete call.respond(
@@ -323,11 +362,17 @@ fun Application.configureRouting() {
                         )
 
                     val updatedRows = dbQuery {
-                        WorkspacesTable.update({
+                        val condition = if (workspaceId != null) {
                             (WorkspacesTable.id eq workspaceId) and
                                     (WorkspacesTable.userId eq userId) and
                                     (WorkspacesTable.workspacePassword eq password)
-                        }) {
+                        } else {
+                            (WorkspacesTable.workspaceName eq workspaceName!!) and
+                                    (WorkspacesTable.userId eq userId) and
+                                    (WorkspacesTable.workspacePassword eq password)
+                        }
+
+                        WorkspacesTable.update({ condition }) {
                             it[isDeleted] = true
                             it[updatedAt] = System.currentTimeMillis()
                         }
@@ -1081,7 +1126,7 @@ fun Application.configureRouting() {
                         return@post
                     }
 
-                    val uploadDir = File("E:\\Rohit kumbhar\\collabpshere_server\\local_files_upload")
+                    val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
                     if (!uploadDir.exists()) {
                         uploadDir.mkdirs()
                     }
@@ -1091,8 +1136,9 @@ fun Application.configureRouting() {
                     physicalFile.writeBytes(fileBytes)
 
                     val generatedFileLocation = physicalFile.absolutePath
+                    val scheme = call.request.headers["X-Forwarded-Proto"] ?: "http"
                     val host = call.request.headers["Host"] ?: "127.0.0.1:8080"
-                    val generatedUrl = "http://$host/api/file/download/$uniqueFileName"
+                    val generatedUrl = "$scheme://$host/api/file/download/$uniqueFileName"
                     val fileSize = physicalFile.length()
                     val finalMimeType = contentType ?: "application/octet-stream"
                     val currentTimeMil = System.currentTimeMillis()
@@ -1206,7 +1252,7 @@ fun Application.configureRouting() {
             get("/download/{fileName}") {
                 try {
                     val fileNameParam = call.parameters["fileName"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing filename")
-                    val uploadDir = File("E:\\Rohit kumbhar\\collabpshere_server\\local_files_upload")
+                    val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
                     val file = File(uploadDir, fileNameParam)
 
                     if (file.exists()) {
@@ -1337,6 +1383,17 @@ fun Application.configureRouting() {
                                             senderAcknowledgementPayload
                                         )
                                         this.send(Frame.Text(senderJson))
+                                    }
+                                } else if (dmDto.action == "DELETE_MESSAGE") {
+                                    val messageId = dmDto.id
+                                    if (messageId != null && messageId != 0) {
+                                        dbQuery {
+                                            DirectMessagesTable.deleteWhere { DirectMessagesTable.id eq messageId }
+                                        }
+                                    }
+                                    val receiverSession = activeDmSessions[dmDto.receiverId.toLong()]
+                                    if (receiverSession != null && receiverSession.isActive) {
+                                        receiverSession.send(Frame.Text(receivedText))
                                     }
                                 }
                             } catch (_: Exception) {
