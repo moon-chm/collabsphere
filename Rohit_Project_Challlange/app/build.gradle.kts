@@ -55,6 +55,11 @@ room {
 dependencies {
     val room_ver = "2.7.2"
     val datastore = "1.1.2"
+    val glance_ver = "1.1.1"
+
+    // ── Jetpack Glance (home screen widgets with Compose syntax) ──
+    implementation("androidx.glance:glance-appwidget:$glance_ver")
+    implementation("androidx.glance:glance-material3:$glance_ver")
     val ktor_version = "3.1.0"
     val work_version = "2.10.2"
 
