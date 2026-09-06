@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: collabsphere-server
+    runtime: docker
+    rootDir: collabpshere_server
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: collabsphere-db
+          property: connectionString
+      - key: PORT
+        value: 8080
+      - key: UPLOAD_DIR
+        value: /app/local_files_upload
+
+databases:
+  - name: collabsphere-db
+    databaseName: Collabsphere
+    user: collabsphere_user
+    plan: free
+    region: oregon
