@@ -16,7 +16,7 @@ services:
 
 databases:
   - name: collabsphere-db
-    databaseName: Collabsphere
+    databaseName: collabsphere
     user: collabsphere_user
     plan: free
     region: oregon
