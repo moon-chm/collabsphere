@@ -4,6 +4,12 @@ import android.widget.Toast
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +41,7 @@ import com.example.rohit_project_challlange.view.WorkspaceUI.WorkspaceDetailedSc
 import com.example.rohit_project_challlange.view.WorkspaceUI.WorkspaceAction
 import com.example.rohit_project_challlange.view.MessageUI.MessageScreen
 import com.example.rohit_project_challlange.view.dmUI.DMScreen
+import com.example.rohit_project_challlange.view.OnboardingScreen
 import com.example.rohit_project_challlange.viewmodel.DashboardViewModel
 import com.example.rohit_project_challlange.viewmodel.LoginViewModel
 import com.example.rohit_project_challlange.viewmodel.channel.ChannelViewModel
@@ -86,7 +93,9 @@ fun AppNavigation(
                     }
                 }
             } else {
-                if (currentRoute != "login" && currentRoute != "register" && currentRoute != null) {
+                if (currentRoute != "login" && currentRoute != "register"
+                    && currentRoute != "onboarding" && currentRoute != null
+                ) {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
@@ -100,8 +109,44 @@ fun AppNavigation(
 
         NavHost(
             navController = navController,
-            startDestination = startDestination
+            startDestination = startDestination,
+            enterTransition = {
+                slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(220))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                    targetOffset = { it / 4 }
+                ) + fadeOut(animationSpec = tween(220))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.End,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                    initialOffset = { -it / 4 }
+                ) + fadeIn(animationSpec = tween(200))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.End,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(200))
+            }
         ) {
+            composable("onboarding") {
+                OnboardingScreen(
+                    onFinish = {
+                        navController.navigate("login") {
+                            popUpTo("onboarding") { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             composable("login") {
                 LoginScreen(
                     viewModel = loginViewModel,
@@ -113,14 +158,36 @@ fun AppNavigation(
                 )
             }
 
-            composable("register") {
+            composable(
+                route = "register",
+                enterTransition = {
+                    slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        animationSpec = tween(280, easing = FastOutSlowInEasing)
+                    ) + fadeIn(animationSpec = tween(200))
+                },
+                popExitTransition = {
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        animationSpec = tween(280, easing = FastOutSlowInEasing)
+                    ) + fadeOut(animationSpec = tween(200))
+                }
+            ) {
                 RegistrationScreen(
                     viewModel = loginViewModel,
                     onNavigateToLogin = { navController.popBackStack() }
                 )
             }
 
-            composable("dashboard") {
+            composable(
+                route = "dashboard",
+                enterTransition = {
+                    fadeIn(animationSpec = tween(350)) + scaleIn(
+                        initialScale = 0.95f,
+                        animationSpec = tween(350, easing = FastOutSlowInEasing)
+                    )
+                }
+            ) {
                 DashboardScreen(
                     viewModel = dashboardViewModel,
                     onNavigateToWorkspace = {
