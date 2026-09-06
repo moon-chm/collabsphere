@@ -2,10 +2,9 @@ package com.example.rohit_project_challlange
 
 object AppConfig {
     /**
-     * Production Cloud URL on Render (update once deployed to Render)
-     * e.g., "https://collabsphere-server.onrender.com"
+     * Production Cloud URL on Render
      */
-    const val PRODUCTION_BASE_URL = "https://collabsphere-server.onrender.com"
+    const val PRODUCTION_BASE_URL = "https://collabsphere-server-qtke.onrender.com"
 
     /**
      * Local Development Server IP:
@@ -21,7 +20,7 @@ object AppConfig {
      * Set to TRUE to connect to Render Cloud Production.
      * Set to FALSE to connect to Local Laptop Development server.
      */
-    const val USE_PRODUCTION_BACKEND = false
+    const val USE_PRODUCTION_BACKEND = true
 
     val BASE_URL: String
         get() = if (USE_PRODUCTION_BACKEND) PRODUCTION_BASE_URL else LOCAL_DEV_BASE_URL
