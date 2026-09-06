@@ -26,11 +26,9 @@ interface TaskDao {
     @Query("UPDATE task SET id = :newId WHERE id = :oldId")
     suspend fun updateTaskId(oldId: Int, newId: Int)
 
-    @Query("""
-        SELECT DISTINCT u.* FROM users u 
-        LEFT JOIN workspace_members wm ON u.id = wm.userId 
-        LEFT JOIN task t ON u.id = t.assignedToUserId OR u.id = t.createdByUserId
-        WHERE wm.workspaceId = :workspaceId OR t.workspaceId = :workspaceId
-    """)
+    @Query("SELECT DISTINCT u.* FROM users u \n        LEFT JOIN workspace_members wm ON u.id = wm.userId \n        LEFT JOIN task t ON u.id = t.assignedToUserId OR u.id = t.createdByUserId\n        WHERE wm.workspaceId = :workspaceId OR t.workspaceId = :workspaceId\n    ")
     fun getWorkspaceMembers(workspaceId: Int): Flow<List<UserEntity>>
+
+    @Query("SELECT * FROM task WHERE createdByUserId = :userId OR assignedToUserId = :userId ORDER BY id DESC")
+    fun getTasksByUserAllWorkspaces(userId: Int): Flow<List<TaskEntity>>
 }

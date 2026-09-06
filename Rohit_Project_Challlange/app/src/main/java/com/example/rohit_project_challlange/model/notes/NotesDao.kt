@@ -26,4 +26,7 @@ interface NotesDao {
 
     @Update
     suspend fun updatenotes(notes: NotesEntity)
+
+    @Query("SELECT * FROM notes WHERE userId = :userId ORDER BY id DESC")
+    fun getNotesByUser(userId: Int): Flow<List<NotesEntity>>
 }

@@ -61,6 +61,45 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ── CollabSphere Home Screen Widgets ── -->
+
+        <receiver
+            android:name=".widget.CollabTaskWidgetReceiver"
+            android:exported="true"
+            android:label="CollabSphere Tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tasks_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.CollabNotesWidgetReceiver"
+            android:exported="true"
+            android:label="CollabSphere Notes">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_notes_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.CollabQuickActionsWidgetReceiver"
+            android:exported="true"
+            android:label="CollabSphere Quick Actions">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quick_actions_info" />
+        </receiver>
+
     </application>
 
 </manifest>

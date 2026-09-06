@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Collabsphere</string>
+    <string name="widget_tasks_description">CollabSphere Tasks — see your pending tasks at a glance</string>
+    <string name="widget_notes_description">CollabSphere Notes — quickly access your recent notes</string>
+    <string name="widget_quick_actions_description">CollabSphere Quick Actions — jump into any section instantly</string>
 </resources>

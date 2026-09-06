@@ -4,8 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import com.example.rohit_project_challlange.ui.theme.CollabSphereTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
+            CollabSphereTheme(darkTheme = false) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val savedUserId by userPreferences.userIdFlow.collectAsStateWithLifecycle(initialValue = -1)
                     val loggedInUserId by loginViewModel.loggedInUserId.collectAsStateWithLifecycle(initialValue = 0L)
@@ -59,10 +59,17 @@ class MainActivity : ComponentActivity() {
                         parametersOf(currentUserId)
                     }
 
-                    val startDestination = if (savedUserId != -1 || loggedInUserId != 0L) {
-                        "dashboard"
-                    } else {
-                        "login"
+                    val widgetDestination = intent?.getStringExtra("widget_destination")
+
+                    val startDestination = when {
+                        // Widget deep-link overrides — map to the workspace detail route
+                        // (user must already be logged in for widgets to send these)
+                        widgetDestination == "tasks"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
+                        widgetDestination == "notes"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
+                        widgetDestination == "dm"     && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
+                        widgetDestination == "files"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
+                        savedUserId != -1 || loggedInUserId != 0L -> "dashboard"
+                        else -> "onboarding"
                     }
 
                     LaunchedEffect(savedUserId) {
