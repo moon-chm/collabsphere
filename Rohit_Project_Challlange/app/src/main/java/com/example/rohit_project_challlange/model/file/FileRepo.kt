@@ -26,8 +26,11 @@ class FileRepo(
 ) {
 
     companion object {
-        private val LAST_FILE_SYNC_KEY = longPreferencesKey("files_last_sync_time")
+        private const val LAST_FILE_SYNC_KEY_PREFIX = "files_last_sync_time_"
     }
+
+    private fun getSyncKey(workspaceId: Int) =
+        longPreferencesKey("${LAST_FILE_SYNC_KEY_PREFIX}$workspaceId")
 
     suspend fun uploadfilestoscreen(local_files: FileEntity): Long = withContext(Dispatchers.IO) {
         val path = local_files.localpath
@@ -134,7 +137,8 @@ class FileRepo(
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         while (isActive) {
             try {
-                val lastSyncTime = dataStore.data.map { it[LAST_FILE_SYNC_KEY] ?: 0L }.first()
+                val syncKey = getSyncKey(workspaceId)
+                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
 
                 val updates = fileApiService.getFileUpdates(workspaceId, lastSyncTime)
 
@@ -161,7 +165,7 @@ class FileRepo(
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
-                        preferences[LAST_FILE_SYNC_KEY] = newestTimestamp
+                        preferences[syncKey] = newestTimestamp
                     }
                 }
             } catch (e: Exception) {

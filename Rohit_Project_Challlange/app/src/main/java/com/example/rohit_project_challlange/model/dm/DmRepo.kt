@@ -65,6 +65,14 @@ class DmRepo(
     }
 
     suspend fun saveIncomingDm(message: DmDto, currentUserId: Int) {
+        if (message.action == "DELETE_MESSAGE") {
+            val id = message.id
+            if (id != null && id != 0) {
+                dmDao.deleteDm(id, message.workspaceId)
+            }
+            return
+        }
+
         if (message.action == "HISTORY") {
             val historyEntity = DmEntity(
                 id = if (message.id == null || message.id == 0) message.hashCode() else message.id,

@@ -2,12 +2,28 @@ package com.example.rohit_project_challlange
 
 object AppConfig {
     /**
-     * Set this to:
-     * - "10.0.2.2" if you are running the app on the Android Emulator
-     * - "192.168.83.101" (your current laptop Wi-Fi IP) if you are running the app on a physical device
+     * Production Cloud URL on Render (update once deployed to Render)
+     * e.g., "https://collabsphere-server.onrender.com"
      */
-    const val SERVER_IP = "192.168.83.101"
-    const val SERVER_PORT = "8080"
+    const val PRODUCTION_BASE_URL = "https://collabsphere-server.onrender.com"
 
-    const val BASE_URL = "http://$SERVER_IP:$SERVER_PORT"
+    /**
+     * Local Development Server IP:
+     * - "127.0.0.1" / "localhost" if using ADB reverse port forwarding (adb reverse tcp:8080 tcp:8080)
+     * - "10.0.2.2" if using Android Studio Emulator
+     * - "192.168.x.x" if using physical device over local Wi-Fi without ADB reverse
+     */
+    const val LOCAL_DEV_IP = "127.0.0.1"
+    const val LOCAL_DEV_PORT = "8080"
+    const val LOCAL_DEV_BASE_URL = "http://$LOCAL_DEV_IP:$LOCAL_DEV_PORT"
+
+    /**
+     * Set to TRUE to connect to Render Cloud Production.
+     * Set to FALSE to connect to Local Laptop Development server.
+     */
+    const val USE_PRODUCTION_BACKEND = false
+
+    val BASE_URL: String
+        get() = if (USE_PRODUCTION_BACKEND) PRODUCTION_BASE_URL else LOCAL_DEV_BASE_URL
 }
+

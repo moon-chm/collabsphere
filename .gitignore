@@ -20,3 +20,7 @@ local.properties
 .DS_Store
 Thumbs.db
 test_download.docx
+.vscode/
+**/local_files_upload/*
+!**/local_files_upload/.gitkeep
+

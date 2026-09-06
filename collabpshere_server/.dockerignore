@@ -1,0 +1,8 @@
+.gradle
+build
+.idea
+.kotlin
+.vscode
+local_files_upload
+*.log
+local.properties

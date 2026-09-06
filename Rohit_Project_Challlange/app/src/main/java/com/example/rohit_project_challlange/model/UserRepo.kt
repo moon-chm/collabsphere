@@ -11,11 +11,6 @@ class UserRepo(
 ) {
 
     suspend fun registerRemote(email: String, username: String, pass: String): Result<LoginResponse> {
-        val existingLocalUser = userDao.getUserByEmail(email)
-        if (existingLocalUser != null) {
-            return Result.failure(Exception("User already exists locally"))
-        }
-
         return try {
             val apiResponse: LoginResponse = apiService.register(RegisterRequest(email, pass, username))
 
@@ -54,9 +49,13 @@ class UserRepo(
                     Result.failure(Exception("Invalid password"))
                 }
             } else {
-                Result.failure(Exception("User not found locally or on server: ${e.localizedMessage}"))
+                Result.failure(Exception(e.message ?: "Authentication failed"))
             }
         }
+    }
+
+    suspend fun getUserById(userId: Int): UserEntity? {
+        return userDao.getUserById(userId)
     }
 
     suspend fun updateProfile(
@@ -67,15 +66,37 @@ class UserRepo(
         newPassword: String?
     ): Boolean {
         return try {
-            val user = userDao.getUserByEmail(userEmail)
+            val user = userDao.getUserByEmail(userEmail) ?: userDao.getUserById(userId)
             if (user == null || user.id != userId) return false
 
             if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
-                if (user.password != currentPassword) return false
+                if (user.password.isNotEmpty() && user.password != currentPassword) return false
+            }
+
+            val remoteSuccess = try {
+                apiService.updateProfile(
+                    com.example.rohit_project_challlange.dto.login.UpdateProfileRequest(
+                        userId = userId,
+                        userName = newName,
+                        currentPassword = currentPassword,
+                        newPassword = newPassword
+                    )
+                )
+            } catch (e: Exception) {
+                // If offline / network unreachable, allow local cache update
+                true
+            }
+
+            if (!remoteSuccess) {
+                return false
+            }
+
+            if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
                 userDao.updateUserProfileWithPassword(userId, newName, newPassword)
             } else {
                 userDao.updateUsername(userId, newName)
             }
+
             true
         } catch (e: Exception) {
             e.printStackTrace()

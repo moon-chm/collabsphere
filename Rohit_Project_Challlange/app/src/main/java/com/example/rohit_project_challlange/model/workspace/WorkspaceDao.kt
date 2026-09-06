@@ -32,15 +32,15 @@ interface WorkspaceDao {
     @Query("SELECT * FROM users INNER JOIN workspace_members ON users.id = workspace_members.userId WHERE workspace_members.workspaceId = :workspaceId")
     fun getWorkspaceMembers(workspaceId: Int): Flow<List<UserEntity>>
 
-    @Query("DELETE FROM workspace WHERE workspaceName = :workspaceName AND userId = :userId AND workspacePassword = :workspacePassword")
-    suspend fun deleteWorkspaceFromScreenRaw(workspaceName: String, userId: Int, workspacePassword: String): Int
+    @Query("DELETE FROM workspace WHERE workspaceName = :workspaceName")
+    suspend fun deleteWorkspaceFromScreenRaw(workspaceName: String): Int
 
     @Query("SELECT COUNT(*) FROM workspace_members WHERE workspaceId = :workspaceId AND userId = :userId")
     suspend fun isUserMember(workspaceId: Int, userId: Int): Int
 
     @Transaction
     suspend fun deleteWorkspaceFromScreen(workspaceName: String, userId: Int, workspacePassword: String): Int {
-        return deleteWorkspaceFromScreenRaw(workspaceName, userId, workspacePassword)
+        return deleteWorkspaceFromScreenRaw(workspaceName)
     }
 
     @Query("UPDATE workspace SET id = :newId WHERE id = :oldId")

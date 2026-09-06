@@ -25,7 +25,11 @@ import com.example.rohit_project_challlange.viewmodel.LoginViewModel
 import com.example.rohit_project_challlange.viewmodel.DashboardViewModel
 import com.example.rohit_project_challlange.viewmodel.task.TaskViewModel
 import com.example.rohit_project_challlange.viewmodel.dm.DmViewModel
+import com.example.rohit_project_challlange.viewmodel.workspace.WorkspaceViewModel
+import com.example.rohit_project_challlange.viewmodel.channel.ChannelViewModel
+import com.example.rohit_project_challlange.viewmodel.message.MessageViewModel
 import com.example.rohit_project_challlange.viewmodel.notes.NotesViewModel
+import com.example.rohit_project_challlange.viewmodel.profile.ProfileViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import com.example.rohit_project_challlange.NotificationHelper
@@ -54,7 +58,7 @@ val databaseModule = module {
             androidContext(),
             AppDatabase::class.java,
             "app_database"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
     }
 
     single { get<AppDatabase>().userDao() }
@@ -141,11 +145,26 @@ val workerModule = module {
 val viewModelModule = module {
     viewModel { LoginViewModel(get(), get()) }
 
-    viewModel { (loggedChannelId: Int) ->
+    viewModel { (initialUserId: Int) ->
         DashboardViewModel(
             repository = get(),
-            loggedChannelId = loggedChannelId,
+            initialUserId = initialUserId,
             userPreferences = get()
+        )
+    }
+
+    viewModel { (loggedInUserId: Int) ->
+        WorkspaceViewModel(
+            repo = get(),
+            loggedInUserId = loggedInUserId
+        )
+    }
+
+    viewModel { (loggedUserId: Int, loggedWorkspaceId: Int) ->
+        ChannelViewModel(
+            repo = get(),
+            loggeduserID = loggedUserId,
+            loggedWorkspaceId = loggedWorkspaceId
         )
     }
 
@@ -165,6 +184,16 @@ val viewModelModule = module {
         )
     }
 
+    viewModel { (loggedUserId: Int, loggedWorkspaceId: Int, loggedChannelId: Int, loggedUserName: String) ->
+        MessageViewModel(
+            repo = get(),
+            loggedUserId = loggedUserId,
+            loggedWorkspaceId = loggedWorkspaceId,
+            loggedChannelId = loggedChannelId,
+            loggedUserName = loggedUserName
+        )
+    }
+
     viewModel {
         DmViewModel(
             repo = get(),
@@ -173,12 +202,22 @@ val viewModelModule = module {
             context = androidContext()
         )
     }
+
     viewModel { (loggedUserId: Int, loggedWorkspaceId: Int, loggedUserName: String) ->
         FileViewModel(
             repo = get(),
             loggedUserId = loggedUserId,
             loggedWorkspaceId = loggedWorkspaceId,
             loggedUserName = loggedUserName
+        )
+    }
+
+    viewModel { (loggedInUserId: Int, userEmail: String) ->
+        ProfileViewModel(
+            loggedInUserId = loggedInUserId,
+            userEmail = userEmail,
+            repo = get(),
+            userPreferences = get()
         )
     }
 }

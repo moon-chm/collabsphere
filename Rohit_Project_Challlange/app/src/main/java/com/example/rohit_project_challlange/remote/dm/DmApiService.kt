@@ -35,7 +35,7 @@ class DmApiService(
             session = null
         }
 
-        val cleanBaseUrl = baseUrl
+        val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
 
         val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://")
 

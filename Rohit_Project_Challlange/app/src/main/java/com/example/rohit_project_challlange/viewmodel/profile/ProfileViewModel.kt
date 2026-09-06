@@ -77,6 +77,7 @@ class ProfileViewModel(
                 )
 
                 if (isSuccess) {
+                    userPreferences.updateUserName(inputUsername)
                     _profileStatus.value = "Profile updated successfully!"
                     _currentPassword.value = ""
                     _newPassword.value = ""
