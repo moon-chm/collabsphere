@@ -8,7 +8,6 @@ import com.example.rohit_project_challlange.dto.workspace.WorkspaceResponse
 import com.example.rohit_project_challlange.dto.workspace.WorkspaceSyncDto
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.*
 import io.ktor.http.*
 
@@ -59,10 +58,6 @@ class WorkspaceApiService(
     suspend fun getWorkspaceUpdates(userId: Int, since: Long): List<WorkspaceSyncDto> {
         return client.get("$baseUrl/sync/$userId") {
             parameter("since", since)
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
         }.body()
     }
 

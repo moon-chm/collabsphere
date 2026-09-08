@@ -486,17 +486,14 @@ fun SkeuoFileItemRow(
                 }
             }
 
-            IconButton(
+            SkeuoActionIconButton(
                 onClick = deleteFile,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Delete file",
-                    tint = Destructive.copy(alpha = 0.6f),
-                    modifier = Modifier.size(17.dp)
-                )
-            }
+                icon = Icons.Default.DeleteOutline,
+                contentDescription = "Delete file",
+                tint = DestructiveStart,
+                size = 32.dp,
+                iconSize = 16.dp
+            )
         }
     }
 }
@@ -688,21 +685,24 @@ fun UploadFileDialog(
                     }
 
                     val canUpload = selectedFileName.isNotEmpty()
-                    val btnColor = if (canUpload) CoralStart else Muted.copy(alpha = 0.45f)
+                    val uploadAlpha = if (canUpload) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = CoralStart.copy(alpha = 0.25f * uploadAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canUpload) CoralEnd else btnColor),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = uploadAlpha),
+                                            CoralEnd.copy(alpha = uploadAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -724,7 +724,7 @@ fun UploadFileDialog(
                         Text(
                             text = "Upload",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White.copy(alpha = if (canUpload) 1f else 0.85f)
                         )
                     }
                 }

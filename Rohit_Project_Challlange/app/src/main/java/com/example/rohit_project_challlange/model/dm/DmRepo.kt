@@ -22,7 +22,11 @@ class DmRepo(
 
     suspend fun sendRealtimeDm(id: Int? = null, workspaceId: Int, senderId: Int, receiverId: Int, content: String) {
         val timestampVal = System.currentTimeMillis()
-        val tempId = id ?: ((timestampVal and 0x7FFFFFFF).toInt().unaryMinus())
+        val tempId = if (id == null || id == 0) {
+            -((timestampVal % 100000000).toInt() + kotlin.random.Random.nextInt(1, 9999))
+        } else {
+            id
+        }
 
         val socketMessage = DmDto(
             action = "SEND_MESSAGE",
@@ -69,6 +73,15 @@ class DmRepo(
             val id = message.id
             if (id != null && id != 0) {
                 dmDao.deleteDm(id, message.workspaceId)
+                dmDao.deleteDmById(id)
+            }
+            return
+        }
+
+        if (message.action == "UPDATE_MESSAGE") {
+            val id = message.id
+            if (id != null && id != 0) {
+                dmDao.updateDmContent(id, message.content)
             }
             return
         }
@@ -113,19 +126,41 @@ class DmRepo(
         dmDao.sendDm(localEntity)
     }
 
+    suspend fun updateDm(dmId: Int, workspaceId: Int, senderId: Int, receiverId: Int, newContent: String) {
+        // Immediate local database update for 0ms latency in UI
+        dmDao.updateDmContent(dmId, newContent)
 
-    suspend fun deleteDm(dmId: Int, workspaceId: Int) {
+        val socketMessage = DmDto(
+            action = "UPDATE_MESSAGE",
+            workspaceId = workspaceId,
+            senderId = senderId,
+            receiverId = receiverId,
+            content = newContent,
+            timestamp = System.currentTimeMillis(),
+            id = dmId
+        )
         try {
-            dmDao.deleteDm(dmId, workspaceId)
-            val socketMessage = DmDto(
-                action = "DELETE_MESSAGE",
-                workspaceId = workspaceId,
-                senderId = 0,
-                receiverId = 0,
-                content = "",
-                timestamp = System.currentTimeMillis(),
-                id = dmId
-            )
+            apiService.sendDm(socketMessage)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun deleteDm(dmId: Int, workspaceId: Int, receiverId: Int = 0) {
+        // Immediate local database deletion for 0ms latency in UI
+        dmDao.deleteDm(dmId, workspaceId)
+        dmDao.deleteDmById(dmId)
+
+        val socketMessage = DmDto(
+            action = "DELETE_MESSAGE",
+            workspaceId = workspaceId,
+            senderId = 0,
+            receiverId = receiverId,
+            content = "",
+            timestamp = System.currentTimeMillis(),
+            id = dmId
+        )
+        try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
             e.printStackTrace()

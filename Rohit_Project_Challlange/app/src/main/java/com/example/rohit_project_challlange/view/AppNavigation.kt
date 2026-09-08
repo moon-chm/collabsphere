@@ -24,6 +24,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.rohit_project_challlange.NotificationDeepLink
 import com.example.rohit_project_challlange.NotificationHelper
 import com.example.rohit_project_challlange.model.UserRepo
 import com.example.rohit_project_challlange.model.channels.ChannelRepo
@@ -70,7 +71,9 @@ fun AppNavigation(
     dmRepo: DmRepo,
     notificationHelper: NotificationHelper,
     dashboardViewModel: DashboardViewModel,
-    startDestination: String = "login"
+    startDestination: String = "login",
+    notificationDeepLink: NotificationDeepLink? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
     KoinContext {
         val navController = rememberNavController()
@@ -100,6 +103,19 @@ fun AppNavigation(
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            }
+        }
+
+        LaunchedEffect(notificationDeepLink, isLoggedIn) {
+            val deepLink = notificationDeepLink
+            if (deepLink != null && isLoggedIn) {
+                val workspaces = dashboardViewModel.workspaces.value
+                val matchedWs = workspaces.find { it.id == deepLink.workspaceId }
+                val wsName = matchedWs?.workspaceName ?: deepLink.senderName.ifEmpty { "Workspace" }
+                val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
+
+                navController.navigate("workspace_detailed/${deepLink.workspaceId}/$encodedWsName?initialTab=4&initialPartnerId=${deepLink.partnerId}")
+                onDeepLinkConsumed()
             }
         }
 
@@ -192,7 +208,7 @@ fun AppNavigation(
                     viewModel = dashboardViewModel,
                     onNavigateToWorkspace = {
                         if (navController.currentDestination?.route == "dashboard") {
-                            navController.navigate("workspace_main")
+                            navController.navigate("workspace_create")
                         }
                     },
                     onWorkspaceClick = { workspace ->
@@ -260,14 +276,25 @@ fun AppNavigation(
             }
 
             composable(
-                route = "workspace_detailed/{workspaceId}/{workspaceName}",
+                route = "workspace_detailed/{workspaceId}/{workspaceName}?initialTab={initialTab}&initialPartnerId={initialPartnerId}",
                 arguments = listOf(
                     navArgument("workspaceId") { type = NavType.IntType },
-                    navArgument("workspaceName") { type = NavType.StringType }
+                    navArgument("workspaceName") { type = NavType.StringType },
+                    navArgument("initialTab") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                    navArgument("initialPartnerId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    }
                 )
             ) { backStackEntry ->
                 val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
                 val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
+                val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
+                val rawPartnerId = backStackEntry.arguments?.getInt("initialPartnerId") ?: -1
+                val initialPartnerId = if (rawPartnerId != -1) rawPartnerId else null
                 val workspaceName = try {
                     URLDecoder.decode(rawWorkspaceName, StandardCharsets.UTF_8.toString())
                 } catch (e: Exception) {
@@ -355,6 +382,8 @@ fun AppNavigation(
                     workspaceName = workspaceName,
                     userId = loggedInUserId,
                     workspaceId = workspaceId,
+                    initialTab = initialTab,
+                    initialPartnerId = initialPartnerId,
                     channelViewModel = channelViewModel,
                     taskViewModel = taskViewModel,
                     notesViewModel = notesViewModel,

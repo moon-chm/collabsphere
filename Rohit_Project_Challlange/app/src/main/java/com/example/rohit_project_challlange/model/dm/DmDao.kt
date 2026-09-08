@@ -25,8 +25,14 @@ interface DmDao {
     @Update
     suspend fun updateDm(dm: DmEntity)
 
+    @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
+    suspend fun updateDmContent(dmId: Int, newContent: String)
+
     @Query("DELETE FROM DM WHERE id = :dmId AND workspaceId = :workspaceId")
     suspend fun deleteDm(dmId: Int, workspaceId: Int)
+
+    @Query("DELETE FROM DM WHERE id = :dmId")
+    suspend fun deleteDmById(dmId: Int)
 
     @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp")
     suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long)

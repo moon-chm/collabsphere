@@ -107,17 +107,33 @@ fun DashboardScreen(
                         .size(46.dp)
                         .graphicsLayer { scaleX = profileScale; scaleY = profileScale }
                         .drawBehind {
+                            val r = size.minDimension / 2f
+                            // 1. Ambient diffuse shadow
                             drawCircle(
-                                color  = ShadowDark.copy(alpha = if (isProfilePressed) 0.12f else 0.25f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x + 3.dp.toPx(), center.y + if (isProfilePressed) 2.dp.toPx() else 4.dp.toPx())
+                                color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.03f else 0.06f),
+                                radius = r,
+                                center = Offset(center.x, center.y + if (isProfilePressed) 2.dp.toPx() else 5.dp.toPx())
                             )
+                            // 2. Tight contact shadow (2.5x alpha)
                             drawCircle(
-                                color  = ShadowLight.copy(alpha = 0.85f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x - 2.dp.toPx(), center.y - 2.dp.toPx())
+                                color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.10f else 0.16f),
+                                radius = r,
+                                center = Offset(center.x, center.y + if (isProfilePressed) 1.dp.toPx() else 1.8.dp.toPx())
                             )
+                            // 3. Specular top halo
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.90f),
+                                radius = r,
+                                center = Offset(center.x, center.y - 1.dp.toPx())
+                            )
+                            // 4. Elevated button body
                             drawCircle(color = Surface)
+                            // 5. 1px hairline border
+                            drawCircle(
+                                color = Color(0xFF2C2A28).copy(alpha = 0.06f),
+                                radius = r - 0.5.dp.toPx(),
+                                style = Stroke(width = 1.dp.toPx())
+                            )
                         }
                         .clip(CircleShape)
                         .clickable(
@@ -212,45 +228,52 @@ private fun DashboardSummaryBanner(count: Int) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(82.dp)
+            .height(84.dp)
             .drawBehind {
-                // dark shadow
+                val cr = CornerRadius(20.dp.toPx())
+                // 1. Ambient soft diffuse shadow
                 drawRoundRect(
-                    color        = CoralStart.copy(alpha = 0.22f),
-                    topLeft      = Offset(5.dp.toPx(), 7.dp.toPx()),
+                    color        = CoralStart.copy(alpha = 0.14f),
+                    topLeft      = Offset(0f, 7.dp.toPx()),
                     size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(20.dp.toPx())
+                    cornerRadius = cr
                 )
-                // subtle light ambient bounce
+                // 2. Tight contact shadow (2.3x alpha)
                 drawRoundRect(
-                    color        = ShadowLight.copy(alpha = 0.35f),
-                    topLeft      = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
+                    color        = CoralStart.copy(alpha = 0.32f),
+                    topLeft      = Offset(0f, 2.dp.toPx()),
                     size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(20.dp.toPx())
+                    cornerRadius = cr
                 )
-                // gradient fill
+                // 3. Coral gradient fill
                 drawRoundRect(
                     brush = Brush.linearGradient(
                         colors = listOf(CoralStart, CoralEnd),
                         start  = Offset(0f, 0f),
                         end    = Offset(size.width, size.height)
                     ),
-                    cornerRadius = CornerRadius(20.dp.toPx())
+                    cornerRadius = cr
                 )
-                // top rim perfectly following rounded contour
+                // 4. Subtle 1px perimeter hairline border
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.20f),
+                    cornerRadius = cr,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                // 5. Specular hairline highlight along top rounded contour
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.40f),
-                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.55f),
+                            Color.White.copy(alpha = 0.15f),
                             Color.Transparent
                         ),
                         startY = 0f,
-                        endY = 20.dp.toPx()
+                        endY = 22.dp.toPx()
                     ),
                     topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
                     size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = CornerRadius(20.dp.toPx()),
+                    cornerRadius = cr,
                     style = Stroke(width = 1.dp.toPx())
                 )
             }
@@ -275,16 +298,28 @@ private fun DashboardSummaryBanner(count: Int) {
                 )
             }
 
-            // Count badge circle
+            // Count badge circle with debossed socket appearance
             Box(
                 modifier = Modifier
                     .size(52.dp)
                     .drawBehind {
-                        drawCircle(color = Color.White.copy(alpha = 0.15f))
+                        val r = size.minDimension / 2f
+                        // Inset socket dark inner shadow top-left
                         drawCircle(
-                            color  = Color.White.copy(alpha = 0.08f),
-                            radius = size.minDimension * 0.35f,
-                            center = Offset(center.x - 6.dp.toPx(), center.y - 6.dp.toPx())
+                            color  = Color(0xFF5A1D0B).copy(alpha = 0.25f),
+                            radius = r,
+                            center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx())
+                        )
+                        // Inset translucent fill
+                        drawCircle(
+                            color  = Color.White.copy(alpha = 0.18f),
+                            radius = r
+                        )
+                        // Specular bottom-right reflection
+                        drawCircle(
+                            color  = Color.White.copy(alpha = 0.40f),
+                            radius = r - 0.5.dp.toPx(),
+                            style  = Stroke(width = 1.dp.toPx())
                         )
                     },
                 contentAlignment = Alignment.Center
@@ -391,21 +426,16 @@ fun WorkspaceItem(
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SkeuoActionIconButton(
                     onClick = onDeleteClick,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Delete workspace",
-                        tint = DestructiveStart.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(Modifier.width(2.dp))
+                    icon = Icons.Outlined.Delete,
+                    contentDescription = "Delete workspace",
+                    tint = DestructiveStart,
+                    size = 32.dp,
+                    iconSize = 16.dp
+                )
+                Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
@@ -438,22 +468,38 @@ private fun DashboardEmptyState() {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier            = Modifier.padding(32.dp)
         ) {
-            // Empty state icon circle
+            // Empty state icon circle with contact shadow & hairline
             Box(
                 modifier = Modifier
                     .size(88.dp)
                     .drawBehind {
+                        val r = size.minDimension / 2f
+                        // Ambient shadow
                         drawCircle(
-                            color  = ShadowDark.copy(alpha = 0.2f),
-                            radius = size.minDimension / 2f,
-                            center = Offset(center.x + 4.dp.toPx(), center.y + 5.dp.toPx())
+                            color  = Color(0xFF2C201A).copy(alpha = 0.05f),
+                            radius = r,
+                            center = Offset(center.x, center.y + 6.dp.toPx())
                         )
+                        // Contact shadow
                         drawCircle(
-                            color  = ShadowLight.copy(alpha = 0.85f),
-                            radius = size.minDimension / 2f,
-                            center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx())
+                            color  = Color(0xFF2C201A).copy(alpha = 0.14f),
+                            radius = r,
+                            center = Offset(center.x, center.y + 2.dp.toPx())
                         )
+                        // Specular top halo
+                        drawCircle(
+                            color  = Color.White.copy(alpha = 0.90f),
+                            radius = r,
+                            center = Offset(center.x, center.y - 1.5.dp.toPx())
+                        )
+                        // Surface fill
                         drawCircle(color = Surface)
+                        // 1px hairline border
+                        drawCircle(
+                            color  = Color(0xFF2C2A28).copy(alpha = 0.06f),
+                            radius = r - 0.5.dp.toPx(),
+                            style  = Stroke(width = 1.dp.toPx())
+                        )
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -504,21 +550,21 @@ private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .drawBehind {
                 val r = CornerRadius(16.dp.toPx())
-                // shadow
+                // 1. Ambient diffuse shadow
                 drawRoundRect(
-                    color        = CoralStart.copy(alpha = if (pressed) 0.15f else 0.35f),
-                    topLeft      = Offset(0f, if (pressed) 2.dp.toPx() else 6.dp.toPx()),
+                    color        = CoralStart.copy(alpha = if (pressed) 0.08f else 0.16f),
+                    topLeft      = Offset(0f, if (pressed) 3.dp.toPx() else 8.dp.toPx()),
                     size         = Size(size.width, size.height),
                     cornerRadius = r
                 )
-                // specular
+                // 2. Tight contact shadow (2.3x alpha)
                 drawRoundRect(
-                    color        = Color.White.copy(alpha = 0.25f),
-                    topLeft      = Offset(-2.dp.toPx(), -2.dp.toPx()),
+                    color        = CoralStart.copy(alpha = if (pressed) 0.18f else 0.38f),
+                    topLeft      = Offset(0f, if (pressed) 1.5.dp.toPx() else 2.5.dp.toPx()),
                     size         = Size(size.width, size.height),
                     cornerRadius = r
                 )
-                // fill
+                // 3. Vibrant coral gradient fill
                 drawRoundRect(
                     brush = Brush.linearGradient(
                         colors = listOf(CoralStart, CoralEnd),
@@ -527,12 +573,18 @@ private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
                     ),
                     cornerRadius = r
                 )
-                // top rim perfectly hugging rounded contour
+                // 4. Subtle 1px perimeter hairline border
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.20f),
+                    cornerRadius = r,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                // 5. Specular top rim highlight hugging rounded contour
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.35f),
-                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.50f),
+                            Color.White.copy(alpha = 0.15f),
                             Color.Transparent
                         ),
                         startY = 0f,

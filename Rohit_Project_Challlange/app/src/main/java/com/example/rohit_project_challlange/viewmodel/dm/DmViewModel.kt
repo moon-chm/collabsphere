@@ -121,9 +121,16 @@ class DmViewModel(
         }
     }
 
-    fun deleteMessage(dmId: Int, workspaceId: Int) {
+    fun deleteMessage(dmId: Int, workspaceId: Int, partnerId: Int = 0) {
         viewModelScope.launch {
-            repo.deleteDm(dmId, workspaceId)
+            repo.deleteDm(dmId, workspaceId, partnerId)
+        }
+    }
+
+    fun updateMessage(dmId: Int, workspaceId: Int, receiverId: Int, newContent: String) {
+        viewModelScope.launch {
+            val senderId = currentUserId ?: 0
+            repo.updateDm(dmId, workspaceId, senderId, receiverId, newContent)
         }
     }
 

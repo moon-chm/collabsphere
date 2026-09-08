@@ -83,15 +83,22 @@ val networkModule = module {
                 })
             }
             install(HttpTimeout) {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-                socketTimeoutMillis = 15000
+                // Render free tier cold-starts in 30–60 s — give it enough room
+                requestTimeoutMillis = 60000
+                connectTimeoutMillis = 60000
+                socketTimeoutMillis  = 60000
             }
         }
     }
 
     single(named("WebSocketHttpClient")) {
         HttpClient(OkHttp) {
+            engine {
+                config {
+                    pingInterval(15, java.util.concurrent.TimeUnit.SECONDS)
+                    retryOnConnectionFailure(true)
+                }
+            }
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
@@ -128,7 +135,7 @@ val repositoryModule = module {
 val appModule = module {
     single { androidContext().dataStore }
     single { UserPreferences(get()) }
-    single { NotificationHelper(androidContext()) }
+    single { NotificationHelper(androidContext(), get()) }
     single { WorkManager.getInstance(androidContext()) }
 }
 

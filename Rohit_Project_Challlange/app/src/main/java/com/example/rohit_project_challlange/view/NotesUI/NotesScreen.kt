@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -419,29 +420,25 @@ fun SkeuoNotesItem(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
+                SkeuoActionIconButton(
                     onClick = updateNote,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit note",
-                        tint = Color(0xFF8C7E75),
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
+                    icon = Icons.Default.Edit,
+                    contentDescription = "Edit note",
+                    tint = IndigoStart,
+                    size = 32.dp,
+                    iconSize = 16.dp
+                )
 
-                IconButton(
+                Spacer(modifier = Modifier.width(6.dp))
+
+                SkeuoActionIconButton(
                     onClick = deleteNote,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete note",
-                        tint = Destructive.copy(alpha = 0.6f),
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
+                    icon = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete note",
+                    tint = DestructiveStart,
+                    size = 32.dp,
+                    iconSize = 16.dp
+                )
             }
         }
     }
@@ -528,24 +525,8 @@ fun CreateNotesDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -556,6 +537,7 @@ fun CreateNotesDialog(
                             .padding(horizontal = 14.dp),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -563,7 +545,7 @@ fun CreateNotesDialog(
                                     Text(
                                         text = "Note title",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -577,24 +559,8 @@ fun CreateNotesDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(68.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.TopStart
                 ) {
                     BasicTextField(
@@ -605,6 +571,7 @@ fun CreateNotesDialog(
                             .padding(14.dp),
                         singleLine = false,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.TopStart) {
@@ -612,7 +579,7 @@ fun CreateNotesDialog(
                                     Text(
                                         text = "Description / Content...",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -641,21 +608,24 @@ fun CreateNotesDialog(
                     }
 
                     val canSubmit = name.trim().isNotEmpty()
-                    val btnColor = if (canSubmit) CoralStart else Muted.copy(alpha = 0.45f)
+                    val submitAlpha = if (canSubmit) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = CoralStart.copy(alpha = 0.25f * submitAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canSubmit) CoralEnd else btnColor),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = submitAlpha),
+                                            CoralEnd.copy(alpha = submitAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -678,7 +648,7 @@ fun CreateNotesDialog(
                         Text(
                             text = if (isEditMode) "Save" else "Create",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White.copy(alpha = if (canSubmit) 1f else 0.85f)
                         )
                     }
                 }

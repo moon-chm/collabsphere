@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -376,24 +377,8 @@ fun ProfileScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp)
-                                    .drawBehind {
-                                        drawRoundRect(
-                                            color = ShadowDark.copy(alpha = 0.22f),
-                                            topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                            size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                        )
-                                        drawRoundRect(
-                                            color = ShadowLight.copy(alpha = 0.85f),
-                                            topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                            size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                        )
-                                        drawRoundRect(
-                                            color = Background.copy(alpha = 0.85f),
-                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                        )
-                                    },
+                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Row(
@@ -414,7 +399,8 @@ fun ProfileScreen(
                                         onValueChange = onNameChange,
                                         modifier = Modifier.weight(1f),
                                         singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink)
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                                        cursorBrush = SolidColor(CoralStart)
                                     )
                                 }
                             }
@@ -480,24 +466,8 @@ fun ProfileScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(52.dp)
-                                            .drawBehind {
-                                                drawRoundRect(
-                                                    color = ShadowDark.copy(alpha = 0.22f),
-                                                    topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                                    size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = ShadowLight.copy(alpha = 0.85f),
-                                                    topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                                    size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = Background.copy(alpha = 0.85f),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                            },
+                                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
                                         contentAlignment = Alignment.CenterStart
                                     ) {
                                         Row(
@@ -512,6 +482,7 @@ fun ProfileScreen(
                                                 modifier = Modifier.weight(1f),
                                                 singleLine = true,
                                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                                                cursorBrush = SolidColor(CoralStart),
                                                 visualTransformation = if (showCurrentPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                                 keyboardOptions = KeyboardOptions(
                                                     keyboardType = KeyboardType.Password,
@@ -523,7 +494,7 @@ fun ProfileScreen(
                                                             Text(
                                                                 text = "Verify existing password",
                                                                 style = MaterialTheme.typography.bodyLarge,
-                                                                color = Muted.copy(alpha = 0.6f)
+                                                                color = Ink.copy(alpha = 0.65f)
                                                             )
                                                         }
                                                         inner()
@@ -555,24 +526,8 @@ fun ProfileScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(52.dp)
-                                            .drawBehind {
-                                                drawRoundRect(
-                                                    color = ShadowDark.copy(alpha = 0.22f),
-                                                    topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                                    size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = ShadowLight.copy(alpha = 0.85f),
-                                                    topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                                    size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = Background.copy(alpha = 0.85f),
-                                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                                )
-                                            },
+                                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
                                         contentAlignment = Alignment.CenterStart
                                     ) {
                                         Row(
@@ -587,6 +542,7 @@ fun ProfileScreen(
                                                 modifier = Modifier.weight(1f),
                                                 singleLine = true,
                                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                                                cursorBrush = SolidColor(CoralStart),
                                                 visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                                 keyboardOptions = KeyboardOptions(
                                                     keyboardType = KeyboardType.Password,
@@ -598,7 +554,7 @@ fun ProfileScreen(
                                                             Text(
                                                                 text = "Enter updated password",
                                                                 style = MaterialTheme.typography.bodyLarge,
-                                                                color = Muted.copy(alpha = 0.6f)
+                                                                color = Ink.copy(alpha = 0.65f)
                                                             )
                                                         }
                                                         inner()
@@ -632,8 +588,7 @@ fun ProfileScreen(
                     label = "updateScale"
                 )
 
-                val updateColor = if (isSubmissionReady) CoralStart else Muted.copy(alpha = 0.45f)
-                val updateColorEnd = if (isSubmissionReady) CoralEnd else Muted.copy(alpha = 0.35f)
+                val updateAlpha = if (isSubmissionReady) 1f else 0.72f
 
                 Box(
                     modifier = Modifier
@@ -645,7 +600,7 @@ fun ProfileScreen(
                             val shadowAlpha = if (updatePressed) 0.12f else 0.32f
 
                             drawRoundRect(
-                                color = updateColor.copy(alpha = shadowAlpha),
+                                color = CoralStart.copy(alpha = shadowAlpha * updateAlpha),
                                 topLeft = Offset(0f, shadowOffset.toPx()),
                                 size = Size(size.width, size.height),
                                 cornerRadius = CornerRadius(16.dp.toPx())
@@ -658,7 +613,10 @@ fun ProfileScreen(
                             )
                             drawRoundRect(
                                 brush = Brush.linearGradient(
-                                    colors = listOf(updateColor, updateColorEnd),
+                                    colors = listOf(
+                                        CoralStart.copy(alpha = updateAlpha),
+                                        CoralEnd.copy(alpha = updateAlpha)
+                                    ),
                                     start = Offset(0f, 0f),
                                     end = Offset(size.width, size.height)
                                 ),
@@ -683,13 +641,14 @@ fun ProfileScreen(
                         }
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(
-                            enabled = isSubmissionReady,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) {
-                            updatePressed = true
-                            focusManager.clearFocus()
-                            onUpdateProfile()
+                            if (isSubmissionReady) {
+                                updatePressed = true
+                                focusManager.clearFocus()
+                                onUpdateProfile()
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {

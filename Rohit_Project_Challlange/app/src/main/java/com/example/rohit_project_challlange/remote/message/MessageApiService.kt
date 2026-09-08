@@ -6,7 +6,6 @@ import com.example.rohit_project_challlange.dto.message.MessageResponse
 import com.example.rohit_project_challlange.dto.message.MessageSyncDto
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.*
 import io.ktor.http.*
 
@@ -18,10 +17,6 @@ class MessageApiService(private val client: HttpClient) {
         return client.post(baseUrl) {
             contentType(ContentType.Application.Json)
             setBody(request)
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
         }.body()
     }
 
@@ -29,21 +24,12 @@ class MessageApiService(private val client: HttpClient) {
         return client.put("$baseUrl/$messageId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
         }.body()
     }
 
     suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Boolean {
         return try {
-            val response = client.delete("$baseUrl/$messageId/$userId/$workspaceId/$channelId") {
-                timeout {
-                    requestTimeoutMillis = 15000
-                    connectTimeoutMillis = 15000
-                }
-            }
+            val response = client.delete("$baseUrl/$messageId/$userId/$workspaceId/$channelId")
             if (response.status.isSuccess()) {
                 response.body<Boolean>()
             } else {
@@ -56,21 +42,12 @@ class MessageApiService(private val client: HttpClient) {
     }
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId") {
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
-        }.body()
+        return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()
     }
 
     suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long): List<MessageSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId/$channelId") {
             parameter("since", since)
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
         }.body()
     }
 }

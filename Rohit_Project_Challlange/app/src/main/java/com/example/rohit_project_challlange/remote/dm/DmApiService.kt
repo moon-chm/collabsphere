@@ -78,6 +78,8 @@ class DmApiService(
                         emit(dto)
                     }
                 }
+                sessionMutex.withLock { session = null }
+                throw IllegalStateException("WebSocket incoming channel closed by remote host")
             } catch (e: Exception) {
                 Log.e("DM_DEBUG", "Exception inside websocket incoming iteration loop", e)
                 sessionMutex.withLock { session = null }

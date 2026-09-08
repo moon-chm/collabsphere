@@ -47,43 +47,7 @@ fun WorkspaceAction(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawBehind {
-                    // Soft dark drop shadow
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.28f),
-                        topLeft = Offset(6.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(28.dp.toPx())
-                    )
-                    // Specular light highlight (top-left)
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-4.dp.toPx(), -4.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(28.dp.toPx())
-                    )
-                    // Card body
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(28.dp.toPx())
-                    )
-                    // Top hairline bevel highlight hugging rounded contour
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.75f),
-                                Color.White.copy(alpha = 0.15f),
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = 28.dp.toPx()
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(28.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
+                .skeuoFloatingCard(cornerRadius = 28.dp, surfaceColor = SurfaceRaised)
         ) {
             Column(
                 modifier = Modifier

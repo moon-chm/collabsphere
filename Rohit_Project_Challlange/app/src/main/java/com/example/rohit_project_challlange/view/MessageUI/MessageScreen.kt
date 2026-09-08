@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -165,6 +166,7 @@ fun MessageScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
+                    .imePadding()
                     .drawBehind {
                         // Dual shadow on top of bottom bar
                         drawRect(
@@ -223,24 +225,8 @@ fun MessageScreen(
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 48.dp, max = 120.dp)
-                            .drawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                    size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                    size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = Background.copy(alpha = 0.85f),
-                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                )
-                            }
+                            .skeuoInset(cornerRadius = 16.dp, depth = 2.dp)
+                            .clip(RoundedCornerShape(16.dp))
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
@@ -249,6 +235,7 @@ fun MessageScreen(
                             onValueChange = { viewModel.onMessageContentChange(it) },
                             modifier = Modifier.fillMaxWidth(),
                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                            cursorBrush = SolidColor(CoralStart),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(
                                 onSend = {
@@ -276,7 +263,7 @@ fun MessageScreen(
                                         Text(
                                             text = if (isEditing) "Edit message..." else "Message #$channelName...",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Muted.copy(alpha = 0.6f)
+                                            color = Ink.copy(alpha = 0.65f)
                                         )
                                     }
                                     inner()
@@ -295,8 +282,7 @@ fun MessageScreen(
                     )
 
                     val canSend = messageContent.trim().isNotEmpty()
-                    val sendColor = if (canSend) CoralStart else Muted.copy(alpha = 0.45f)
-                    val sendColorEnd = if (canSend) CoralEnd else Muted.copy(alpha = 0.35f)
+                    val sendAlpha = if (canSend) 1f else 0.70f
 
                     Box(
                         modifier = Modifier
@@ -307,7 +293,7 @@ fun MessageScreen(
                                 val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
 
                                 drawCircle(
-                                    color = sendColor.copy(alpha = shadowAlpha),
+                                    color = CoralStart.copy(alpha = shadowAlpha * sendAlpha),
                                     radius = size.minDimension / 2f,
                                     center = Offset(center.x, center.y + shadowOffset.toPx())
                                 )
@@ -318,7 +304,10 @@ fun MessageScreen(
                                 )
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        colors = listOf(sendColor, sendColorEnd),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = sendAlpha),
+                                            CoralEnd.copy(alpha = sendAlpha)
+                                        ),
                                         center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
                                         radius = size.minDimension / 2f
                                     )
