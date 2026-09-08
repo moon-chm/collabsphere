@@ -23,6 +23,7 @@ fun Application.module() {
     install(CORS) {
         anyHost()
         allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Head)
         allowMethod(HttpMethod.Post)
         allowMethod(HttpMethod.Get)
         allowMethod(HttpMethod.Put)
