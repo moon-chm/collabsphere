@@ -14,6 +14,9 @@ COPY build.gradle.kts /app/build.gradle.kts
 # Grant execute permissions to gradlew
 RUN chmod +x ./gradlew
 
+# Pre-download Gradle wrapper distribution for layer caching
+RUN ./gradlew --version || ./gradlew --version
+
 # Copy source code
 COPY src /app/src
 
