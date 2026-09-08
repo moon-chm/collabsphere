@@ -49,8 +49,16 @@ fun Application.configureRouting() {
             call.respondText("CollabSphere Server is running!", ContentType.Text.Plain, HttpStatusCode.OK)
         }
 
+        head("/") {
+            call.respond(HttpStatusCode.OK)
+        }
+
         get("/health") {
             call.respondText("OK", ContentType.Text.Plain, HttpStatusCode.OK)
+        }
+
+        head("/health") {
+            call.respond(HttpStatusCode.OK)
         }
 
         post("/api/login") {
