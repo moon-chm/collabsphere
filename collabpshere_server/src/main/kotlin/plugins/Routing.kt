@@ -45,6 +45,13 @@ val activeDmSessions = ConcurrentHashMap<Long, WebSocketServerSession>()
 
 fun Application.configureRouting() {
     routing {
+        get("/") {
+            call.respondText("CollabSphere Server is running!", ContentType.Text.Plain, HttpStatusCode.OK)
+        }
+
+        get("/health") {
+            call.respondText("OK", ContentType.Text.Plain, HttpStatusCode.OK)
+        }
 
         post("/api/login") {
             try {
@@ -1384,16 +1391,53 @@ fun Application.configureRouting() {
                                         )
                                         this.send(Frame.Text(senderJson))
                                     }
-                                } else if (dmDto.action == "DELETE_MESSAGE") {
+                                } else if (dmDto.action == "UPDATE_MESSAGE") {
                                     val messageId = dmDto.id
+                                    var targetReceiverId = dmDto.receiverId
                                     if (messageId != null && messageId != 0) {
                                         dbQuery {
+                                            val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
+                                            if (existing != null) {
+                                                val sId = existing[DirectMessagesTable.senderId]
+                                                val rId = existing[DirectMessagesTable.receiverId]
+                                                targetReceiverId = if (targetReceiverId != 0) targetReceiverId else if (sId == userIdParam.toInt()) rId else sId
+                                            }
+                                            DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
+                                                it[content] = dmDto.content
+                                            }
+                                        }
+                                    }
+                                    val updatedPayload = dmDto.copy(action = "UPDATE_MESSAGE", receiverId = targetReceiverId)
+                                    val updatedJson = Json.encodeToString(DmDto.serializer(), updatedPayload)
+                                    val receiverSession = activeDmSessions[targetReceiverId.toLong()]
+                                    if (receiverSession != null && receiverSession.isActive) {
+                                        receiverSession.send(Frame.Text(updatedJson))
+                                    }
+                                    if (this.isActive) {
+                                        this.send(Frame.Text(updatedJson))
+                                    }
+                                } else if (dmDto.action == "DELETE_MESSAGE") {
+                                    val messageId = dmDto.id
+                                    var targetReceiverId = dmDto.receiverId
+                                    if (messageId != null && messageId != 0) {
+                                        dbQuery {
+                                            val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
+                                            if (existing != null) {
+                                                val sId = existing[DirectMessagesTable.senderId]
+                                                val rId = existing[DirectMessagesTable.receiverId]
+                                                targetReceiverId = if (targetReceiverId != 0) targetReceiverId else if (sId == userIdParam.toInt()) rId else sId
+                                            }
                                             DirectMessagesTable.deleteWhere { DirectMessagesTable.id eq messageId }
                                         }
                                     }
-                                    val receiverSession = activeDmSessions[dmDto.receiverId.toLong()]
+                                    val deletePayload = dmDto.copy(action = "DELETE_MESSAGE", receiverId = targetReceiverId)
+                                    val deleteJson = Json.encodeToString(DmDto.serializer(), deletePayload)
+                                    val receiverSession = activeDmSessions[targetReceiverId.toLong()]
                                     if (receiverSession != null && receiverSession.isActive) {
-                                        receiverSession.send(Frame.Text(receivedText))
+                                        receiverSession.send(Frame.Text(deleteJson))
+                                    }
+                                    if (this.isActive) {
+                                        this.send(Frame.Text(deleteJson))
                                     }
                                 }
                             } catch (_: Exception) {
