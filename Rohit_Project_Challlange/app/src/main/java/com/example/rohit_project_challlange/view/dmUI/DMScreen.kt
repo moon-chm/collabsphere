@@ -92,6 +92,7 @@ fun DMScreen(
     currentUserId: Long,
     initialPartnerId: Int? = null,
     baseUrl: String = AppConfig.BASE_URL,
+    onConversationActiveChange: (Boolean) -> Unit = {},
     onExitModule: () -> Unit
 ) {
     val workspaceMembers by viewModel.workspaceMembers.collectAsStateWithLifecycle()
@@ -102,6 +103,10 @@ fun DMScreen(
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
+
+    LaunchedEffect(activeChatPartner) {
+        onConversationActiveChange(activeChatPartner != null)
+    }
     var typedText by remember { mutableStateOf("") }
     var selectedMessage by remember { mutableStateOf<DmEntity?>(null) }
     var editingMessage by remember { mutableStateOf<DmEntity?>(null) }
@@ -566,32 +571,43 @@ fun DMScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .animateItem(),
+                                    .animateItem()
+                                    .padding(bottom = if (msgReactions.isNotEmpty()) 8.dp else 2.dp),
                                 contentAlignment = if (isOwnMessage) Alignment.CenterEnd else Alignment.CenterStart
                             ) {
-                                Column(
-                                    horizontalAlignment = if (isOwnMessage) Alignment.End else Alignment.Start,
-                                    modifier = Modifier.widthIn(max = 300.dp)
+                                Box(
+                                    modifier = Modifier.wrapContentSize(),
+                                    contentAlignment = if (isOwnMessage) Alignment.BottomEnd else Alignment.BottomStart
                                 ) {
                                     // Message bubble
                                     Box(
                                         modifier = Modifier
+                                            .widthIn(min = 52.dp, max = 280.dp)
                                             .drawBehind {
                                                 if (isOwnMessage) {
                                                     drawRoundRect(
                                                         color = CoralStart.copy(alpha = 0.25f),
-                                                        topLeft = Offset(0f, 3.dp.toPx()),
+                                                        topLeft = Offset(0f, 2.5.dp.toPx()),
                                                         size = Size(size.width, size.height),
                                                         cornerRadius = CornerRadius(16.dp.toPx())
                                                     )
                                                     drawRoundRect(
-                                                        brush = Brush.linearGradient(colors = listOf(CoralLight, CoralStart), start = Offset(0f, 0f), end = Offset(size.width, size.height)),
+                                                        brush = Brush.linearGradient(
+                                                            colors = listOf(CoralLight, CoralStart),
+                                                            start = Offset(0f, 0f),
+                                                            end = Offset(size.width, size.height)
+                                                        ),
                                                         cornerRadius = CornerRadius(16.dp.toPx())
                                                     )
                                                     drawRoundRect(
                                                         brush = Brush.verticalGradient(
-                                                            colors = listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.10f), Color.Transparent),
-                                                            startY = 0f, endY = 16.dp.toPx()
+                                                            colors = listOf(
+                                                                Color.White.copy(alpha = 0.35f),
+                                                                Color.White.copy(alpha = 0.10f),
+                                                                Color.Transparent
+                                                            ),
+                                                            startY = 0f,
+                                                            endY = 16.dp.toPx()
                                                         ),
                                                         topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
                                                         size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
@@ -614,8 +630,13 @@ fun DMScreen(
                                                     drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(16.dp.toPx()))
                                                     drawRoundRect(
                                                         brush = Brush.verticalGradient(
-                                                            colors = listOf(Color.White.copy(alpha = 0.70f), Color.White.copy(alpha = 0.15f), Color.Transparent),
-                                                            startY = 0f, endY = 16.dp.toPx()
+                                                            colors = listOf(
+                                                                Color.White.copy(alpha = 0.70f),
+                                                                Color.White.copy(alpha = 0.15f),
+                                                                Color.Transparent
+                                                            ),
+                                                            startY = 0f,
+                                                            endY = 16.dp.toPx()
                                                         ),
                                                         topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
                                                         size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
@@ -628,8 +649,6 @@ fun DMScreen(
                                             .combinedClickable(
                                                 onClick = {},
                                                 onLongClick = {
-                                                    // Long press → show reaction picker for everyone,
-                                                    // action menu (edit/delete) only for own messages
                                                     if (isOwnMessage) {
                                                         selectedMessage = message
                                                         showActionMenu = true
@@ -638,9 +657,12 @@ fun DMScreen(
                                                     }
                                                 }
                                             )
-                                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                                            .padding(horizontal = 14.dp, vertical = 9.dp)
                                     ) {
-                                        Column {
+                                        Column(
+                                            modifier = Modifier.wrapContentSize(),
+                                            horizontalAlignment = if (isOwnMessage) Alignment.End else Alignment.Start
+                                        ) {
                                             // Media image
                                             if (hasMedia) {
                                                 SubcomposeAsyncImage(
@@ -684,28 +706,17 @@ fun DMScreen(
 
                                             // Read receipt (own messages only)
                                             if (isOwnMessage) {
-                                                Spacer(modifier = Modifier.height(3.dp))
                                                 Row(
                                                     horizontalArrangement = Arrangement.End,
-                                                    modifier = Modifier.fillMaxWidth()
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(top = 2.dp)
                                                 ) {
-                                                    if (isRead) {
-                                                        // ✓✓ read
-                                                        Text(
-                                                            text = "✓✓",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Mint
-                                                        )
-                                                    } else {
-                                                        // ✓ delivered / sent
-                                                        Text(
-                                                            text = "✓",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Color.White.copy(alpha = 0.7f)
-                                                        )
-                                                    }
+                                                    Text(
+                                                        text = if (isRead) "✓✓" else "✓",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = if (isRead) Color(0xFF6EE7B7) else Color.White.copy(alpha = 0.70f)
+                                                    )
                                                 }
                                             }
                                         }
@@ -756,29 +767,37 @@ fun DMScreen(
                                         }
                                     }
 
-                                    // Reaction pills below bubble
+                                    // Docked Reaction badges overlapping the bottom border of the bubble
                                     if (msgReactions.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(4.dp))
                                         Row(
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                            modifier = Modifier
+                                                .offset(
+                                                    x = if (isOwnMessage) (-6).dp else 6.dp,
+                                                    y = 10.dp
+                                                ),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
                                                 Box(
                                                     modifier = Modifier
                                                         .drawBehind {
                                                             drawRoundRect(
-                                                                color = ShadowDark.copy(alpha = 0.12f),
-                                                                topLeft = Offset(0f, 2.dp.toPx()),
+                                                                color = ShadowDark.copy(alpha = 0.18f),
+                                                                topLeft = Offset(0f, 1.5.dp.toPx()),
                                                                 size = Size(size.width, size.height),
-                                                                cornerRadius = CornerRadius(20.dp.toPx())
+                                                                cornerRadius = CornerRadius(14.dp.toPx())
                                                             )
                                                             drawRoundRect(
                                                                 color = SurfaceRaised,
-                                                                cornerRadius = CornerRadius(20.dp.toPx())
+                                                                cornerRadius = CornerRadius(14.dp.toPx())
+                                                            )
+                                                            drawRoundRect(
+                                                                color = Color.White.copy(alpha = 0.85f),
+                                                                cornerRadius = CornerRadius(14.dp.toPx()),
+                                                                style = Stroke(width = 1.dp.toPx())
                                                             )
                                                         }
-                                                        .clip(RoundedCornerShape(20.dp))
+                                                        .clip(RoundedCornerShape(14.dp))
                                                         .clickable {
                                                             viewModel.toggleReaction(
                                                                 messageId = message.id,
@@ -787,19 +806,19 @@ fun DMScreen(
                                                                 receiverId = partner.id
                                                             )
                                                         }
-                                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
                                                 ) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                     ) {
-                                                        Text(text = emoji, fontSize = 13.sp)
+                                                        Text(text = emoji, fontSize = 12.sp)
                                                         if (count > 1) {
                                                             Text(
                                                                 text = count.toString(),
                                                                 style = MaterialTheme.typography.labelSmall.copy(
                                                                     fontWeight = FontWeight.Bold,
-                                                                    fontSize = 11.sp
+                                                                    fontSize = 10.sp
                                                                 ),
                                                                 color = Ink
                                                             )

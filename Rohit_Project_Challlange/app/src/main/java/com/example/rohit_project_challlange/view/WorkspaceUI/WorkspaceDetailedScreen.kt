@@ -90,6 +90,7 @@ fun WorkspaceDetailedScreen(
     workspaceMembers: List<UserEntity>
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
+    var isDmInConversation by remember { mutableStateOf(false) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var memberEmailInput by remember { mutableStateOf("") }
 
@@ -328,9 +329,11 @@ fun WorkspaceDetailedScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = if (selectedTab == 4 && isDmInConversation) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            // Tactile Top Bar
-            Box(
+            if (!(selectedTab == 4 && isDmInConversation)) {
+                // Tactile Top Bar
+                Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
@@ -432,85 +435,88 @@ fun WorkspaceDetailedScreen(
                     }
                 }
             }
-        },
-        bottomBar = {
-            // Skeuomorphic Tactile Bottom Navigation Bar — floating tray with true contact & ambient shadow
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .height(82.dp)
-                    .drawBehind {
-                        // 1. Upward ambient diffuse shadow
-                        drawRect(
-                            color = Color(0xFF2C201A).copy(alpha = 0.07f),
-                            topLeft = Offset(0f, -6.dp.toPx()),
-                            size = Size(size.width, 6.dp.toPx())
+        }
+    },
+    bottomBar = {
+            if (!(selectedTab == 4 && isDmInConversation)) {
+                // Skeuomorphic Tactile Bottom Navigation Bar — floating tray with true contact & ambient shadow
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .height(82.dp)
+                        .drawBehind {
+                            // 1. Upward ambient diffuse shadow
+                            drawRect(
+                                color = Color(0xFF2C201A).copy(alpha = 0.07f),
+                                topLeft = Offset(0f, -6.dp.toPx()),
+                                size = Size(size.width, 6.dp.toPx())
+                            )
+                            // 2. Upward tight contact shadow (2.3x ambient alpha)
+                            drawRect(
+                                color = Color(0xFF2C201A).copy(alpha = 0.16f),
+                                topLeft = Offset(0f, -1.5.dp.toPx()),
+                                size = Size(size.width, 1.5.dp.toPx())
+                            )
+                            // 3. Elevated SurfaceRaised tray body (#FDFBF7)
+                            drawRect(color = SurfaceRaised)
+                            // 4. Subtle perimeter hairline boundary
+                            drawRect(
+                                color = Color(0xFF2C2A28).copy(alpha = 0.07f),
+                                topLeft = Offset(0f, 0f),
+                                size = Size(size.width, 1.dp.toPx())
+                            )
+                            // 5. Bright specular rim highlight along top edge
+                            drawRect(
+                                color = Color.White.copy(alpha = 0.95f),
+                                topLeft = Offset(0f, 1.dp.toPx()),
+                                size = Size(size.width, 1.dp.toPx())
+                            )
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SkeuoTabItem(
+                            selected = selectedTab == 0,
+                            icon = Icons.Outlined.GridView,
+                            label = "Spaces",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 0 }
                         )
-                        // 2. Upward tight contact shadow (2.3x ambient alpha)
-                        drawRect(
-                            color = Color(0xFF2C201A).copy(alpha = 0.16f),
-                            topLeft = Offset(0f, -1.5.dp.toPx()),
-                            size = Size(size.width, 1.5.dp.toPx())
+                        SkeuoTabItem(
+                            selected = selectedTab == 4,
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            label = "Chat",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 4 }
                         )
-                        // 3. Elevated SurfaceRaised tray body (#FDFBF7)
-                        drawRect(color = SurfaceRaised)
-                        // 4. Subtle perimeter hairline boundary
-                        drawRect(
-                            color = Color(0xFF2C2A28).copy(alpha = 0.07f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
+                        SkeuoTabItem(
+                            selected = selectedTab == 1,
+                            icon = Icons.Outlined.CheckBox,
+                            label = "Tasks",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 1 }
                         )
-                        // 5. Bright specular rim highlight along top edge
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.95f),
-                            topLeft = Offset(0f, 1.dp.toPx()),
-                            size = Size(size.width, 1.dp.toPx())
+                        SkeuoTabItem(
+                            selected = selectedTab == 3,
+                            icon = Icons.Outlined.Description,
+                            label = "Docs",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 3 }
+                        )
+                        SkeuoTabItem(
+                            selected = selectedTab == 2,
+                            icon = Icons.Outlined.Folder,
+                            label = "Files",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 2 }
                         )
                     }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SkeuoTabItem(
-                        selected = selectedTab == 0,
-                        icon = Icons.Outlined.GridView,
-                        label = "Spaces",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = 0 }
-                    )
-                    SkeuoTabItem(
-                        selected = selectedTab == 4,
-                        icon = Icons.Outlined.ChatBubbleOutline,
-                        label = "Chat",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = 4 }
-                    )
-                    SkeuoTabItem(
-                        selected = selectedTab == 1,
-                        icon = Icons.Outlined.CheckBox,
-                        label = "Tasks",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = 1 }
-                    )
-                    SkeuoTabItem(
-                        selected = selectedTab == 3,
-                        icon = Icons.Outlined.Description,
-                        label = "Docs",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = 3 }
-                    )
-                    SkeuoTabItem(
-                        selected = selectedTab == 2,
-                        icon = Icons.Outlined.Folder,
-                        label = "Files",
-                        modifier = Modifier.weight(1f),
-                        onClick = { selectedTab = 2 }
-                    )
                 }
             }
         }
@@ -518,7 +524,7 @@ fun WorkspaceDetailedScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(if (selectedTab == 4 && isDmInConversation) PaddingValues(0.dp) else paddingValues)
         ) {
             AnimatedContent(
                 targetState = selectedTab,
@@ -563,6 +569,7 @@ fun WorkspaceDetailedScreen(
                         workspaceId = workspaceId,
                         currentUserId = userId,
                         initialPartnerId = initialPartnerId,
+                        onConversationActiveChange = { active -> isDmInConversation = active },
                         onExitModule = { selectedTab = 0 }
                     )
                 }
