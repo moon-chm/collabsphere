@@ -239,23 +239,38 @@ fun ProfileScreen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
+    // Track pending crop files across activity launches
+    var pendingCropSourceFile by remember { mutableStateOf<File?>(null) }
+    var pendingCropDestFile by remember { mutableStateOf<File?>(null) }
+
     // ── uCrop result launcher — receives the cropped image URI ──────────────
     val cropLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val resultUri = UCrop.getOutput(result.data ?: return@rememberLauncherForActivityResult)
-        if (result.resultCode == android.app.Activity.RESULT_OK && resultUri != null) {
-            try {
-                val croppedFile = File(context.cacheDir, "avatar_cropped_${System.currentTimeMillis()}.jpg")
-                context.contentResolver.openInputStream(resultUri)?.use { inputStream ->
-                    croppedFile.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                }
-                if (croppedFile.exists()) {
-                    onAvatarPicked(croppedFile)
-                }
-            } catch (_: Exception) { /* ignored — user can retry */ }
+        val dest = pendingCropDestFile
+        val src = pendingCropSourceFile
+
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val resultUri = result.data?.let { UCrop.getOutput(it) }
+            val croppedFile = if (resultUri != null && resultUri.scheme == "file" && resultUri.path != null) {
+                File(resultUri.path!!)
+            } else if (dest != null && dest.exists() && dest.length() > 0L) {
+                dest
+            } else null
+
+            if (croppedFile != null && croppedFile.exists() && croppedFile.length() > 0L) {
+                onAvatarPicked(croppedFile)
+            } else if (src != null && src.exists() && src.length() > 0L) {
+                // Fallback to source if cropped output file was not found
+                onAvatarPicked(src)
+            }
+        } else if (result.resultCode == UCrop.RESULT_ERROR) {
+            val cropError = result.data?.let { UCrop.getError(it) }
+            android.util.Log.e("ProfileScreen", "uCrop failed: ${cropError?.message}", cropError)
+            // If crop errored, fall back to the picked source photo so user is not blocked
+            if (src != null && src.exists() && src.length() > 0L) {
+                onAvatarPicked(src)
+            }
         }
     }
 
@@ -265,43 +280,61 @@ fun ProfileScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                // Destination file for the cropped result
-                val destFile = File(context.cacheDir, "avatar_crop_dest_${System.currentTimeMillis()}.jpg")
-                val destUri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    destFile
-                )
+                // 1. Copy picked photo to local cache file first.
+                // This ensures UCropActivity has direct file access without PhotoPicker IPC permission expiration.
+                val sourceFile = File(context.cacheDir, "avatar_source_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    sourceFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                if (!sourceFile.exists() || sourceFile.length() == 0L) {
+                    return@rememberLauncherForActivityResult
+                }
+                pendingCropSourceFile = sourceFile
+
+                // 2. Destination file in cacheDir using Uri.fromFile(...)
+                // uCrop's internal BitmapCropTask requires a file:// Uri where .getPath() returns a real filesystem path.
+                val destFile = File(context.cacheDir, "avatar_cropped_${System.currentTimeMillis()}.jpg")
+                pendingCropDestFile = destFile
+
+                val sourceUri = Uri.fromFile(sourceFile)
+                val destUri = Uri.fromFile(destFile)
 
                 // Coral accent colors matching the app's skeuomorphic theme
                 val toolbarColor = AndroidColor.parseColor("#E8784A")   // CoralStart
                 val statusBarColor = AndroidColor.parseColor("#C95E30") // CoralEnd
                 val activeCtrlColor = AndroidColor.parseColor("#E8784A")
 
-                val cropIntent = UCrop.of(uri, destUri)
-                    .withAspectRatio(1f, 1f)        // Force 1:1 for perfect circle
-                    .withMaxResultSize(512, 512)    // Reasonable upload size
+                val cropIntent = UCrop.of(sourceUri, destUri)
+                    .withAspectRatio(1f, 1f)        // Force 1:1 for perfect circular avatar
+                    .withMaxResultSize(512, 512)    // High-resolution avatar
                     .withOptions(
                         UCrop.Options().apply {
-                            setCircleDimmedLayer(true)          // Circle overlay
-                            setShowCropGrid(false)              // Clean look, no grid
-                            setShowCropFrame(false)             // Circle speaks for itself
+                            setCircleDimmedLayer(true)          // Circular crop mask
+                            setShowCropGrid(false)              // Clean view, no grid lines
+                            setShowCropFrame(false)             // Circle frame only
                             setToolbarColor(toolbarColor)
                             setStatusBarColor(statusBarColor)
                             setActiveControlsWidgetColor(activeCtrlColor)
+                            setToolbarWidgetColor(AndroidColor.WHITE)
                             setToolbarTitle("Adjust your photo")
                             setCompressionQuality(90)
-                            setHideBottomControls(false)        // Keep rotate/flip available
+                            setHideBottomControls(false)        // Keep rotation/scale controls visible
                         }
                     )
                     .getIntent(context)
 
                 cropLauncher.launch(cropIntent)
-            } catch (_: Exception) {
-                // uCrop launch failed — fall back to direct copy without crop
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileScreen", "Failed to launch crop", e)
+                // Fallback: direct upload if uCrop couldn't be launched
                 try {
                     val tempFile = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
-                    context.contentResolver.openInputStream(uri)?.use { i -> tempFile.outputStream().use { o -> i.copyTo(o) } }
+                    context.contentResolver.openInputStream(uri)?.use { i ->
+                        tempFile.outputStream().use { o -> i.copyTo(o) }
+                    }
                     if (tempFile.exists()) onAvatarPicked(tempFile)
                 } catch (_: Exception) { }
             }
