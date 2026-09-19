@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.view.FileUI
+import android.util.Log
 
 import android.content.Context
 import android.content.Intent
@@ -75,7 +76,7 @@ fun openFile(
                 context.startActivity(intent)
                 return
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
             }
         }
     }
@@ -86,15 +87,12 @@ fun openFile(
     }
 
     onLoadingStateChange(true)
-    viewModel.downloadFile(fileEntity.url) { bytes ->
+    val cleanFileName = fileEntity.fileName.replace("\\s+".toRegex(), "_")
+    val targetFile = File(context.cacheDir, "view_${System.currentTimeMillis()}_$cleanFileName")
+    viewModel.downloadFile(fileEntity.url, targetFile) { success ->
         onLoadingStateChange(false)
-        if (bytes != null) {
+        if (success) {
             try {
-                val cleanFileName = fileEntity.fileName.replace("\\s+".toRegex(), "_")
-                val targetFile = File(context.cacheDir, "view_${System.currentTimeMillis()}_$cleanFileName")
-
-                targetFile.outputStream().use { output -> output.write(bytes) }
-
                 var resolvedMimeType = viewModel.getMimeTypeFromExtension(cleanFileName)
                 if (resolvedMimeType == "application/octet-stream" && fileEntity.mimeType.isNotEmpty()) {
                     resolvedMimeType = fileEntity.mimeType
@@ -108,7 +106,7 @@ fun openFile(
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
                 Toast.makeText(context, "No app found to open this type of file.", Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -535,7 +533,7 @@ fun UploadFileDialog(
                     selectedFileObject = tempFile
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
                 Toast.makeText(context, "Error staging file target local buffer.", Toast.LENGTH_SHORT).show()
             }
         }

@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.viewmodel.file
+import android.util.Log
 
 import android.webkit.MimeTypeMap
 import androidx.lifecycle.ViewModel
@@ -60,21 +61,22 @@ class FileViewModel(
 
                 repo.uploadfilestoscreen(tentativeEntity)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileViewModel", "Operation failed", e)
             } finally {
                 _uploadingStatus.value = false
             }
         }
     }
 
-    fun downloadFile(url: String, onResult: (ByteArray?) -> Unit) {
+    fun downloadFile(url: String, destination: File, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
-                val bytes = repo.downloadFileFromServer(url)
-                onResult(bytes)
+                repo.downloadFileFromServer(url, destination)
+                onResult(true)
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(null)
+                Log.e("FileViewModel", "Operation failed", e)
+                destination.delete()
+                onResult(false)
             }
         }
     }

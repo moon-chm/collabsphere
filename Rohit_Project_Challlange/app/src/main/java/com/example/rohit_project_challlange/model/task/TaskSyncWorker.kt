@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.task
+import android.util.Log
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -68,7 +69,7 @@ class TaskSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("TaskSyncWorker", "Operation failed", e)
             return@withContext Result.retry()
         }
     }

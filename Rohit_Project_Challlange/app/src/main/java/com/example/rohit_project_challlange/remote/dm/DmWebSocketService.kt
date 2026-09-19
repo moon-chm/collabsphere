@@ -15,15 +15,15 @@ import com.example.rohit_project_challlange.MyApplication
 import com.example.rohit_project_challlange.NotificationHelper
 import com.example.rohit_project_challlange.model.dm.DmRepo
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.inject
 
 class DmWebSocketService : Service() {
@@ -164,14 +164,14 @@ class DmWebSocketService : Service() {
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun onDestroy() {
         connectionJob?.cancel()
-        val cleanupScope = CoroutineScope(Dispatchers.IO)
-        cleanupScope.launch {
+        // Deliberately outlives serviceScope (cancelled right after) so the disconnect handshake can
+        // still finish even though the service itself is being torn down right now.
+        GlobalScope.launch(Dispatchers.IO) {
             try {
-                withContext(NonCancellable) {
-                    repo.disconnectChat()
-                }
+                repo.disconnectChat()
             } finally {
                 serviceScope.cancel()
             }

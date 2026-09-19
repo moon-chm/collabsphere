@@ -40,3 +40,8 @@ data class WorkspaceSyncDto(
     val isDeleted: Boolean,
     val updatedAt: Long
 )
+
+@Serializable
+data class DeleteWorkspaceResponse(
+    val deletedIds: List<Int>
+)

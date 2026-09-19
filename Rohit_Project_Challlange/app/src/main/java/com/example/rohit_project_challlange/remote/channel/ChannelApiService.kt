@@ -22,7 +22,12 @@ class ChannelApiService(private val client: HttpClient) {
 
     suspend fun deleteChannel(channelName: String, workspaceId: Int, userId: Int?): Boolean {
         val targetUserId = userId ?: 0
-        val response = client.delete("$baseUrl/$channelName/$workspaceId/$targetUserId")
+        // appendPathSegments percent-encodes each segment, so a channel name containing a space,
+        // '/', '#', '?' or '%' can't produce a malformed or misrouted request.
+        val url = URLBuilder(baseUrl).apply {
+            appendPathSegments(channelName, workspaceId.toString(), targetUserId.toString())
+        }.buildString()
+        val response = client.delete(url)
         return response.status.isSuccess()
     }
 

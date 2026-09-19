@@ -22,8 +22,6 @@ import androidx.core.graphics.drawable.IconCompat
 import com.example.rohit_project_challlange.dto.dm.DmDto
 import com.example.rohit_project_challlange.model.UserDao
 import com.example.rohit_project_challlange.remote.dm.DmNotificationReplyReceiver
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
@@ -37,7 +35,10 @@ class NotificationHelper(
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     // In-memory conversation history cache: PartnerId -> List of Messages
-    private val conversationHistory = ConcurrentHashMap<Int, MutableList<NotificationCompat.MessagingStyle.Message>>()
+    // Int in the pair is the server message id (0 for messages with no id to key deletion on, e.g.
+    // an outgoing reply recorded before its own send confirmation) — lets removeMessageFromHistory
+    // actually find and drop a specific message instead of only ever seeing a never-empty list.
+    private val conversationHistory = ConcurrentHashMap<Int, MutableList<Pair<Int, NotificationCompat.MessagingStyle.Message>>>()
     private val partnerNames = ConcurrentHashMap<Int, String>()
 
     init {
@@ -60,14 +61,16 @@ class NotificationHelper(
                 vibrationPattern = longArrayOf(0, 150, 80, 200)
                 enableLights(true)
                 lightColor = 0xFF25D366.toInt()
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                // PRIVATE (not PUBLIC): a locked device still shows "New message from X" without
+                // exposing the message content on the lock screen for anyone else to read.
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 setShowBadge(true)
             }
             notificationManager.createNotificationChannel(channel)
         }
     }
 
-    fun showDmNotification(dm: DmDto) {
+    suspend fun showDmNotification(dm: DmDto) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             Log.w("NotificationHelper", "Notifications disabled in system settings or missing permission")
             return
@@ -75,14 +78,12 @@ class NotificationHelper(
 
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
-        // Resolve sender display name
-        val senderName = runBlocking(Dispatchers.IO) {
-            try {
-                userDao.getUserById(dm.senderId)?.userName
-            } catch (e: Exception) {
-                null
-            }
-        } ?: "User #${dm.senderId}"
+        // Resolve sender display name — a plain suspend call instead of blocking the caller's thread.
+        val senderName = (try {
+            userDao.getUserById(dm.senderId)?.userName
+        } catch (e: Exception) {
+            null
+        }) ?: "User #${dm.senderId}"
 
         partnerNames[dm.senderId] = senderName
 
@@ -111,11 +112,18 @@ class NotificationHelper(
             senderPerson
         )
         synchronized(historyList) {
-            historyList.add(newMessage)
+            historyList.add((dm.id ?: 0) to newMessage)
             if (historyList.size > 8) {
                 historyList.removeAt(0)
             }
         }
+
+        // Each of this sender's three possible actions (click/reply/mark-read) needs its own request
+        // code — multiplying by 10 and adding a small per-action offset can never collide between
+        // categories for any senderId, unlike the previous scheme's arbitrary +200000/+300000 offsets.
+        val clickRequestCode = dm.senderId * 10
+        val replyRequestCode = dm.senderId * 10 + 1
+        val markReadRequestCode = dm.senderId * 10 + 2
 
         // Tap PendingIntent: Opens the chat screen directly
         val clickIntent = Intent(context, MainActivity::class.java).apply {
@@ -127,7 +135,7 @@ class NotificationHelper(
         }
         val clickPendingIntent = PendingIntent.getActivity(
             context,
-            dm.senderId,
+            clickRequestCode,
             clickIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -154,7 +162,7 @@ class NotificationHelper(
 
         val replyPendingIntent = PendingIntent.getBroadcast(
             context,
-            dm.senderId + 200000,
+            replyRequestCode,
             replyIntent,
             replyPendingFlags
         )
@@ -177,7 +185,7 @@ class NotificationHelper(
         }
         val markReadPendingIntent = PendingIntent.getBroadcast(
             context,
-            dm.senderId + 300000,
+            markReadRequestCode,
             markReadIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -196,7 +204,7 @@ class NotificationHelper(
             .setGroupConversation(false)
 
         synchronized(historyList) {
-            for (msg in historyList) {
+            for ((_, msg) in historyList) {
                 messagingStyle.addMessage(msg)
             }
         }
@@ -220,12 +228,12 @@ class NotificationHelper(
             .addAction(replyAction)
             .addAction(markReadAction)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setGroup("collabsphere_dms")
 
         try {
             notificationManager.notify(notificationId, builder.build())
-            Log.d("NotificationHelper", "WhatsApp-style notification posted for $senderName: ${dm.content}")
+            Log.d("NotificationHelper", "Notification posted for $senderName (message id=${dm.id})")
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed posting notification", e)
         }
@@ -244,7 +252,7 @@ class NotificationHelper(
         val historyList = conversationHistory.getOrPut(partnerId) { mutableListOf() }
         synchronized(historyList) {
             historyList.add(
-                NotificationCompat.MessagingStyle.Message(
+                0 to NotificationCompat.MessagingStyle.Message(
                     replyText,
                     System.currentTimeMillis(),
                     userPerson
@@ -257,7 +265,7 @@ class NotificationHelper(
             .setGroupConversation(false)
 
         synchronized(historyList) {
-            for (msg in historyList) {
+            for ((_, msg) in historyList) {
                 messagingStyle.addMessage(msg)
             }
         }
@@ -284,13 +292,46 @@ class NotificationHelper(
     }
 
     fun removeMessageFromHistory(partnerId: Int, messageId: Int) {
-        val historyList = conversationHistory[partnerId]
-        if (historyList != null) {
-            synchronized(historyList) {
-                if (historyList.isEmpty()) {
-                    notificationManager.cancel(partnerId)
-                }
+        val historyList = conversationHistory[partnerId] ?: return
+        val stillHasMessages = synchronized(historyList) {
+            if (messageId != 0) {
+                historyList.removeAll { (id, _) -> id == messageId }
             }
+            historyList.isNotEmpty()
+        }
+
+        if (!stillHasMessages) {
+            notificationManager.cancel(partnerId)
+            return
+        }
+
+        // Refresh the notification so the deleted message no longer shows in the thread.
+        val partnerName = partnerNames[partnerId] ?: "Chat"
+        val userPerson = Person.Builder().setName("You").build()
+        val messagingStyle = NotificationCompat.MessagingStyle(userPerson)
+            .setGroupConversation(false)
+        synchronized(historyList) {
+            for ((_, msg) in historyList) {
+                messagingStyle.addMessage(msg)
+            }
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setStyle(messagingStyle)
+            .setLargeIcon(createAvatarBitmap(partnerName))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setColor(0xFF25D366.toInt())
+            .setSubText("Direct message")
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup("collabsphere_dms")
+
+        try {
+            notificationManager.notify(partnerId, builder.build())
+        } catch (e: Exception) {
+            Log.e("NotificationHelper", "Failed refreshing notification after message delete", e)
         }
     }
 

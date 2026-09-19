@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -21,9 +20,6 @@ interface DmDao {
         ORDER BY timestamp ASC
     """)
     fun getDmHistory(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Flow<List<DmEntity>>
-
-    @Update
-    suspend fun updateDm(dm: DmEntity)
 
     @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
     suspend fun updateDmContent(dmId: Int, newContent: String)

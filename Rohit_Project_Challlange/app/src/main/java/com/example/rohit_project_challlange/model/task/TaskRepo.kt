@@ -5,13 +5,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import com.example.rohit_project_challlange.model.TempId
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.task.TaskRequest
 import com.example.rohit_project_challlange.model.UserEntity
 import com.example.rohit_project_challlange.model.workspace.WorkspaceDao
 import com.example.rohit_project_challlange.model.workspace.WorkspaceMemberEntity
 import com.example.rohit_project_challlange.remote.task.TaskApiService
-import com.example.rohit_project_challlange.remote.worlspace.WorkspaceApiService
+import com.example.rohit_project_challlange.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -143,7 +144,9 @@ class TaskRepo(
             Result.success(savedId)
         } catch (e: Exception) {
             Log.e("TaskRepo", "POST request failed.", e)
-            val temporaryLocalId = System.currentTimeMillis().toInt() and Int.MAX_VALUE
+            // Negative range: a positive id here (even truncated from a timestamp) can collide with
+            // a real server-assigned id synced down before this pending create's own sync resolves.
+            val temporaryLocalId = TempId.next()
             val fallbackId = taskDao.insertTask(task.copy(id = temporaryLocalId))
             val syncData = workDataOf(
                 "ACTION_TYPE" to "CREATE",
@@ -160,7 +163,7 @@ class TaskRepo(
         }
     }
 
-    suspend fun updateTask(task: TaskEntity): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun updateTask(task: TaskEntity): Result<TaskSyncOutcome> = withContext(Dispatchers.IO) {
         return@withContext try {
             taskDao.updateTask(task)
             val request = TaskRequest(
@@ -171,7 +174,7 @@ class TaskRepo(
                 status = task.status.name
             )
             apiService.updateTask(taskId = task.id, request = request)
-            Result.success(Unit)
+            Result.success(TaskSyncOutcome.CONFIRMED)
         } catch (e: Exception) {
             Log.e("TaskRepo", "PUT request failed.", e)
             val syncData = workDataOf(
@@ -185,15 +188,15 @@ class TaskRepo(
                 "STATUS" to task.status.name
             )
             enqueueSync(syncData)
-            Result.success(Unit)
+            Result.success(TaskSyncOutcome.QUEUED)
         }
     }
 
-    suspend fun deleteTask(taskId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun deleteTask(taskId: Int): Result<TaskSyncOutcome> = withContext(Dispatchers.IO) {
         return@withContext try {
             apiService.deleteTask(taskId)
             taskDao.deleteTask(taskId)
-            Result.success(Unit)
+            Result.success(TaskSyncOutcome.CONFIRMED)
         } catch (e: Exception) {
             Log.e("TaskRepo", "DELETE request failed.", e)
             taskDao.deleteTask(taskId)
@@ -202,7 +205,7 @@ class TaskRepo(
                 "TASK_ID" to taskId
             )
             enqueueSync(syncData)
-            Result.success(Unit)
+            Result.success(TaskSyncOutcome.QUEUED)
         }
     }
 
@@ -221,8 +224,11 @@ class TaskRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per task, not per entity TYPE — see ChannelRepo.enqueueSync for why a shared name
+        // across every task would let one permanently-failed sync cancel every other task's queue.
+        val taskId = data.getInt("TASK_ID", 0)
         workManager.enqueueUniqueWork(
-            "TASK_SYNC_QUEUE",
+            "TASK_SYNC_$taskId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

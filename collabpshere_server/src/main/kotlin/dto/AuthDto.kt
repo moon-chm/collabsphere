@@ -13,8 +13,11 @@ data class LoginResponse(
     val id: Int,
     val userName: String,
     val email: String,
-    val token: String? = null
+    val token: String? = null,
+    val avatarUrl: String? = null,
+    val isEmailVerified: Boolean = false
 )
+
 @Serializable
 data class RegisterRequest(
     val email: String,
@@ -26,6 +29,8 @@ data class RegisterRequest(
 data class UpdateProfileRequest(
     val userId: Int,
     val userName: String,
+    val bio: String? = null,
+    val statusMessage: String? = null,
     val currentPassword: String? = null,
     val newPassword: String? = null
-)
+)

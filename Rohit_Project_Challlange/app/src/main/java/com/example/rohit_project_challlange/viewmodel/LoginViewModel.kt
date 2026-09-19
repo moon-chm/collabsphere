@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.rohit_project_challlange.model.UserRepo
 import android.util.Patterns
+import com.example.rohit_project_challlange.SessionManager
 import com.example.rohit_project_challlange.UserPreferences
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,8 @@ import java.net.SocketTimeoutException
 
 class LoginViewModel(
     private val repo: UserRepo,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _loginStatus = MutableStateFlow<String?>(null)
@@ -139,7 +141,7 @@ class LoginViewModel(
 
     fun logout() {
         viewModelScope.launch {
-            userPreferences.clearPreferences()
+            sessionManager.logout()
             _isLoggedIn.value = false
             _loginStatus.value = null
             _loggedInUserId.value = 0L

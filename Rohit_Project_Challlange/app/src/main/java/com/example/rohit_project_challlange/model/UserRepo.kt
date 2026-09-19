@@ -1,5 +1,7 @@
 package com.example.rohit_project_challlange.model
+import android.util.Log
 
+import com.example.rohit_project_challlange.UserPreferences
 import com.example.rohit_project_challlange.dto.login.LoginRequest
 import com.example.rohit_project_challlange.dto.login.RegisterRequest
 import com.example.rohit_project_challlange.dto.login.LoginResponse
@@ -7,24 +9,26 @@ import com.example.rohit_project_challlange.remote.login.LoginApiService
 
 class UserRepo(
     private val userDao: UserDao,
-    private val apiService: LoginApiService
+    private val apiService: LoginApiService,
+    private val userPreferences: UserPreferences
 ) {
 
     suspend fun registerRemote(email: String, username: String, pass: String): Result<LoginResponse> {
         return try {
             val apiResponse: LoginResponse = apiService.register(RegisterRequest(email, pass, username))
+            userPreferences.saveAuthToken(apiResponse.token)
 
             val localUser = UserEntity(
                 id = apiResponse.id,
                 email = email,
                 userName = username,
-                password = pass
+                password = PasswordHasher.hash(pass)
             )
             userDao.registerUser(localUser)
 
             Result.success(apiResponse)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("UserRepo", "Operation failed", e)
             Result.failure(e)
         }
     }
@@ -33,17 +37,21 @@ class UserRepo(
         val localUser = userDao.getUserByEmail(email)
         return try {
             val responseDto = apiService.login(LoginRequest(email, pass))
+            userPreferences.saveAuthToken(responseDto.token)
             val userEntity = UserEntity(
                 id = responseDto.id,
                 email = responseDto.email,
                 userName = responseDto.userName,
-                password = pass
+                password = PasswordHasher.hash(pass)
             )
             userDao.registerUser(userEntity)
             Result.success(userEntity)
         } catch (e: Exception) {
             if (localUser != null) {
-                if (localUser.password == pass) {
+                if (PasswordHasher.matches(pass, localUser.password)) {
+                    if (!PasswordHasher.isHashed(localUser.password)) {
+                        userDao.registerUser(localUser.copy(password = PasswordHasher.hash(pass)))
+                    }
                     Result.success(localUser)
                 } else {
                     Result.failure(Exception("Invalid password"))
@@ -70,7 +78,8 @@ class UserRepo(
             if (user == null || user.id != userId) return false
 
             if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
-                if (user.password.isNotEmpty() && user.password != currentPassword) return false
+                val currentMatches = user.password.isEmpty() || PasswordHasher.matches(currentPassword, user.password)
+                if (!currentMatches) return false
             }
 
             val remoteSuccess = try {
@@ -92,14 +101,14 @@ class UserRepo(
             }
 
             if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
-                userDao.updateUserProfileWithPassword(userId, newName, newPassword)
+                userDao.updateUserProfileWithPassword(userId, newName, PasswordHasher.hash(newPassword))
             } else {
                 userDao.updateUsername(userId, newName)
             }
 
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("UserRepo", "Operation failed", e)
             false
         }
     }

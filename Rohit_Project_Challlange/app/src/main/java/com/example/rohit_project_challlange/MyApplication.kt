@@ -1,11 +1,17 @@
 package com.example.rohit_project_challlange
  
-import android.app.Activity
 import android.app.Application
-import android.os.Bundle
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.rohit_project_challlange.di.appModules
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
+import org.koin.android.ext.android.get
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
@@ -19,24 +25,17 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            private var startedActivities = 0
-
-            override fun onActivityStarted(activity: Activity) {
-                startedActivities++
-                isAppForeground = startedActivities > 0
+        // ProcessLifecycleOwner already solves "is the app in the foreground" correctly (including
+        // debouncing the brief onStop/onStart blip between activities during a screen rotation or
+        // navigation) — no need to hand-roll a started-activity counter.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                isAppForeground = true
             }
 
-            override fun onActivityStopped(activity: Activity) {
-                startedActivities = (startedActivities - 1).coerceAtLeast(0)
-                isAppForeground = startedActivities > 0
+            override fun onStop(owner: LifecycleOwner) {
+                isAppForeground = false
             }
-
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
         })
 
         startKoin {
@@ -45,5 +44,10 @@ class MyApplication : Application() {
             workManagerFactory()
             modules(appModules)
         }
+
+        val userPreferences: UserPreferences = get()
+        userPreferences.authTokenFlow
+            .onEach { AuthTokenHolder.token = it }
+            .launchIn(CoroutineScope(Dispatchers.IO))
     }
 }

@@ -34,7 +34,10 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-java-time:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposed_version")
-    implementation("io.ktor:ktor-server-cors:${ktor_version}")
+    implementation("io.ktor:ktor-server-auth:${ktor_version}")
+    implementation("io.ktor:ktor-server-auth-jwt:${ktor_version}")
+    implementation("io.ktor:ktor-server-status-pages:${ktor_version}")
+    implementation("at.favre.lib:bcrypt:0.10.2")
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
 }

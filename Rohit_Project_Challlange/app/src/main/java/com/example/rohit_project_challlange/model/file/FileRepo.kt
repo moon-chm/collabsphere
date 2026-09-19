@@ -1,10 +1,12 @@
 package com.example.rohit_project_challlange.model.file
+import android.util.Log
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.file.FileApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -64,9 +66,11 @@ class FileRepo(
             serverResponse.id
         } catch (e: Exception) {
             System.err.println("Network Upload Pipeline Mismatch Failure Exception:")
-            e.printStackTrace()
+            Log.e("FileRepo", "Operation failed", e)
 
-            val allocatedLocalId = fileDoa.insertFile(local_files)
+            // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
+            // id == 0, so a positive fallback here could collide with a real id synced down later.
+            val allocatedLocalId = fileDoa.insertFile(local_files.copy(id = TempId.nextLong()))
 
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPLOAD",
@@ -106,23 +110,29 @@ class FileRepo(
                     entities.forEach { fileDoa.insertFile(it) }
                 } catch (e: Exception) {
                     System.err.println("Error fetching network files on loop initialization:")
-                    e.printStackTrace()
+                    Log.e("FileRepo", "Operation failed", e)
                 }
             }
             .flowOn(Dispatchers.IO)
     }
 
-    suspend fun downloadFileFromServer(url: String): ByteArray {
-        return fileApiService.downloadFile(url)
+    suspend fun downloadFileFromServer(url: String, destination: File) {
+        fileApiService.downloadFile(url, destination)
     }
 
     suspend fun deletefiles(fileId: Long) = withContext(Dispatchers.IO) {
         try {
             val isNetworkDeleted = fileApiService.deleteFile(fileId)
+            if (!isNetworkDeleted) {
+                // Server explicitly rejected the delete (not a network failure) — retry in the background
+                // instead of letting the local cache silently drift from what the server still has.
+                System.err.println("Server rejected delete for file $fileId, deferring to background sync.")
+                enqueueSync(workDataOf("ACTION_TYPE" to "DELETE", "FILE_ID" to fileId))
+            }
             fileDoa.deleteFileById(fileId)
         } catch (e: Exception) {
             System.err.println("Network Delete Exception encountered, deferring execution to background sync:")
-            e.printStackTrace()
+            Log.e("FileRepo", "Operation failed", e)
 
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
@@ -170,7 +180,7 @@ class FileRepo(
                 }
             } catch (e: Exception) {
                 System.err.println("Exception encountered during workspace file polling updates loop:")
-                e.printStackTrace()
+                Log.e("FileRepo", "Operation failed", e)
             }
             delay(3000)
         }
@@ -187,8 +197,11 @@ class FileRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per file, not per entity TYPE — see ChannelRepo.enqueueSync for why a shared name
+        // across every file would let one permanently-failed sync cancel every other file's queue.
+        val fileId = data.getLong("FILE_ID", 0L)
         workManager.enqueueUniqueWork(
-            "FILE_SYNC_QUEUE",
+            "FILE_SYNC_$fileId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

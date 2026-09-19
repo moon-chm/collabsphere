@@ -24,7 +24,7 @@ object WidgetDataProvider {
             AppDatabase::class.java,
             "app_database"
         )
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
 
     /**

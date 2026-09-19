@@ -116,18 +116,23 @@ class DmViewModel(
             try {
                 repo.sendRealtimeDm(id, workspaceId, senderId, receiverId, content)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("DmViewModel", "Operation failed", e)
             }
         }
     }
 
     fun deleteMessage(dmId: Int, workspaceId: Int, partnerId: Int = 0) {
+        // A negative id is still a client-local placeholder for a message the server hasn't
+        // confirmed yet — it has no real id to delete server-side. Acting on it now would silently
+        // no-op remotely and can resurrect the message once the delivery ack reconciles the temp row.
+        if (dmId < 0) return
         viewModelScope.launch {
             repo.deleteDm(dmId, workspaceId, partnerId)
         }
     }
 
     fun updateMessage(dmId: Int, workspaceId: Int, receiverId: Int, newContent: String) {
+        if (dmId < 0) return
         viewModelScope.launch {
             val senderId = currentUserId ?: 0
             repo.updateDm(dmId, workspaceId, senderId, receiverId, newContent)

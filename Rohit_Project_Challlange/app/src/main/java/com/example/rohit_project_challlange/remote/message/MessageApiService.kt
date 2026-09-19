@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.remote.message
+import android.util.Log
 
 import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.dto.message.MessageRequest
@@ -36,7 +37,7 @@ class MessageApiService(private val client: HttpClient) {
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MessageApiService", "Operation failed", e)
             false
         }
     }

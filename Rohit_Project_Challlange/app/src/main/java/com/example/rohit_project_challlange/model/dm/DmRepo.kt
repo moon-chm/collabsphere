@@ -1,7 +1,9 @@
 package com.example.rohit_project_challlange.model.dm
+import android.util.Log
 
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.dm.DmDto
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.dm.DmApiService
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.TimeUnit
@@ -23,7 +25,7 @@ class DmRepo(
     suspend fun sendRealtimeDm(id: Int? = null, workspaceId: Int, senderId: Int, receiverId: Int, content: String) {
         val timestampVal = System.currentTimeMillis()
         val tempId = if (id == null || id == 0) {
-            -((timestampVal % 100000000).toInt() + kotlin.random.Random.nextInt(1, 9999))
+            TempId.next()
         } else {
             id
         }
@@ -51,7 +53,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("DmRepo", "Operation failed", e)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "SEND_MESSAGE",
                 "DM_ID" to tempId,
@@ -87,8 +89,13 @@ class DmRepo(
         }
 
         if (message.action == "HISTORY") {
+            // A HISTORY payload always carries a real, server-assigned id. If it somehow doesn't,
+            // hashCode() is not a stable/unique key — drop the message rather than risk silently
+            // overwriting an unrelated row via a hash collision.
+            val id = message.id
+            if (id == null || id == 0) return
             val historyEntity = DmEntity(
-                id = if (message.id == null || message.id == 0) message.hashCode() else message.id,
+                id = id,
                 workspaceId = message.workspaceId,
                 senderId = message.senderId,
                 receiverId = message.receiverId,
@@ -115,8 +122,12 @@ class DmRepo(
             return
         }
 
+        // Same reasoning as the HISTORY branch above: a real incoming message always has a
+        // server-assigned id; without one there's nothing safe to key the local row on.
+        val id = message.id
+        if (id == null || id == 0) return
         val localEntity = DmEntity(
-            id = if (message.id == null || message.id == 0) message.hashCode() else message.id,
+            id = id,
             workspaceId = message.workspaceId,
             senderId = message.senderId,
             receiverId = message.receiverId,
@@ -142,7 +153,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("DmRepo", "Operation failed", e)
         }
     }
 
@@ -163,7 +174,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("DmRepo", "Operation failed", e)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE_MESSAGE",
                 "DM_ID" to dmId,
@@ -188,8 +199,13 @@ class DmRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per message, not a timestamp-suffixed name — that defeated enqueueUniqueWork's
+        // dedup entirely and let unboundedly many parallel workers pile up under network outages.
+        // Per-message keying gets the same failure-isolation as the other repos' sync queues without
+        // that risk. See ChannelRepo.enqueueSync for why a name shared across every message is wrong too.
+        val dmId = data.getInt("DM_ID", 0)
         workManager.enqueueUniqueWork(
-            "DM_SYNC_QUEUE_${System.currentTimeMillis()}",
+            "DM_SYNC_$dmId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

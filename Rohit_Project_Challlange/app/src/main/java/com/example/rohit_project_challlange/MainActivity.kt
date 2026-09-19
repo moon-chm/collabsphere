@@ -80,10 +80,13 @@ class MainActivity : ComponentActivity() {
         if (targetIntent?.getBooleanExtra("from_notification", false) == true) {
             val workspaceId = targetIntent.getIntExtra("workspace_id", -1)
             val partnerId = targetIntent.getIntExtra("partner_id", -1)
-            val senderName = targetIntent.getStringExtra("sender_name") ?: "Member"
+            val senderName = targetIntent.getStringExtra("partner_name") ?: "Member"
             if (workspaceId != -1 && partnerId != -1) {
                 notificationDeepLink = NotificationDeepLink(workspaceId, partnerId, senderName)
             }
+            // Mark this intent as consumed so a rotation (which re-delivers the same intent to a
+            // fresh onCreate) doesn't silently re-navigate to the same DM/workspace again.
+            targetIntent.putExtra("from_notification", false)
         }
     }
 

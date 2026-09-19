@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.message
+import android.util.Log
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -77,7 +78,7 @@ class MessageSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MessageSyncWorker", "Operation failed", e)
             return@withContext Result.retry()
         }
     }

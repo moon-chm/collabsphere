@@ -2,6 +2,7 @@ package com.example.rohit_project_challlange.viewmodel.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.rohit_project_challlange.SessionManager
 import com.example.rohit_project_challlange.UserPreferences
 import com.example.rohit_project_challlange.model.UserRepo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +14,8 @@ class ProfileViewModel(
     val loggedInUserId: Int,
     private val userEmail: String,
     private val repo: UserRepo,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _updatedUserName = MutableStateFlow("")
@@ -93,7 +95,7 @@ class ProfileViewModel(
 
     fun onLogout(onLogoutComplete: () -> Unit) {
         viewModelScope.launch {
-            userPreferences.clearPreferences()
+            sessionManager.logout()
             onLogoutComplete()
         }
     }

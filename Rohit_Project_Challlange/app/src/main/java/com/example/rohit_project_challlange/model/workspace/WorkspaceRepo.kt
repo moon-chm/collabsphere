@@ -8,8 +8,9 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.workspace.AddMemberRequest
 import com.example.rohit_project_challlange.dto.workspace.WorkspaceRequest
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.model.UserEntity
-import com.example.rohit_project_challlange.remote.worlspace.WorkspaceApiService
+import com.example.rohit_project_challlange.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +19,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
 class WorkspaceRepo(
     private val workspaceDao: WorkspaceDao,
@@ -71,14 +71,18 @@ class WorkspaceRepo(
 
     suspend fun syncWorkspaces(userId: Int) = withContext(Dispatchers.IO) {
         try {
-            workspaceDao.upsertUser(
-                UserEntity(
-                    id = userId,
-                    email = "currentuser@collabsphere.com",
-                    password = "",
-                    userName = "Logged In User"
+            // Only ever plant a placeholder row to satisfy the FK constraint on WorkspaceEntity.userId
+            // when the real user row genuinely isn't cached yet — never overwrite it if it already is.
+            if (workspaceDao.userCount(userId) == 0) {
+                workspaceDao.upsertUser(
+                    UserEntity(
+                        id = userId,
+                        email = "",
+                        password = "",
+                        userName = ""
+                    )
                 )
-            )
+            }
 
             val remote = workspaceApiService.getWorkspacesByUserId(userId)
             val workspaceEntities = remote.map {
@@ -149,7 +153,7 @@ class WorkspaceRepo(
                 )
                 Result.success(Unit)
             } catch (e: Exception) {
-                val tempId = Random.nextInt(-999999, -1)
+                val tempId = TempId.next()
                 val temporaryEntity = workspace.copy(id = tempId)
 
                 workspaceDao.upsertWorkspace(temporaryEntity)
@@ -215,17 +219,11 @@ class WorkspaceRepo(
         userId: Int,
         workspacePassword: String
     ): Int = withContext(Dispatchers.IO) {
-        try {
-            val serverRowsAffected = workspaceApiService.deleteWorkspaceFromServer(workspaceName, userId, workspacePassword)
-
-            if (serverRowsAffected > 0) {
-                return@withContext workspaceDao.deleteWorkspaceFromScreen(workspaceName, userId, workspacePassword)
-            } else {
-                return@withContext 0
-            }
-        } catch (e: Exception) {
-            throw e
-        }
+        // Delete locally by the exact workspace id(s) the server confirmed as deleted, never by name
+        // alone — two distinct workspaces (the user's own and someone else's) can share a name.
+        val deletedIds = workspaceApiService.deleteWorkspaceFromServer(workspaceName, userId, workspacePassword)
+        deletedIds.forEach { workspaceDao.deleteWorkspaceById(it) }
+        deletedIds.size
     }
 
     suspend fun isUserMember(workspaceId: Int, email: String): Boolean = withContext(Dispatchers.IO) {
@@ -244,8 +242,15 @@ class WorkspaceRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per workspace (and per member email for ADD_MEMBER, since several distinct members
+        // can be queued for the same workspace at once) — see ChannelRepo.enqueueSync for why a
+        // shared name across every workspace would let one permanently-failed sync cancel the rest.
+        val workspaceId = data.getInt("WORKSPACE_ID", 0)
+        val email = data.getString("EMAIL")
+        val uniqueKey = if (email != null) "WORKSPACE_SYNC_${workspaceId}_$email" else "WORKSPACE_SYNC_$workspaceId"
+
         workManager.enqueueUniqueWork(
-            "WORKSPACE_SYNC_QUEUE",
+            uniqueKey,
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             request
         )
