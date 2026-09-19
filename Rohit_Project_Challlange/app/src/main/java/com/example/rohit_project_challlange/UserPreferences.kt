@@ -112,6 +112,12 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun updateUserEmail(email: String) {
+        dataStore.edit { preferences ->
+            preferences[USER_EMAIL] = email
+        }
+    }
+
     suspend fun clearPreferences() {
         dataStore.edit { preferences ->
             preferences.clear()

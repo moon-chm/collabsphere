@@ -68,6 +68,9 @@ val databaseModule = module {
             // destructive there is acceptable. An *upgrade* with no matching Migration now fails loudly
             // instead of silently wiping every user's local data, as it has on every version bump so far.
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+            // The users table is a resyncable cache of GET /api/user/profile — safe to drop and
+            // rebuild on an upgrade rather than hand-writing a Migration for every added column.
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
     }
 

@@ -30,7 +30,7 @@ import com.example.rohit_project_challlange.model.message.MessageEntity
         FileEntity::class,
         DmEntity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
