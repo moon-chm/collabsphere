@@ -82,7 +82,103 @@ import com.example.rohit_project_challlange.model.dm.DmEntity
 import com.example.rohit_project_challlange.ui.theme.*
 import com.example.rohit_project_challlange.viewmodel.dm.DmViewModel
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+
 private val REACTION_EMOJIS = listOf("👍", "❤️", "😂", "🚀", "👀")
+
+private fun formatDmDateHeader(timestamp: Long): String {
+    val messageCal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+    val todayCal = java.util.Calendar.getInstance()
+    val yesterdayCal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+
+    return when {
+        messageCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+        messageCal.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR) -> "Today"
+
+        messageCal.get(java.util.Calendar.YEAR) == yesterdayCal.get(java.util.Calendar.YEAR) &&
+        messageCal.get(java.util.Calendar.DAY_OF_YEAR) == yesterdayCal.get(java.util.Calendar.DAY_OF_YEAR) -> "Yesterday"
+
+        messageCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) -> {
+            java.text.SimpleDateFormat("MMMM d", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        }
+        else -> {
+            java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+        }
+    }
+}
+
+private fun formatDmTime(timestamp: Long): String {
+    return java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+}
+
+private fun isSameDay(t1: Long, t2: Long): Boolean {
+    val cal1 = java.util.Calendar.getInstance().apply { timeInMillis = t1 }
+    val cal2 = java.util.Calendar.getInstance().apply { timeInMillis = t2 }
+    return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
+           cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+private fun DrawScope.drawWhatsAppTexture(baseTint: Color) {
+    val stepX = 64.dp.toPx()
+    val stepY = 64.dp.toPx()
+    val motifColor = baseTint.copy(alpha = 0.042f)
+    val stroke = Stroke(width = 1.2.dp.toPx())
+
+    var row = 0
+    var y = 20.dp.toPx()
+    while (y < size.height) {
+        val offsetX = if (row % 2 == 1) stepX / 2f else 0f
+        var x = offsetX
+        var col = 0
+        while (x < size.width) {
+            when ((row + col) % 4) {
+                0 -> {
+                    drawRoundRect(
+                        color = motifColor,
+                        topLeft = Offset(x, y),
+                        size = Size(14.dp.toPx(), 10.dp.toPx()),
+                        cornerRadius = CornerRadius(3.dp.toPx()),
+                        style = stroke
+                    )
+                }
+                1 -> {
+                    val cx = x + 7.dp.toPx()
+                    val cy = y + 5.dp.toPx()
+                    val r = 4.dp.toPx()
+                    drawLine(motifColor, Offset(cx - r, cy), Offset(cx + r, cy), strokeWidth = 1.2.dp.toPx())
+                    drawLine(motifColor, Offset(cx, cy - r), Offset(cx, cy + r), strokeWidth = 1.2.dp.toPx())
+                }
+                2 -> {
+                    val cx = x + 7.dp.toPx()
+                    val cy = y + 5.dp.toPx()
+                    val path = Path().apply {
+                        moveTo(cx, cy - 4.dp.toPx())
+                        lineTo(cx + 4.dp.toPx(), cy)
+                        lineTo(cx, cy + 4.dp.toPx())
+                        lineTo(cx - 4.dp.toPx(), cy)
+                        close()
+                    }
+                    drawPath(path, motifColor, style = stroke)
+                }
+                3 -> {
+                    drawCircle(
+                        color = motifColor,
+                        radius = 3.5.dp.toPx(),
+                        center = Offset(x + 7.dp.toPx(), y + 5.dp.toPx()),
+                        style = stroke
+                    )
+                }
+            }
+            x += stepX
+            col++
+        }
+        y += stepY
+        row++
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -113,6 +209,7 @@ fun DMScreen(
     var showActionMenu by remember { mutableStateOf(false) }
     var showReactionPickerFor by remember { mutableStateOf<DmEntity?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var showPartnerProfileDialog by remember { mutableStateOf(false) }
 
     val lazyListState = rememberLazyListState()
     val context = LocalContext.current
@@ -203,6 +300,266 @@ fun DMScreen(
                     contentScale = ContentScale.Fit,
                     loading = { CircularProgressIndicator(color = CoralStart, modifier = Modifier.size(40.dp)) }
                 )
+            }
+        }
+    }
+
+    // Partner Profile Card dialog
+    if (showPartnerProfileDialog && activeChatPartner != null) {
+        val partner = activeChatPartner!!
+        val partnerInitialDialog = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
+        val isOnlineDialog = partner.id in onlineUserIds
+
+        Dialog(onDismissRequest = { showPartnerProfileDialog = false }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .drawBehind {
+                        // Outer drop shadow
+                        drawRoundRect(
+                            color = ShadowDark.copy(alpha = 0.28f),
+                            topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
+                            size = Size(size.width, size.height),
+                            cornerRadius = CornerRadius(28.dp.toPx())
+                        )
+                        // Top-left highlight
+                        drawRoundRect(
+                            color = ShadowLight.copy(alpha = 0.90f),
+                            topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
+                            size = Size(size.width, size.height),
+                            cornerRadius = CornerRadius(28.dp.toPx())
+                        )
+                        // Base surface
+                        drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(28.dp.toPx()))
+                        // Top gloss shine
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.72f), Color.Transparent),
+                                startY = 0f,
+                                endY = 56.dp.toPx()
+                            ),
+                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
+                            cornerRadius = CornerRadius(27.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    }
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Close button (top-right)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .drawBehind {
+                                    drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
+                                    drawCircle(color = SurfaceRaised, radius = size.minDimension / 2f)
+                                }
+                                .clip(CircleShape)
+                                .clickable { showPartnerProfileDialog = false },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close profile",
+                                tint = Muted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Avatar
+                    Box(
+                        modifier = Modifier
+                            .size(84.dp)
+                            .drawBehind {
+                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 2.dp.toPx(), center.y + 3.dp.toPx()))
+                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 2.dp.toPx(), center.y - 2.dp.toPx()))
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(IndigoStart, IndigoEnd),
+                                        center = Offset(center.x - 8.dp.toPx(), center.y - 8.dp.toPx()),
+                                        radius = size.minDimension / 2f
+                                    )
+                                )
+                            }
+                            .clip(CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!partner.avatarUrl.isNullOrEmpty()) {
+                            SubcomposeAsyncImage(
+                                model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                contentDescription = partner.userName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(84.dp).clip(CircleShape),
+                                error = {
+                                    Text(
+                                        text = partnerInitialDialog,
+                                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            )
+                        } else {
+                            Text(
+                                text = partnerInitialDialog,
+                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // Online status pill
+                    Box(
+                        modifier = Modifier
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = if (isOnlineDialog) Mint.copy(alpha = 0.18f) else Muted.copy(alpha = 0.12f),
+                                    cornerRadius = CornerRadius(20.dp.toPx())
+                                )
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isOnlineDialog) Mint else Muted.copy(alpha = 0.5f))
+                            )
+                            Text(
+                                text = if (isOnlineDialog) "Online" else "Offline",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 11.sp),
+                                color = if (isOnlineDialog) Mint else Muted
+                            )
+                        }
+                    }
+
+                    // Username
+                    Text(
+                        text = partner.userName,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, fontSize = 20.sp),
+                        color = Ink,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Email
+                    Text(
+                        text = partner.email,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        color = Muted,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Divider
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .drawBehind {
+                                drawRect(color = ShadowDark.copy(alpha = 0.10f), topLeft = Offset(0f, 0f))
+                                drawRect(color = Color.White.copy(alpha = 0.60f), topLeft = Offset(0f, 0.5.dp.toPx()))
+                            }
+                    )
+
+                    // Bio
+                    if (!partner.bio.isNullOrBlank()) {
+                        Text(
+                            text = partner.bio,
+                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 14.sp),
+                            color = Ink.copy(alpha = 0.80f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = "No bio yet",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            color = Muted.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // Status message
+                    if (!partner.statusMessage.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .drawBehind {
+                                    drawRoundRect(
+                                        color = ShadowDark.copy(alpha = 0.10f),
+                                        topLeft = Offset(1.dp.toPx(), 2.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                    drawRoundRect(color = Surface, cornerRadius = CornerRadius(12.dp.toPx()))
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = "\"${partner.statusMessage}\"",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = Muted,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Message button
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = ShadowDark.copy(alpha = 0.22f),
+                                    topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
+                                    size = Size(size.width, size.height),
+                                    cornerRadius = CornerRadius(14.dp.toPx())
+                                )
+                                drawRoundRect(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(CoralStart, CoralEnd),
+                                        start = Offset(0f, 0f),
+                                        end = Offset(size.width, size.height)
+                                    ),
+                                    cornerRadius = CornerRadius(14.dp.toPx())
+                                )
+                                drawRoundRect(
+                                    color = Color.White.copy(alpha = 0.25f),
+                                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                                    size = Size(size.width - 1.dp.toPx(), size.height / 2),
+                                    cornerRadius = CornerRadius(13.dp.toPx())
+                                )
+                            }
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showPartnerProfileDialog = false }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Message ${partner.userName}",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                            color = Color.White
+                        )
+                    }
+                }
             }
         }
     }
@@ -456,8 +813,6 @@ fun DMScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding()
-                            .height(64.dp)
                             .drawBehind {
                                 drawRect(
                                     color = ShadowDark.copy(alpha = 0.14f),
@@ -471,11 +826,14 @@ fun DMScreen(
                                     size = Size(size.width, 1.dp.toPx())
                                 )
                             }
-                            .padding(horizontal = 14.dp),
-                        contentAlignment = Alignment.Center
+                            .statusBarsPadding()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.CenterStart
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
@@ -484,344 +842,694 @@ fun DMScreen(
                                     viewModel.closeChatSessionUi()
                                 },
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(38.dp)
                                     .drawBehind {
-                                        drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
-                                        drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
+                                        drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
+                                        drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                         drawCircle(color = Surface, radius = size.minDimension / 2f)
                                     }
                             ) {
                                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(20.dp))
                             }
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
-                            val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
-                            Box(
+                            // Partner Info (clickable to view profile card)
+                            Row(
                                 modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .drawBehind {
-                                        drawCircle(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(IndigoStart, IndigoEnd),
-                                                center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
-                                                radius = size.minDimension / 2f
-                                            )
-                                        )
-                                    },
-                                contentAlignment = Alignment.Center
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { showPartnerProfileDialog = true }
+                                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (!partner.avatarUrl.isNullOrEmpty()) {
-                                    SubcomposeAsyncImage(
-                                        model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
-                                        contentDescription = partner.userName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(38.dp).clip(CircleShape),
-                                        error = { Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White) }
+                                val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .drawBehind {
+                                            drawCircle(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(IndigoStart, IndigoEnd),
+                                                    center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
+                                                    radius = size.minDimension / 2f
+                                                )
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (!partner.avatarUrl.isNullOrEmpty()) {
+                                        SubcomposeAsyncImage(
+                                            model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                            contentDescription = partner.userName,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.size(38.dp).clip(CircleShape),
+                                            error = { Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White) }
+                                        )
+                                    } else {
+                                        Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = partner.userName,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.5.sp),
+                                        color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis
                                     )
-                                } else {
-                                    Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        if (isPartnerTyping) {
+                                            val infiniteTransition = rememberInfiniteTransition(label = "headerTyping")
+                                            val pulseAlpha by infiniteTransition.animateFloat(
+                                                initialValue = 0.35f, targetValue = 1f,
+                                                animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+                                                label = "pulseAlpha"
+                                            )
+                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(CoralStart.copy(alpha = pulseAlpha)))
+                                            Text(text = "typing...", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold), color = CoralStart)
+                                        } else if (isPartnerOnline) {
+                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Mint))
+                                            Text(text = "Online", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Mint)
+                                        } else {
+                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Muted.copy(alpha = 0.5f)))
+                                            Text(text = "Offline", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Muted)
+                                        }
+                                    }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = partner.userName,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    if (isPartnerTyping) {
-                                        val infiniteTransition = rememberInfiniteTransition(label = "headerTyping")
-                                        val pulseAlpha by infiniteTransition.animateFloat(
-                                            initialValue = 0.35f, targetValue = 1f,
-                                            animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-                                            label = "pulseAlpha"
-                                        )
-                                        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(CoralStart.copy(alpha = pulseAlpha)))
-                                        Text(text = "typing...", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold), color = CoralStart)
-                                    } else if (isPartnerOnline) {
-                                        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Mint))
-                                        Text(text = "Online", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Mint)
-                                    } else {
-                                        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Muted.copy(alpha = 0.5f)))
-                                        Text(text = "Offline", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Muted)
+                            // Info action button
+                            IconButton(
+                                onClick = { showPartnerProfileDialog = true },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .drawBehind {
+                                        drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
+                                        drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
+                                        drawCircle(color = Surface, radius = size.minDimension / 2f)
                                     }
-                                }
+                            ) {
+                                Icon(imageVector = Icons.Default.Info, contentDescription = "Profile info", tint = CoralStart, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
 
-                    // Chat Messages
-                    LazyColumn(
-                        state = lazyListState,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    // Chat Area with WhatsApp-Style Background Texture
+                    val chatBgColor = MaterialTheme.colorScheme.background
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .drawBehind {
+                                drawRect(color = chatBgColor)
+                                drawWhatsAppTexture(Ink)
+                            }
                     ) {
-                        items(messages, key = { it.id }) { message ->
-                            val isOwnMessage = message.senderId.toLong() == currentUserId
-                            val msgReactions = reactions[message.id] ?: emptyMap()
-                            val isRead = message.isRead
-                            val hasMedia = !message.mediaUrl.isNullOrEmpty()
-
+                        if (messages.isEmpty()) {
+                            // Friendly Empty State Hero Card
+                            val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem()
-                                    .padding(bottom = if (msgReactions.isNotEmpty()) 8.dp else 2.dp),
-                                contentAlignment = if (isOwnMessage) Alignment.CenterEnd else Alignment.CenterStart
+                                    .fillMaxSize()
+                                    .padding(28.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Box(
-                                    modifier = Modifier.wrapContentSize(),
-                                    contentAlignment = if (isOwnMessage) Alignment.BottomEnd else Alignment.BottomStart
-                                ) {
-                                    // Message bubble
-                                    Box(
-                                        modifier = Modifier
-                                            .widthIn(min = 52.dp, max = 280.dp)
-                                            .drawBehind {
-                                                if (isOwnMessage) {
-                                                    drawRoundRect(
-                                                        color = CoralStart.copy(alpha = 0.25f),
-                                                        topLeft = Offset(0f, 2.5.dp.toPx()),
-                                                        size = Size(size.width, size.height),
-                                                        cornerRadius = CornerRadius(16.dp.toPx())
-                                                    )
-                                                    drawRoundRect(
-                                                        brush = Brush.linearGradient(
-                                                            colors = listOf(CoralLight, CoralStart),
-                                                            start = Offset(0f, 0f),
-                                                            end = Offset(size.width, size.height)
-                                                        ),
-                                                        cornerRadius = CornerRadius(16.dp.toPx())
-                                                    )
-                                                    drawRoundRect(
-                                                        brush = Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color.White.copy(alpha = 0.35f),
-                                                                Color.White.copy(alpha = 0.10f),
-                                                                Color.Transparent
-                                                            ),
-                                                            startY = 0f,
-                                                            endY = 16.dp.toPx()
-                                                        ),
-                                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                                        cornerRadius = CornerRadius(16.dp.toPx()),
-                                                        style = Stroke(width = 1.dp.toPx())
-                                                    )
-                                                } else {
-                                                    drawRoundRect(
-                                                        color = ShadowDark.copy(alpha = 0.18f),
-                                                        topLeft = Offset(2.dp.toPx(), 3.dp.toPx()),
-                                                        size = Size(size.width, size.height),
-                                                        cornerRadius = CornerRadius(16.dp.toPx())
-                                                    )
-                                                    drawRoundRect(
-                                                        color = ShadowLight.copy(alpha = 0.85f),
-                                                        topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                                        size = Size(size.width, size.height),
-                                                        cornerRadius = CornerRadius(16.dp.toPx())
-                                                    )
-                                                    drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(16.dp.toPx()))
-                                                    drawRoundRect(
-                                                        brush = Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color.White.copy(alpha = 0.70f),
-                                                                Color.White.copy(alpha = 0.15f),
-                                                                Color.Transparent
-                                                            ),
-                                                            startY = 0f,
-                                                            endY = 16.dp.toPx()
-                                                        ),
-                                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                                        cornerRadius = CornerRadius(16.dp.toPx()),
-                                                        style = Stroke(width = 1.dp.toPx())
-                                                    )
-                                                }
-                                            }
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .combinedClickable(
-                                                onClick = {},
-                                                onLongClick = {
-                                                    if (isOwnMessage) {
-                                                        selectedMessage = message
-                                                        showActionMenu = true
-                                                    } else {
-                                                        showReactionPickerFor = message
-                                                    }
-                                                }
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .drawBehind {
+                                            drawRoundRect(
+                                                color = ShadowDark.copy(alpha = 0.18f),
+                                                topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
+                                                size = Size(size.width, size.height),
+                                                cornerRadius = CornerRadius(24.dp.toPx())
                                             )
-                                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                                            drawRoundRect(
+                                                color = ShadowLight.copy(alpha = 0.90f),
+                                                topLeft = Offset(-2.dp.toPx(), -2.dp.toPx()),
+                                                size = Size(size.width, size.height),
+                                                cornerRadius = CornerRadius(24.dp.toPx())
+                                            )
+                                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                                        }
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Column(
-                                            modifier = Modifier.wrapContentSize(),
-                                            horizontalAlignment = if (isOwnMessage) Alignment.End else Alignment.Start
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .clip(CircleShape)
+                                                .drawBehind {
+                                                    drawCircle(brush = Brush.radialGradient(listOf(IndigoStart, IndigoEnd)), radius = size.minDimension / 2f)
+                                                },
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            // Media image
-                                            if (hasMedia) {
-                                                SubcomposeAsyncImage(
-                                                    model = ImageRequest.Builder(context)
-                                                        .data(message.mediaUrl)
-                                                        .crossfade(true)
-                                                        .build(),
-                                                    contentDescription = "Shared image",
-                                                    modifier = Modifier
-                                                        .widthIn(max = 220.dp)
-                                                        .heightIn(max = 220.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .clickable { fullscreenImageUrl = message.mediaUrl },
-                                                    contentScale = ContentScale.Crop,
-                                                    loading = {
-                                                        Box(
-                                                            modifier = Modifier.size(120.dp),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            CircularProgressIndicator(
-                                                                color = if (isOwnMessage) Color.White else CoralStart,
-                                                                modifier = Modifier.size(28.dp),
-                                                                strokeWidth = 2.5.dp
-                                                            )
-                                                        }
-                                                    }
-                                                )
-                                                if (message.dm_content.isNotBlank()) {
-                                                    Spacer(modifier = Modifier.height(6.dp))
-                                                }
-                                            }
-
-                                            // Text content
-                                            if (message.dm_content.isNotBlank()) {
-                                                Text(
-                                                    text = message.dm_content,
-                                                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
-                                                    color = if (isOwnMessage) Color.White else Ink
-                                                )
-                                            }
-
-                                            // Read receipt (own messages only)
-                                            if (isOwnMessage) {
-                                                Row(
-                                                    horizontalArrangement = Arrangement.End,
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.padding(top = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = if (isRead) "✓✓" else "✓",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = if (isRead) Color(0xFF6EE7B7) else Color.White.copy(alpha = 0.70f)
+                                            Text(text = partnerInitial, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                        }
+                                        Text(
+                                            text = "Start chatting with ${partner.userName}",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = Ink,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            text = "Messages are delivered instantly and synced in real-time.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Muted,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .drawBehind {
+                                                    drawRoundRect(
+                                                        brush = Brush.linearGradient(listOf(CoralLight, CoralStart)),
+                                                        cornerRadius = CornerRadius(12.dp.toPx())
                                                     )
                                                 }
-                                            }
+                                                .clickable {
+                                                    viewModel.sendMessage(
+                                                        id = 0,
+                                                        workspaceId = workspaceId,
+                                                        senderId = currentUserId.toInt(),
+                                                        receiverId = partner.id,
+                                                        content = "Hi 👋"
+                                                    )
+                                                }
+                                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                        ) {
+                                            Text("Say hi 👋", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         }
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                state = lazyListState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                itemsIndexed(messages, key = { _, it -> it.id }) { index, message ->
+                                    val isOwnMessage = message.senderId.toLong() == currentUserId
+                                    val msgReactions = reactions[message.id] ?: emptyMap()
+                                    val isRead = message.isRead
+                                    val hasMedia = !message.mediaUrl.isNullOrEmpty()
 
-                                        // Action menu for own messages
-                                        if (showActionMenu && selectedMessage?.id == message.id) {
-                                            DropdownMenu(
-                                                expanded = showActionMenu,
-                                                onDismissRequest = {
-                                                    showActionMenu = false
-                                                    selectedMessage = null
-                                                },
-                                                modifier = Modifier.background(SurfaceRaised)
+                                    // Floating Date Header Chip
+                                    val showDateHeader = index == 0 || !isSameDay(messages[index - 1].timestamp, message.timestamp)
+                                    if (showDateHeader) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .drawBehind {
+                                                        drawRoundRect(
+                                                            color = ShadowDark.copy(alpha = 0.12f),
+                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
+                                                            size = Size(size.width, size.height),
+                                                            cornerRadius = CornerRadius(12.dp.toPx())
+                                                        )
+                                                        drawRoundRect(
+                                                            color = SurfaceRaised.copy(alpha = 0.94f),
+                                                            cornerRadius = CornerRadius(12.dp.toPx())
+                                                        )
+                                                        drawRoundRect(
+                                                            color = Color.White.copy(alpha = 0.85f),
+                                                            cornerRadius = CornerRadius(12.dp.toPx()),
+                                                            style = Stroke(width = 1.dp.toPx())
+                                                        )
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 4.dp)
                                             ) {
-                                                DropdownMenuItem(
-                                                    text = { Text("React", color = Ink) },
-                                                    onClick = {
-                                                        showReactionPickerFor = message
-                                                        showActionMenu = false
-                                                        selectedMessage = null
-                                                    },
-                                                    leadingIcon = { Text("😊", fontSize = 18.sp) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("Edit message", color = Ink) },
-                                                    onClick = {
-                                                        editingMessage = message
-                                                        typedText = message.dm_content
-                                                        showActionMenu = false
-                                                        selectedMessage = null
-                                                    },
-                                                    leadingIcon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("Delete message", color = Destructive) },
-                                                    onClick = {
-                                                        viewModel.deleteMessage(message.id, workspaceId, partner.id)
-                                                        showActionMenu = false
-                                                        selectedMessage = null
-                                                        if (editingMessage?.id == message.id) {
-                                                            editingMessage = null
-                                                            typedText = ""
-                                                        }
-                                                    },
-                                                    leadingIcon = { Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = Destructive) }
+                                                Text(
+                                                    text = formatDmDateHeader(message.timestamp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    ),
+                                                    color = Muted
                                                 )
                                             }
                                         }
                                     }
 
-                                    // Docked Reaction badges overlapping the bottom border of the bubble
-                                    if (msgReactions.isNotEmpty()) {
-                                        Row(
+                                    if (isOwnMessage) {
+                                        // Outgoing message (Aligned End)
+                                        Box(
                                             modifier = Modifier
-                                                .offset(
-                                                    x = if (isOwnMessage) (-6).dp else 6.dp,
-                                                    y = 10.dp
-                                                ),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                .fillMaxWidth()
+                                                .animateItem()
+                                                .padding(bottom = if (msgReactions.isNotEmpty()) 10.dp else 2.dp),
+                                            contentAlignment = Alignment.CenterEnd
                                         ) {
-                                            msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
+                                            Box(
+                                                modifier = Modifier.wrapContentSize(),
+                                                contentAlignment = Alignment.BottomEnd
+                                            ) {
+                                                // Message bubble
                                                 Box(
                                                     modifier = Modifier
+                                                        .widthIn(min = 52.dp, max = 280.dp)
                                                         .drawBehind {
                                                             drawRoundRect(
-                                                                color = ShadowDark.copy(alpha = 0.18f),
-                                                                topLeft = Offset(0f, 1.5.dp.toPx()),
+                                                                color = CoralStart.copy(alpha = 0.25f),
+                                                                topLeft = Offset(0f, 2.5.dp.toPx()),
                                                                 size = Size(size.width, size.height),
-                                                                cornerRadius = CornerRadius(14.dp.toPx())
+                                                                cornerRadius = CornerRadius(16.dp.toPx())
                                                             )
                                                             drawRoundRect(
-                                                                color = SurfaceRaised,
-                                                                cornerRadius = CornerRadius(14.dp.toPx())
+                                                                brush = Brush.linearGradient(
+                                                                    colors = listOf(CoralLight, CoralStart),
+                                                                    start = Offset(0f, 0f),
+                                                                    end = Offset(size.width, size.height)
+                                                                ),
+                                                                cornerRadius = CornerRadius(16.dp.toPx())
                                                             )
                                                             drawRoundRect(
-                                                                color = Color.White.copy(alpha = 0.85f),
-                                                                cornerRadius = CornerRadius(14.dp.toPx()),
+                                                                brush = Brush.verticalGradient(
+                                                                    colors = listOf(
+                                                                        Color.White.copy(alpha = 0.35f),
+                                                                        Color.White.copy(alpha = 0.10f),
+                                                                        Color.Transparent
+                                                                    ),
+                                                                    startY = 0f,
+                                                                    endY = 16.dp.toPx()
+                                                                ),
+                                                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                                                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+                                                                cornerRadius = CornerRadius(16.dp.toPx()),
                                                                 style = Stroke(width = 1.dp.toPx())
                                                             )
                                                         }
-                                                        .clip(RoundedCornerShape(14.dp))
-                                                        .clickable {
-                                                            viewModel.toggleReaction(
-                                                                messageId = message.id,
-                                                                emoji = emoji,
-                                                                workspaceId = workspaceId,
-                                                                receiverId = partner.id
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .combinedClickable(
+                                                            onClick = {},
+                                                            onLongClick = {
+                                                                selectedMessage = message
+                                                                showActionMenu = true
+                                                            }
+                                                        )
+                                                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.wrapContentSize(),
+                                                        horizontalAlignment = Alignment.End
+                                                    ) {
+                                                        // Media image
+                                                        if (hasMedia) {
+                                                            SubcomposeAsyncImage(
+                                                                model = ImageRequest.Builder(context)
+                                                                    .data(message.mediaUrl)
+                                                                    .crossfade(true)
+                                                                    .build(),
+                                                                contentDescription = "Shared image",
+                                                                modifier = Modifier
+                                                                    .widthIn(max = 220.dp)
+                                                                    .heightIn(max = 220.dp)
+                                                                    .clip(RoundedCornerShape(10.dp))
+                                                                    .clickable { fullscreenImageUrl = message.mediaUrl },
+                                                                contentScale = ContentScale.Crop,
+                                                                loading = {
+                                                                    Box(
+                                                                        modifier = Modifier.size(120.dp),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        CircularProgressIndicator(
+                                                                            color = Color.White,
+                                                                            modifier = Modifier.size(28.dp),
+                                                                            strokeWidth = 2.5.dp
+                                                                        )
+                                                                    }
+                                                                }
+                                                            )
+                                                            if (message.dm_content.isNotBlank()) {
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                            }
+                                                        }
+
+                                                        // Text content
+                                                        if (message.dm_content.isNotBlank()) {
+                                                            Text(
+                                                                text = message.dm_content,
+                                                                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
+                                                                color = Color.White
                                                             )
                                                         }
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                                    ) {
-                                                        Text(text = emoji, fontSize = 12.sp)
-                                                        if (count > 1) {
+
+                                                        // Timestamp + Read receipt row
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.End,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(top = 2.dp)
+                                                        ) {
                                                             Text(
-                                                                text = count.toString(),
-                                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    fontSize = 10.sp
+                                                                text = formatDmTime(message.timestamp),
+                                                                fontSize = 10.sp,
+                                                                color = Color.White.copy(alpha = 0.75f)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                            Text(
+                                                                text = if (isRead) "✓✓" else "✓",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = if (isRead) Color(0xFF6EE7B7) else Color.White.copy(alpha = 0.70f)
+                                                            )
+                                                        }
+                                                    }
+
+                                                    // Action menu for own messages
+                                                    if (showActionMenu && selectedMessage?.id == message.id) {
+                                                        DropdownMenu(
+                                                            expanded = showActionMenu,
+                                                            onDismissRequest = {
+                                                                showActionMenu = false
+                                                                selectedMessage = null
+                                                            },
+                                                            modifier = Modifier.background(SurfaceRaised)
+                                                        ) {
+                                                            DropdownMenuItem(
+                                                                text = { Text("React", color = Ink) },
+                                                                onClick = {
+                                                                    showReactionPickerFor = message
+                                                                    showActionMenu = false
+                                                                    selectedMessage = null
+                                                                },
+                                                                leadingIcon = { Text("😊", fontSize = 18.sp) }
+                                                            )
+                                                            DropdownMenuItem(
+                                                                text = { Text("Edit message", color = Ink) },
+                                                                onClick = {
+                                                                    editingMessage = message
+                                                                    typedText = message.dm_content
+                                                                    showActionMenu = false
+                                                                    selectedMessage = null
+                                                                },
+                                                                leadingIcon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart) }
+                                                            )
+                                                            DropdownMenuItem(
+                                                                text = { Text("Delete message", color = Destructive) },
+                                                                onClick = {
+                                                                    viewModel.deleteMessage(message.id, workspaceId, partner.id)
+                                                                    showActionMenu = false
+                                                                    selectedMessage = null
+                                                                    if (editingMessage?.id == message.id) {
+                                                                        editingMessage = null
+                                                                        typedText = ""
+                                                                    }
+                                                                },
+                                                                leadingIcon = { Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = Destructive) }
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Docked Reaction badges
+                                                if (msgReactions.isNotEmpty()) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .offset(x = (-6).dp, y = 10.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .drawBehind {
+                                                                        drawRoundRect(
+                                                                            color = ShadowDark.copy(alpha = 0.18f),
+                                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
+                                                                            size = Size(size.width, size.height),
+                                                                            cornerRadius = CornerRadius(14.dp.toPx())
+                                                                        )
+                                                                        drawRoundRect(
+                                                                            color = SurfaceRaised,
+                                                                            cornerRadius = CornerRadius(14.dp.toPx())
+                                                                        )
+                                                                        drawRoundRect(
+                                                                            color = Color.White.copy(alpha = 0.85f),
+                                                                            cornerRadius = CornerRadius(14.dp.toPx()),
+                                                                            style = Stroke(width = 1.dp.toPx())
+                                                                        )
+                                                                    }
+                                                                    .clip(RoundedCornerShape(14.dp))
+                                                                    .clickable {
+                                                                        viewModel.toggleReaction(
+                                                                            messageId = message.id,
+                                                                            emoji = emoji,
+                                                                            workspaceId = workspaceId,
+                                                                            receiverId = partner.id
+                                                                        )
+                                                                    }
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                                ) {
+                                                                    Text(text = emoji, fontSize = 12.sp)
+                                                                    if (count > 1) {
+                                                                        Text(
+                                                                            text = count.toString(),
+                                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                fontSize = 10.sp
+                                                                            ),
+                                                                            color = Ink
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // Incoming message (Aligned Start with small partner avatar)
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .animateItem()
+                                                .padding(bottom = if (msgReactions.isNotEmpty()) 10.dp else 2.dp),
+                                            horizontalArrangement = Arrangement.Start,
+                                            verticalAlignment = Alignment.Bottom
+                                        ) {
+                                            // 28dp partner avatar
+                                            val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .drawBehind {
+                                                        drawCircle(
+                                                            color = ShadowDark.copy(alpha = 0.14f),
+                                                            radius = size.minDimension / 2f,
+                                                            center = Offset(center.x, center.y + 1.dp.toPx())
+                                                        )
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (!partner.avatarUrl.isNullOrEmpty()) {
+                                                    SubcomposeAsyncImage(
+                                                        model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                                        contentDescription = partner.userName,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.size(28.dp).clip(CircleShape),
+                                                        error = {
+                                                            Box(
+                                                                modifier = Modifier.size(28.dp).background(IndigoStart),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                            }
+                                                        }
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier.size(28.dp).background(IndigoStart),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                            Box(
+                                                modifier = Modifier.wrapContentSize(),
+                                                contentAlignment = Alignment.BottomStart
+                                            ) {
+                                                // Incoming Bubble Box
+                                                Box(
+                                                    modifier = Modifier
+                                                        .widthIn(min = 52.dp, max = 280.dp)
+                                                        .drawBehind {
+                                                            drawRoundRect(
+                                                                color = ShadowDark.copy(alpha = 0.18f),
+                                                                topLeft = Offset(2.dp.toPx(), 3.dp.toPx()),
+                                                                size = Size(size.width, size.height),
+                                                                cornerRadius = CornerRadius(16.dp.toPx())
+                                                            )
+                                                            drawRoundRect(
+                                                                color = ShadowLight.copy(alpha = 0.85f),
+                                                                topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
+                                                                size = Size(size.width, size.height),
+                                                                cornerRadius = CornerRadius(16.dp.toPx())
+                                                            )
+                                                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(16.dp.toPx()))
+                                                            drawRoundRect(
+                                                                brush = Brush.verticalGradient(
+                                                                    colors = listOf(
+                                                                        Color.White.copy(alpha = 0.70f),
+                                                                        Color.White.copy(alpha = 0.15f),
+                                                                        Color.Transparent
+                                                                    ),
+                                                                    startY = 0f,
+                                                                    endY = 16.dp.toPx()
                                                                 ),
+                                                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                                                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+                                                                cornerRadius = CornerRadius(16.dp.toPx()),
+                                                                style = Stroke(width = 1.dp.toPx())
+                                                            )
+                                                        }
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .combinedClickable(
+                                                            onClick = {},
+                                                            onLongClick = {
+                                                                showReactionPickerFor = message
+                                                            }
+                                                        )
+                                                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.wrapContentSize(),
+                                                        horizontalAlignment = Alignment.Start
+                                                    ) {
+                                                        // Media image
+                                                        if (hasMedia) {
+                                                            SubcomposeAsyncImage(
+                                                                model = ImageRequest.Builder(context)
+                                                                    .data(message.mediaUrl)
+                                                                    .crossfade(true)
+                                                                    .build(),
+                                                                contentDescription = "Shared image",
+                                                                modifier = Modifier
+                                                                    .widthIn(max = 220.dp)
+                                                                    .heightIn(max = 220.dp)
+                                                                    .clip(RoundedCornerShape(10.dp))
+                                                                    .clickable { fullscreenImageUrl = message.mediaUrl },
+                                                                contentScale = ContentScale.Crop,
+                                                                loading = {
+                                                                    Box(
+                                                                        modifier = Modifier.size(120.dp),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        CircularProgressIndicator(
+                                                                            color = CoralStart,
+                                                                            modifier = Modifier.size(28.dp),
+                                                                            strokeWidth = 2.5.dp
+                                                                        )
+                                                                    }
+                                                                }
+                                                            )
+                                                            if (message.dm_content.isNotBlank()) {
+                                                                Spacer(modifier = Modifier.height(6.dp))
+                                                            }
+                                                        }
+
+                                                        // Text content
+                                                        if (message.dm_content.isNotBlank()) {
+                                                            Text(
+                                                                text = message.dm_content,
+                                                                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
                                                                 color = Ink
                                                             )
+                                                        }
+
+                                                        // Timestamp row
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.End,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(top = 2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = formatDmTime(message.timestamp),
+                                                                fontSize = 10.sp,
+                                                                color = Muted
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Docked Reaction badges for incoming
+                                                if (msgReactions.isNotEmpty()) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .offset(x = 6.dp, y = 10.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .drawBehind {
+                                                                        drawRoundRect(
+                                                                            color = ShadowDark.copy(alpha = 0.18f),
+                                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
+                                                                            size = Size(size.width, size.height),
+                                                                            cornerRadius = CornerRadius(14.dp.toPx())
+                                                                        )
+                                                                        drawRoundRect(
+                                                                            color = SurfaceRaised,
+                                                                            cornerRadius = CornerRadius(14.dp.toPx())
+                                                                        )
+                                                                        drawRoundRect(
+                                                                            color = Color.White.copy(alpha = 0.85f),
+                                                                            cornerRadius = CornerRadius(14.dp.toPx()),
+                                                                            style = Stroke(width = 1.dp.toPx())
+                                                                        )
+                                                                    }
+                                                                    .clip(RoundedCornerShape(14.dp))
+                                                                    .clickable {
+                                                                        viewModel.toggleReaction(
+                                                                            messageId = message.id,
+                                                                            emoji = emoji,
+                                                                            workspaceId = workspaceId,
+                                                                            receiverId = partner.id
+                                                                        )
+                                                                    }
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                                ) {
+                                                                    Text(text = emoji, fontSize = 12.sp)
+                                                                    if (count > 1) {
+                                                                        Text(
+                                                                            text = count.toString(),
+                                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                fontSize = 10.sp
+                                                                            ),
+                                                                            color = Ink
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -829,15 +1537,15 @@ fun DMScreen(
                                         }
                                     }
                                 }
-                            }
-                        }
 
-                        if (isPartnerTyping) {
-                            item(key = "typing_bubble") {
-                                SkeuoTypingBubble(
-                                    partnerName = partner.userName,
-                                    modifier = Modifier.animateItem()
-                                )
+                                if (isPartnerTyping) {
+                                    item(key = "typing_bubble") {
+                                        SkeuoTypingBubble(
+                                            partnerName = partner.userName,
+                                            modifier = Modifier.animateItem()
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
