@@ -2,17 +2,23 @@ package com.example.rohit_project_challlange.view
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -82,6 +88,8 @@ fun LoginScreen(
             isLoading = true
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
+        } else if (!isFormValid) {
+            Toast.makeText(context, "Please enter your email and password", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -245,27 +253,46 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
         modifier = Modifier
             .size(84.dp)
             .drawBehind {
-                // dark shadow
+                val r = size.minDimension / 2f
+                // 1. Soft deep ambient drop shadow underneath
                 drawCircle(
-                    color  = ShadowDark.copy(alpha = 0.4f),
-                    radius = size.minDimension / 2f,
-                    center = Offset(center.x + 4.dp.toPx(), center.y + 5.dp.toPx())
+                    color  = Color(0xFF2C201A).copy(alpha = 0.12f),
+                    radius = r,
+                    center = Offset(center.x + 3.dp.toPx(), center.y + 6.dp.toPx())
                 )
-                // light specular
+                // 2. Contact drop shadow
                 drawCircle(
-                    color  = ShadowLight.copy(alpha = 0.9f),
-                    radius = size.minDimension / 2f,
-                    center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx())
+                    color  = Color(0xFF2C201A).copy(alpha = 0.15f),
+                    radius = r,
+                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 3.dp.toPx())
+                )
+                // 3. Top-left specular halo
+                drawCircle(
+                    color  = Color.White.copy(alpha = 0.95f),
+                    radius = r,
+                    center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
+                )
+                // 4. Medallion disk body
+                drawCircle(
+                    color = SurfaceRaised,
+                    radius = r
+                )
+                // 5. Specular rim highlight hugging top edge
+                drawCircle(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.85f),
+                            Color.White.copy(alpha = 0.15f),
+                            Color.Transparent
+                        ),
+                        startY = 0f,
+                        endY = size.height * 0.6f
+                    ),
+                    radius = r - 0.5.dp.toPx(),
+                    style = Stroke(width = 1.dp.toPx())
                 )
             }
-            .clip(CircleShape)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(SurfaceRaised, Surface),
-                    start  = Offset(0f, 0f),
-                    end    = Offset(84.dp.value, 84.dp.value)
-                )
-            ),
+            .clip(CircleShape),
         contentAlignment = Alignment.Center
     ) {
         // Accent sphere inside
@@ -273,16 +300,17 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
             modifier = Modifier
                 .size(52.dp)
                 .drawBehind {
+                    val r = size.minDimension / 2f
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(accentColor, accentColor.copy(alpha = 0.7f)),
+                            colors = listOf(accentColor, accentColor.copy(alpha = 0.75f)),
                             center = Offset(center.x - 6.dp.toPx(), center.y - 6.dp.toPx()),
-                            radius = size.minDimension / 2f
+                            radius = r
                         )
                     )
-                    // specular
+                    // Specular spot reflection
                     drawCircle(
-                        color  = Color.White.copy(alpha = 0.35f),
+                        color  = Color.White.copy(alpha = 0.40f),
                         radius = 8.dp.toPx(),
                         center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
                     )
@@ -292,56 +320,20 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
         ) {
             Text(
                 text  = letter,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
         }
     }
 }
 
-/** Raised card wrapping the form fields */
+/** Raised card wrapping the form fields using the centralized skeuoFloatingCard modifier */
 @Composable
 internal fun SkeuoFormCard(content: @Composable ColumnScope.() -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .drawBehind {
-                // dark shadow
-                drawRoundRect(
-                    color        = ShadowDark.copy(alpha = 0.3f),
-                    topLeft      = Offset(6.dp.toPx(), 8.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(24.dp.toPx())
-                )
-                // light specular
-                drawRoundRect(
-                    color        = ShadowLight.copy(alpha = 0.85f),
-                    topLeft      = Offset(-4.dp.toPx(), -4.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(24.dp.toPx())
-                )
-                // card fill
-                drawRoundRect(
-                    color        = SurfaceRaised,
-                    cornerRadius = CornerRadius(24.dp.toPx())
-                )
-                // top hairline bevel hugging rounded contour
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.7f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 24.dp.toPx()
-                    ),
-                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = CornerRadius(24.dp.toPx()),
-                    style = Stroke(width = 1.dp.toPx())
-                )
-            }
+            .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
     ) {
         Column(
             modifier = Modifier
@@ -352,7 +344,7 @@ internal fun SkeuoFormCard(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** Inset text field with skeuomorphic deboss effect */
+/** Inset text field using the centralized skeuoInset debossed cavity modifier */
 @Composable
 internal fun SkeuoTextField(
     value               : String,
@@ -369,35 +361,16 @@ internal fun SkeuoTextField(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text  = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Muted
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = Ink.copy(alpha = 0.75f)
         )
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
-                .drawBehind {
-                    // inset dark top-left
-                    drawRoundRect(
-                        color        = ShadowDark.copy(alpha = 0.2f),
-                        topLeft      = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                        size         = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                    // inset light bottom-right rim
-                    drawRoundRect(
-                        color        = ShadowLight.copy(alpha = 0.8f),
-                        topLeft      = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                        size         = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                    // field background
-                    drawRoundRect(
-                        color        = Background.copy(alpha = 0.8f),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                },
+                .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                .clip(RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
@@ -446,6 +419,7 @@ private fun BasicTextField_Compat(
         modifier               = modifier,
         singleLine             = true,
         textStyle              = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+        cursorBrush            = androidx.compose.ui.graphics.SolidColor(CoralStart),
         visualTransformation   = visualTransformation,
         keyboardOptions        = KeyboardOptions(
             keyboardType = keyboardType,
@@ -461,7 +435,7 @@ private fun BasicTextField_Compat(
                     Text(
                         text  = placeholder,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Muted.copy(alpha = 0.6f)
+                        color = Ink.copy(alpha = 0.65f)
                     )
                 }
                 innerTextField()
@@ -470,7 +444,7 @@ private fun BasicTextField_Compat(
     )
 }
 
-/** Skeuomorphic primary CTA button — Coral gradient with dual shadow & press scale */
+/** Skeuomorphic primary CTA button — Rich Coral gradient with dual shadow & spring press scale */
 @Composable
 internal fun SkeuoPrimaryButton(
     text       : String,
@@ -479,16 +453,33 @@ internal fun SkeuoPrimaryButton(
     accentColor: Color,
     onClick    : () -> Unit
 ) {
-    var pressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val haptics = LocalHapticFeedback.current
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
     val scale by animateFloatAsState(
-        targetValue   = if (pressed) 0.96f else 1f,
-        animationSpec = tween(80),
+        targetValue   = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
         label         = "btnScale"
     )
 
-    val activeColor  = if (enabled) accentColor else Muted.copy(alpha = 0.4f)
-    val shadowAlpha  = if (pressed) 0.12f else 0.30f
-    val shadowOffset = if (pressed) 2.dp else 5.dp
+    // True Coral (or Indigo) gradient tokens matching DESIGN.md
+    val isCoral = (accentColor == CoralStart)
+    val gradientStart = if (isCoral) CoralStart else IndigoStart
+    val gradientEnd   = if (isCoral) CoralEnd else IndigoEnd
+
+    val shadowColor  = gradientStart
+    val shadowAlpha  = if (isPressed) 0.15f else if (enabled) 0.38f else 0.20f
+    val shadowOffset = if (isPressed) 2.dp else 5.dp
 
     Box(
         modifier = Modifier
@@ -496,35 +487,43 @@ internal fun SkeuoPrimaryButton(
             .height(56.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .drawBehind {
-                // dark shadow
+                val cr = CornerRadius(16.dp.toPx())
+                // 1. Colored ambient drop shadow underneath button
                 drawRoundRect(
-                    color        = activeColor.copy(alpha = shadowAlpha),
+                    color        = shadowColor.copy(alpha = shadowAlpha),
                     topLeft      = Offset(0f, shadowOffset.toPx()),
                     size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(16.dp.toPx())
+                    cornerRadius = cr
                 )
-                // light specular
+                // 2. Top-left specular halo
                 drawRoundRect(
-                    color        = Color.White.copy(alpha = 0.25f),
-                    topLeft      = Offset(-2.dp.toPx(), -2.dp.toPx()),
+                    color        = Color.White.copy(alpha = 0.35f),
+                    topLeft      = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
                     size         = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(16.dp.toPx())
+                    cornerRadius = cr
                 )
-                // gradient fill
+                // 3. True Coral (or Indigo) gradient fill — always vibrant brand tone
                 drawRoundRect(
                     brush = Brush.linearGradient(
-                        colors = listOf(activeColor, activeColor.copy(alpha = 0.80f)),
+                        colors = if (enabled) {
+                            listOf(gradientStart, gradientEnd)
+                        } else {
+                            listOf(
+                                gradientStart.copy(alpha = 0.72f),
+                                gradientEnd.copy(alpha = 0.72f)
+                            )
+                        },
                         start  = Offset(0f, 0f),
                         end    = Offset(size.width, size.height)
                     ),
-                    cornerRadius = CornerRadius(16.dp.toPx())
+                    cornerRadius = cr
                 )
-                // top hairline hugging rounded contour
+                // 4. Top hairline highlight hugging rounded contour
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.35f),
-                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.45f),
+                            Color.White.copy(alpha = 0.12f),
                             Color.Transparent
                         ),
                         startY = 0f,
@@ -532,19 +531,17 @@ internal fun SkeuoPrimaryButton(
                     ),
                     topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
                     size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = CornerRadius(16.dp.toPx()),
+                    cornerRadius = cr,
                     style = Stroke(width = 1.dp.toPx())
                 )
             }
             .clip(RoundedCornerShape(16.dp))
             .clickable(
-                enabled           = enabled && !isLoading,
-                interactionSource = remember { MutableInteractionSource() },
-                indication        = null
-            ) {
-                pressed = true
-                onClick()
-            },
+                enabled           = !isLoading,
+                interactionSource = interactionSource,
+                indication        = null,
+                onClick           = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
@@ -556,16 +553,12 @@ internal fun SkeuoPrimaryButton(
         } else {
             Text(
                 text  = text,
-                style = MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = Color.White
             )
-        }
-    }
-
-    LaunchedEffect(pressed) {
-        if (pressed) {
-            kotlinx.coroutines.delay(120)
-            pressed = false
         }
     }
 }

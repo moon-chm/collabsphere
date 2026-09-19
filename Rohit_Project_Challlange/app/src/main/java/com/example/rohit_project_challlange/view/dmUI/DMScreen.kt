@@ -33,6 +33,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -46,6 +49,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +70,7 @@ fun DMScreen(
     viewModel: DmViewModel,
     workspaceId: Int,
     currentUserId: Long,
+    initialPartnerId: Int? = null,
     baseUrl: String = com.example.rohit_project_challlange.AppConfig.BASE_URL,
     onExitModule: () -> Unit
 ) {
@@ -75,12 +80,23 @@ fun DMScreen(
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
     var typedText by remember { mutableStateOf("") }
     var selectedMessage by remember { mutableStateOf<DmEntity?>(null) }
+    var editingMessage by remember { mutableStateOf<DmEntity?>(null) }
     var showActionMenu by remember { mutableStateOf(false) }
 
     val lazyListState = rememberLazyListState()
 
     val currentPartnerId = activeChatPartner?.id
     val currentMembersList = workspaceMembers
+
+    LaunchedEffect(initialPartnerId, currentMembersList) {
+        if (initialPartnerId != null && activeChatPartner == null) {
+            val partner = currentMembersList.find { it.id == initialPartnerId }
+            if (partner != null) {
+                activeChatPartner = partner
+                viewModel.loadChatHistory(workspaceId, currentUserId.toInt(), partner.id, baseUrl)
+            }
+        }
+    }
 
     LaunchedEffect(currentMembersList, currentPartnerId) {
         if (currentPartnerId != null) {
@@ -522,7 +538,7 @@ fun DMScreen(
                                         color = if (isOwnMessage) Color.White else Ink
                                     )
 
-                                    if (showActionMenu && selectedMessage?.id == message.id) {
+                                     if (showActionMenu && selectedMessage?.id == message.id) {
                                         DropdownMenu(
                                             expanded = showActionMenu,
                                             onDismissRequest = {
@@ -532,11 +548,31 @@ fun DMScreen(
                                             modifier = Modifier.background(SurfaceRaised)
                                         ) {
                                             DropdownMenuItem(
-                                                text = { Text("Delete message", color = Destructive) },
+                                                text = { Text("Edit message", color = Ink) },
                                                 onClick = {
-                                                    viewModel.deleteMessage(message.id, workspaceId)
+                                                    editingMessage = message
+                                                    typedText = message.dm_content
                                                     showActionMenu = false
                                                     selectedMessage = null
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = null,
+                                                        tint = CoralStart
+                                                    )
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Delete message", color = Destructive) },
+                                                onClick = {
+                                                    viewModel.deleteMessage(message.id, workspaceId, partner.id)
+                                                    showActionMenu = false
+                                                    selectedMessage = null
+                                                    if (editingMessage?.id == message.id) {
+                                                        editingMessage = null
+                                                        typedText = ""
+                                                    }
                                                 },
                                                 leadingIcon = {
                                                     Icon(
@@ -555,164 +591,255 @@ fun DMScreen(
                 }
 
                 // Skeuomorphic Message Input Bar
-                Box(
+                // Skeuomorphic Message Input Bar & Editing Banner
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .drawBehind {
-                            drawRect(
-                                color = ShadowDark.copy(alpha = 0.16f),
-                                topLeft = Offset(0f, -3.dp.toPx()),
-                                size = Size(size.width, 3.dp.toPx())
-                            )
-                            drawRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(0f, 0f),
-                                size = Size(size.width, 1.dp.toPx())
-                            )
-                            drawRect(color = SurfaceRaised)
-                        }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .imePadding()
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Debossed message field
-                        Box(
+                    // Tactile Editing Banner
+                    if (editingMessage != null) {
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp, max = 120.dp)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
                                 .drawBehind {
                                     drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.22f),
-                                        topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                        size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        color = ShadowDark.copy(alpha = 0.10f),
+                                        topLeft = Offset(0f, 2.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(12.dp.toPx())
                                     )
                                     drawRoundRect(
-                                        color = ShadowLight.copy(alpha = 0.85f),
-                                        topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                        size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        color = SurfaceRaised,
+                                        cornerRadius = CornerRadius(12.dp.toPx())
                                     )
                                     drawRoundRect(
-                                        color = Background.copy(alpha = 0.85f),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        color = CoralStart.copy(alpha = 0.5f),
+                                        topLeft = Offset(0f, 0f),
+                                        size = Size(4.dp.toPx(), size.height),
+                                        cornerRadius = CornerRadius(4.dp.toPx())
                                     )
                                 }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.CenterStart
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            BasicTextField(
-                                value = typedText,
-                                onValueChange = { typedText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(
-                                    onSend = {
-                                        if (typedText.trim().isNotEmpty()) {
-                                            viewModel.sendMessage(
-                                                id = 0,
-                                                workspaceId = workspaceId,
-                                                senderId = currentUserId.toInt(),
-                                                receiverId = partner.id,
-                                                content = typedText.trim()
-                                            )
-                                            typedText = ""
-                                        }
-                                    }
-                                ),
-                                decorationBox = { inner ->
-                                    Box(contentAlignment = Alignment.CenterStart) {
-                                        if (typedText.isEmpty()) {
-                                            Text(
-                                                text = "Message ${partner.userName}...",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = Muted.copy(alpha = 0.6f)
-                                            )
-                                        }
-                                        inner()
-                                    }
-                                }
-                            )
-                        }
-
-                        // Tactile Send Button
-                        val sendInteractionSource = remember { MutableInteractionSource() }
-                        val isSendPressed by sendInteractionSource.collectIsPressedAsState()
-                        val canSend = typedText.trim().isNotEmpty()
-
-                        val sendScale by animateFloatAsState(
-                            targetValue = if (isSendPressed) 0.90f else if (canSend) 1f else 0.88f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
-                            label = "dmSendScale"
-                        )
-
-                        val sendColor = if (canSend) CoralStart else Muted.copy(alpha = 0.45f)
-                        val sendColorEnd = if (canSend) CoralEnd else Muted.copy(alpha = 0.35f)
-
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                                .drawBehind {
-                                    val shadowOffset = if (isSendPressed) 1.5.dp else 4.dp
-                                    val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
-
-                                    drawCircle(
-                                        color = sendColor.copy(alpha = shadowAlpha),
-                                        radius = size.minDimension / 2f,
-                                        center = Offset(center.x, center.y + shadowOffset.toPx())
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = CoralStart,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Editing message",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = CoralStart
                                     )
-                                    drawCircle(
-                                        color = Color.White.copy(alpha = 0.30f),
-                                        radius = size.minDimension / 2f,
-                                        center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx())
-                                    )
-                                    drawCircle(
-                                        brush = Brush.radialGradient(
-                                            colors = listOf(sendColor, sendColorEnd),
-                                            center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
-                                            radius = size.minDimension / 2f
-                                        )
-                                    )
-                                    drawCircle(
-                                        color = Color.White.copy(alpha = 0.35f),
-                                        radius = 7.dp.toPx(),
-                                        center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx())
+                                    Text(
+                                        text = editingMessage!!.dm_content,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Muted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                .clip(CircleShape)
-                                .clickable(
-                                    enabled = canSend,
-                                    interactionSource = sendInteractionSource,
-                                    indication = null
-                                ) {
-                                    if (typedText.trim().isNotEmpty()) {
-                                        viewModel.sendMessage(
-                                            id = 0,
-                                            workspaceId = workspaceId,
-                                            senderId = currentUserId.toInt(),
-                                            receiverId = partner.id,
-                                            content = typedText.trim()
-                                        )
-                                        typedText = ""
-                                    }
+                            }
+                            IconButton(
+                                onClick = {
+                                    editingMessage = null
+                                    typedText = ""
                                 },
-                            contentAlignment = Alignment.Center
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Cancel Edit",
+                                    tint = Muted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                drawRect(
+                                    color = ShadowDark.copy(alpha = 0.16f),
+                                    topLeft = Offset(0f, -3.dp.toPx()),
+                                    size = Size(size.width, 3.dp.toPx())
+                                )
+                                drawRect(
+                                    color = ShadowLight.copy(alpha = 0.85f),
+                                    topLeft = Offset(0f, 0f),
+                                    size = Size(size.width, 1.dp.toPx())
+                                )
+                                drawRect(color = SurfaceRaised)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send Message",
-                                tint = Color.White,
-                                modifier = Modifier.size(19.dp)
+                            // Debossed message field
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp, max = 120.dp)
+                                    .skeuoInset(cornerRadius = 16.dp, depth = 2.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                BasicTextField(
+                                    value = typedText,
+                                    onValueChange = { typedText = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                                    cursorBrush = SolidColor(CoralStart),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                    keyboardActions = KeyboardActions(
+                                        onSend = {
+                                            if (typedText.trim().isNotEmpty()) {
+                                                val textToSend = typedText.trim()
+                                                val currentlyEditing = editingMessage
+                                                if (currentlyEditing != null) {
+                                                    viewModel.updateMessage(
+                                                        dmId = currentlyEditing.id,
+                                                        workspaceId = workspaceId,
+                                                        receiverId = partner.id,
+                                                        newContent = textToSend
+                                                    )
+                                                    editingMessage = null
+                                                    typedText = ""
+                                                } else {
+                                                    viewModel.sendMessage(
+                                                        id = 0,
+                                                        workspaceId = workspaceId,
+                                                        senderId = currentUserId.toInt(),
+                                                        receiverId = partner.id,
+                                                        content = textToSend
+                                                    )
+                                                    typedText = ""
+                                                }
+                                            }
+                                        }
+                                    ),
+                                    decorationBox = { inner ->
+                                        Box(contentAlignment = Alignment.CenterStart) {
+                                            if (typedText.isEmpty()) {
+                                                Text(
+                                                    text = if (editingMessage != null) "Edit message..." else "Message ${partner.userName}...",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = Ink.copy(alpha = 0.65f)
+                                                )
+                                            }
+                                            inner()
+                                        }
+                                    }
+                                )
+                            }
+
+                            // Tactile Send / Update Button
+                            val sendInteractionSource = remember { MutableInteractionSource() }
+                            val isSendPressed by sendInteractionSource.collectIsPressedAsState()
+                            val canSend = typedText.trim().isNotEmpty()
+
+                            val sendScale by animateFloatAsState(
+                                targetValue = if (isSendPressed) 0.90f else if (canSend) 1f else 0.88f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                ),
+                                label = "dmSendScale"
                             )
+
+                            val sendAlpha = if (canSend) 1f else 0.70f
+
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
+                                    .drawBehind {
+                                        val shadowOffset = if (isSendPressed) 1.5.dp else 4.dp
+                                        val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
+
+                                        drawCircle(
+                                            color = CoralStart.copy(alpha = shadowAlpha * sendAlpha),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x, center.y + shadowOffset.toPx())
+                                        )
+                                        drawCircle(
+                                            color = Color.White.copy(alpha = 0.30f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(
+                                                    CoralStart.copy(alpha = sendAlpha),
+                                                    CoralEnd.copy(alpha = sendAlpha)
+                                                ),
+                                                center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
+                                                radius = size.minDimension / 2f
+                                            )
+                                        )
+                                        drawCircle(
+                                            color = Color.White.copy(alpha = 0.35f),
+                                            radius = 7.dp.toPx(),
+                                            center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx())
+                                        )
+                                    }
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        enabled = canSend,
+                                        interactionSource = sendInteractionSource,
+                                        indication = null
+                                    ) {
+                                        if (typedText.trim().isNotEmpty()) {
+                                            val textToSend = typedText.trim()
+                                            val currentlyEditing = editingMessage
+                                            if (currentlyEditing != null) {
+                                                viewModel.updateMessage(
+                                                    dmId = currentlyEditing.id,
+                                                    workspaceId = workspaceId,
+                                                    receiverId = partner.id,
+                                                    newContent = textToSend
+                                                )
+                                                editingMessage = null
+                                                typedText = ""
+                                            } else {
+                                                viewModel.sendMessage(
+                                                    id = 0,
+                                                    workspaceId = workspaceId,
+                                                    senderId = currentUserId.toInt(),
+                                                    receiverId = partner.id,
+                                                    content = textToSend
+                                                )
+                                                typedText = ""
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (editingMessage != null) Icons.Default.Check else Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = if (editingMessage != null) "Update Message" else "Send Message",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
                         }
                     }
                 }

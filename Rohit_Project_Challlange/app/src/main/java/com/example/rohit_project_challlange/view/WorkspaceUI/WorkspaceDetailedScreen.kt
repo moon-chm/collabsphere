@@ -77,6 +77,8 @@ fun WorkspaceDetailedScreen(
     workspaceName: String,
     userId: Long,
     workspaceId: Int,
+    initialTab: Int = 0,
+    initialPartnerId: Int? = null,
     onBack: () -> Unit,
     onChannelClick: (ChannelEntity) -> Unit,
     onAddMemberSubmit: (email: String) -> Unit,
@@ -87,7 +89,7 @@ fun WorkspaceDetailedScreen(
     dmViewModel: DmViewModel,
     workspaceMembers: List<UserEntity>
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(initialTab) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var memberEmailInput by remember { mutableStateOf("") }
 
@@ -186,24 +188,8 @@ fun WorkspaceDetailedScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
-                            .drawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                    size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                    size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = Background.copy(alpha = 0.85f),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                            },
+                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Row(
@@ -225,6 +211,7 @@ fun WorkspaceDetailedScreen(
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(CoralStart),
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = KeyboardType.Email,
                                     imeAction = ImeAction.Done
@@ -245,7 +232,7 @@ fun WorkspaceDetailedScreen(
                                             Text(
                                                 text = "colleague@company.com",
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = Muted.copy(alpha = 0.6f)
+                                                color = Ink.copy(alpha = 0.65f)
                                             )
                                         }
                                         inner()
@@ -292,21 +279,24 @@ fun WorkspaceDetailedScreen(
 
                         // Add button
                         val canAdd = memberEmailInput.trim().isNotEmpty()
-                        val btnColor = if (canAdd) CoralStart else Muted.copy(alpha = 0.45f)
+                        val addAlpha = if (canAdd) 1f else 0.72f
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(46.dp)
                                 .drawBehind {
                                     drawRoundRect(
-                                        color = btnColor.copy(alpha = 0.25f),
+                                        color = CoralStart.copy(alpha = 0.25f * addAlpha),
                                         topLeft = Offset(0f, 2.dp.toPx()),
                                         size = Size(size.width, size.height),
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
                                     drawRoundRect(
                                         brush = Brush.linearGradient(
-                                            colors = listOf(btnColor, if (canAdd) CoralEnd else btnColor),
+                                            colors = listOf(
+                                                CoralStart.copy(alpha = addAlpha),
+                                                CoralEnd.copy(alpha = addAlpha)
+                                            ),
                                             start = Offset(0f, 0f),
                                             end = Offset(size.width, size.height)
                                         ),
@@ -314,7 +304,7 @@ fun WorkspaceDetailedScreen(
                                     )
                                 }
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = canAdd) {
+                                .clickable {
                                     val email = memberEmailInput.trim()
                                     if (email.isNotEmpty()) {
                                         onAddMemberSubmit(email)
@@ -444,26 +434,39 @@ fun WorkspaceDetailedScreen(
             }
         },
         bottomBar = {
-            // Skeuomorphic Tactile Bottom Navigation Bar — matching screenshot
+            // Skeuomorphic Tactile Bottom Navigation Bar — floating tray with true contact & ambient shadow
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .height(82.dp)
                     .drawBehind {
-                        // Top soft hairline highlight & subtle ambient separation
+                        // 1. Upward ambient diffuse shadow
                         drawRect(
-                            color = Color(0xFFEBE6DC),
+                            color = Color(0xFF2C201A).copy(alpha = 0.07f),
+                            topLeft = Offset(0f, -6.dp.toPx()),
+                            size = Size(size.width, 6.dp.toPx())
+                        )
+                        // 2. Upward tight contact shadow (2.3x ambient alpha)
+                        drawRect(
+                            color = Color(0xFF2C201A).copy(alpha = 0.16f),
+                            topLeft = Offset(0f, -1.5.dp.toPx()),
+                            size = Size(size.width, 1.5.dp.toPx())
+                        )
+                        // 3. Elevated SurfaceRaised tray body (#FDFBF7)
+                        drawRect(color = SurfaceRaised)
+                        // 4. Subtle perimeter hairline boundary
+                        drawRect(
+                            color = Color(0xFF2C2A28).copy(alpha = 0.07f),
                             topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.2.dp.toPx())
+                            size = Size(size.width, 1.dp.toPx())
                         )
+                        // 5. Bright specular rim highlight along top edge
                         drawRect(
-                            color = Color(0xFF2E221D).copy(alpha = 0.05f),
-                            topLeft = Offset(0f, -2.dp.toPx()),
-                            size = Size(size.width, 2.dp.toPx())
+                            color = Color.White.copy(alpha = 0.95f),
+                            topLeft = Offset(0f, 1.dp.toPx()),
+                            size = Size(size.width, 1.dp.toPx())
                         )
-                        // Warm cream tray background (identical to screenshot)
-                        drawRect(color = Color(0xFFF9F7F2))
                     }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
@@ -559,6 +562,7 @@ fun WorkspaceDetailedScreen(
                         viewModel = dmViewModel,
                         workspaceId = workspaceId,
                         currentUserId = userId,
+                        initialPartnerId = initialPartnerId,
                         onExitModule = { selectedTab = 0 }
                     )
                 }
@@ -591,10 +595,10 @@ private fun SkeuoTabItem(
     )
 
     // Colors matching screenshot:
-    // Terracotta accent for selected: #BA5330
+    // Terracotta accent for selected: #A63F20 (WCAG AA compliant against #EAE5DC)
     // Charcoal warm brown for unselected icon: #4F423F
     // Muted warm brown for unselected text: #70625E
-    val selectedAccent = Color(0xFFBA5330)
+    val selectedAccent = Color(0xFFA63F20)
     val unselectedIconColor = Color(0xFF4F423F)
     val unselectedTextColor = Color(0xFF70625E)
 

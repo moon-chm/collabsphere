@@ -11,6 +11,11 @@ enum class TaskStatus {
     TO_DO, IN_PROGRESS, DONE
 }
 
+/** Whether a mutation reached the server, or only got queued locally for a background retry. */
+enum class TaskSyncOutcome {
+    CONFIRMED, QUEUED
+}
+
 @Entity(
     tableName = "task",
     foreignKeys = [

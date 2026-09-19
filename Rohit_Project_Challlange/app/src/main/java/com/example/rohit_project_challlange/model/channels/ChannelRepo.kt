@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.channels
+import android.util.Log
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -7,6 +8,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.channel.ChannelRequest
 import com.example.rohit_project_challlange.dto.channel.ChannelSyncDto
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.channel.ChannelApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -51,8 +53,10 @@ class ChannelRepo(
             val savedId = channelDao.createChannels(fallbackEntity.copy(id = remoteChannel.id))
             Result.success(savedId)
         } catch (e: Exception) {
-            e.printStackTrace()
-            val fallbackId = channelDao.createChannels(fallbackEntity)
+            Log.e("ChannelRepo", "Operation failed", e)
+            // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
+            // id == 0, so a positive fallback here could collide with a real id synced down later.
+            val fallbackId = channelDao.createChannels(fallbackEntity.copy(id = TempId.next()))
             val syncData = workDataOf(
                 "CHANNEL_ID" to fallbackId.toInt(),
                 "WORKSPACE_ID" to workspaceId,
@@ -71,7 +75,7 @@ class ChannelRepo(
             val deletedRows = channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
             deletedRows > 0 || apiSuccess
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("ChannelRepo", "Operation failed", e)
             val deletedRows = channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
@@ -101,7 +105,7 @@ class ChannelRepo(
                     }
                     channelDao.insertAllChannels(channelEntities)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e("ChannelRepo", "Operation failed", e)
                 }
             }
             .flowOn(Dispatchers.IO)
@@ -140,7 +144,7 @@ class ChannelRepo(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("ChannelRepo", "Operation failed", e)
             }
             delay(3000)
         }
@@ -157,8 +161,17 @@ class ChannelRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per channel, not per entity TYPE — a shared name across every channel meant one
+        // permanently-failed item silently cancelled every other channel's independently queued sync.
+        val channelId = data.getInt("CHANNEL_ID", 0)
+        val uniqueKey = if (channelId != 0) {
+            "CHANNEL_SYNC_$channelId"
+        } else {
+            "CHANNEL_SYNC_${data.getString("CHANNEL_NAME")}_${data.getInt("WORKSPACE_ID", 0)}"
+        }
+
         workManager.enqueueUniqueWork(
-            "CHANNEL_SYNC_QUEUE",
+            uniqueKey,
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

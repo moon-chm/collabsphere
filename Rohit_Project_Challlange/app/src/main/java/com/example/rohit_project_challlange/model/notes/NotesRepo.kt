@@ -1,15 +1,16 @@
 package com.example.rohit_project_challlange.model.notes
 
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.notes.NotesRequest
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.note.NoteApiService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class NotesRepo(
@@ -22,9 +23,6 @@ class NotesRepo(
     companion object {
         private const val LAST_SYNC_KEY_PREFIX = "notes_last_sync_time_"
     }
-
-    private val activeSyncJobs = ConcurrentHashMap<Int, Job>()
-    private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private fun getSyncKey(workspaceId: Int) =
         longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
@@ -49,56 +47,51 @@ class NotesRepo(
                         notesDao.insertAllNotes(notesEntities)
                     }
                 } catch (e: Exception) {
+                    Log.e("NotesRepo", "Initial notes fetch failed", e)
                 }
             }
         }.flowOn(Dispatchers.IO)
     }
 
 
-    suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.Main) {
-        if (activeSyncJobs[workspaceId]?.isActive == true) {
-            return@withContext
-        }
+    // Runs directly in the caller's coroutine (matching every other repo's sync loop) instead of an
+    // app-lifetime singleton scope, so it's actually cancelled when the caller's scope is — e.g. when
+    // the owning ViewModel clears — instead of running for the rest of the process's life.
+    suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
+        while (isActive) {
+            try {
+                val syncKey = getSyncKey(workspaceId)
+                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
+                val updates = apiService.getNoteUpdates(workspaceId, lastSyncTime)
 
-        activeSyncJobs[workspaceId]?.cancel()
-
-        val syncJob = repoScope.launch {
-            while (isActive) {
-                try {
-                    val syncKey = getSyncKey(workspaceId)
-                    val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-                    val updates = apiService.getNoteUpdates(workspaceId, lastSyncTime)
-
-                    if (updates.isNotEmpty()) {
-                        updates.forEach { remote ->
-                            if (remote.isDeleted) {
-                                notesDao.deleteNoteById(remote.id)
-                            } else {
-                                val entity = NotesEntity(
-                                    id = remote.id,
-                                    userId = remote.userId,
-                                    workspaceId = remote.workspaceId,
-                                    notesName = remote.notesName,
-                                    description = remote.description
-                                )
-                                notesDao.createNotes(entity)
-                            }
-                        }
-
-                        val newestTimestamp = updates.maxOf { it.updatedAt }
-                        dataStore.edit { preferences ->
-                            preferences[syncKey] = newestTimestamp
+                if (updates.isNotEmpty()) {
+                    updates.forEach { remote ->
+                        if (remote.isDeleted) {
+                            notesDao.deleteNoteById(remote.id)
+                        } else {
+                            val entity = NotesEntity(
+                                id = remote.id,
+                                userId = remote.userId,
+                                workspaceId = remote.workspaceId,
+                                notesName = remote.notesName,
+                                description = remote.description
+                            )
+                            notesDao.createNotes(entity)
                         }
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                }
-                delay(3000)
-            }
-        }
 
-        activeSyncJobs[workspaceId] = syncJob
+                    val newestTimestamp = updates.maxOf { it.updatedAt }
+                    dataStore.edit { preferences ->
+                        preferences[syncKey] = newestTimestamp
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("NotesRepo", "Delta sync iteration error", e)
+            }
+            delay(3000)
+        }
     }
 
     suspend fun addnotestoscreen(notes: NotesEntity): Result<Long> = withContext(Dispatchers.IO) {
@@ -114,7 +107,7 @@ class NotesRepo(
             val localId = notesDao.createNotes(notes.copy(id = remoteNote.id))
             Result.success(localId)
         } catch (e: Exception) {
-            val tempId = (System.currentTimeMillis() and 0x7FFFFFFF).toInt()
+            val tempId = TempId.next()
             val fallbackId = notesDao.createNotes(notes.copy(id = tempId))
 
             val syncData = workDataOf(
@@ -188,8 +181,11 @@ class NotesRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per note, not per entity TYPE — see ChannelRepo.enqueueSync for why a shared name
+        // across every note would let one permanently-failed sync cancel every other note's queue.
+        val noteId = data.getInt("NOTE_ID", data.getInt("TEMPORARY_NOTE_ID", 0))
         workManager.enqueueUniqueWork(
-            "NOTES_SYNC_QUEUE",
+            "NOTES_SYNC_$noteId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             request
         )

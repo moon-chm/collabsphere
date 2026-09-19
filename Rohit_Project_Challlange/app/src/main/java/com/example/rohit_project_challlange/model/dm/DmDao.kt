@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -22,11 +21,14 @@ interface DmDao {
     """)
     fun getDmHistory(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Flow<List<DmEntity>>
 
-    @Update
-    suspend fun updateDm(dm: DmEntity)
+    @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
+    suspend fun updateDmContent(dmId: Int, newContent: String)
 
     @Query("DELETE FROM DM WHERE id = :dmId AND workspaceId = :workspaceId")
     suspend fun deleteDm(dmId: Int, workspaceId: Int)
+
+    @Query("DELETE FROM DM WHERE id = :dmId")
+    suspend fun deleteDmById(dmId: Int)
 
     @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp")
     suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long)

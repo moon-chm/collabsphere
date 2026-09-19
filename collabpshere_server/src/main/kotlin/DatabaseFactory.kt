@@ -64,7 +64,10 @@ object DatabaseFactory {
                 NotesTable,
                 TasksTable,
                 DirectMessagesTable,
-                WorkspaceMembersTable
+                WorkspaceMembersTable,
+                UserBlocksTable,
+                UserVerificationTable,
+                NotificationsTable
             )
         }
     }

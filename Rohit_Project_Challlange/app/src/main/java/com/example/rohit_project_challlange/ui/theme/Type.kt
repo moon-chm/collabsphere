@@ -145,3 +145,9 @@ val CollabSphereTypography = Typography(
 
 // Legacy alias — keeps any existing code that references `Typography` working
 val Typography = CollabSphereTypography
+
+// ─────────────────────────────────────────────────────────────────
+// NEWSREADER ALIAS — Stitch design uses Newsreader serif;
+// we map it to FrauncesFamily which fills the same editorial role.
+// ─────────────────────────────────────────────────────────────────
+val NewsreaderFamily = FrauncesFamily

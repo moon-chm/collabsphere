@@ -5,10 +5,14 @@ import com.example.rohit_project_challlange.dto.file.FileResponse
 import com.example.rohit_project_challlange.dto.file.FileSyncDto
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.forms.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.utils.io.streams.asInput
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class FileApiService(private val client: HttpClient) {
@@ -31,56 +35,41 @@ class FileApiService(private val client: HttpClient) {
                 if (localPath != null) {
                     append("localpath", localPath)
                 }
-                append("file", fileToUpload.readBytes(), Headers.build {
-                    append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
-                    append(HttpHeaders.ContentDisposition, "filename=\"${fileToUpload.name}\"")
-                })
+                append(
+                    "file",
+                    InputProvider(fileToUpload.length()) { fileToUpload.inputStream().asInput() },
+                    Headers.build {
+                        append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
+                        append(HttpHeaders.ContentDisposition, "filename=\"${fileToUpload.name}\"")
+                    }
+                )
             }
-        ) {
-            timeout {
-                requestTimeoutMillis = 60000
-                connectTimeoutMillis = 15000
-            }
-        }.body()
+        ).body()
     }
 
     suspend fun getFilesByWorkspace(workspaceId: Int): List<FileResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId") {
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
-        }.body()
+        return client.get("$baseUrl/workspace/$workspaceId").body()
     }
 
-    suspend fun downloadFile(url: String): ByteArray {
-        return client.get(url) {
-            timeout {
-                requestTimeoutMillis = 30000
-                connectTimeoutMillis = 15000
+    /** Streams the response body straight to [destination] instead of buffering the whole file in memory. */
+    suspend fun downloadFile(url: String, destination: File) {
+        val response = client.get(url)
+        withContext(Dispatchers.IO) {
+            response.bodyAsChannel().toInputStream().use { input ->
+                destination.outputStream().use { output -> input.copyTo(output) }
             }
-        }.body()
+        }
     }
 
     suspend fun deleteFile(fileId: Long): Boolean {
-        val response = client.delete("$baseUrl/$fileId") {
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
-        }
+        val response = client.delete("$baseUrl/$fileId")
         return response.status.isSuccess()
     }
-
 
     suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long): List<FileSyncDto> {
         return client.get("$baseUrl/updates") {
             parameter("workspaceId", workspaceId)
             parameter("lastSyncTime", lastSyncTime)
-            timeout {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-            }
         }.body()
     }
 }

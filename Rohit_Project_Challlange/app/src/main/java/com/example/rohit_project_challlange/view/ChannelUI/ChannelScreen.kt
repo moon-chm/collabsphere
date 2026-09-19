@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -398,18 +399,13 @@ fun SkeuoChannelItem(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
+                SkeuoActionIconButton(
                     onClick = onDeleteClick,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete channel",
-                        tint = Destructive.copy(alpha = 0.6f),
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(2.dp))
+                    icon = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete channel",
+                    tint = DestructiveStart
+                )
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
@@ -500,24 +496,8 @@ fun CreateChannelDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -528,6 +508,7 @@ fun CreateChannelDialog(
                             .padding(horizontal = 14.dp),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -535,7 +516,7 @@ fun CreateChannelDialog(
                                     Text(
                                         text = "Channel name (e.g. announcements)",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -549,24 +530,8 @@ fun CreateChannelDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -577,6 +542,7 @@ fun CreateChannelDialog(
                             .padding(horizontal = 14.dp),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(
                             onDone = {
@@ -592,7 +558,7 @@ fun CreateChannelDialog(
                                     Text(
                                         text = "Description (optional)",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -618,21 +584,24 @@ fun CreateChannelDialog(
                     }
 
                     val canCreate = name.trim().isNotEmpty()
-                    val btnColor = if (canCreate) CoralStart else Muted.copy(alpha = 0.45f)
+                    val createAlpha = if (canCreate) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = CoralStart.copy(alpha = 0.25f * createAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canCreate) CoralEnd else btnColor),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = createAlpha),
+                                            CoralEnd.copy(alpha = createAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -640,7 +609,7 @@ fun CreateChannelDialog(
                                 )
                             }
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable(enabled = canCreate) {
+                            .clickable {
                                 if (name.trim().isNotEmpty()) {
                                     viewModel.onCreateChannel()
                                     onDismiss()

@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.message
+import android.util.Log
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -6,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.example.rohit_project_challlange.dto.message.MessageRequest
+import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.message.MessageApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -47,8 +49,10 @@ class MessageRepo(
             val updatedMessage = message.copy(id = remoteMessage.id)
             messageDao.sendMessage(updatedMessage)
         } catch (e: Exception) {
-            e.printStackTrace()
-            val localId = messageDao.sendMessage(message)
+            Log.e("MessageRepo", "Operation failed", e)
+            // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
+            // id == 0, so a positive fallback here could collide with a real id synced down later.
+            val localId = messageDao.sendMessage(message.copy(id = TempId.next()))
             val syncData = workDataOf(
                 "ACTION_TYPE" to "CREATE",
                 "MESSAGE_ID" to localId.toInt(),
@@ -80,7 +84,7 @@ class MessageRepo(
             }
             messageDao.insertAllMessage(messageEntity)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MessageRepo", "Operation failed", e)
         }
         emitAll(messageDao.getMessageForChannels(workspaceId, channelId))
     }.flowOn(Dispatchers.IO)
@@ -92,7 +96,7 @@ class MessageRepo(
                 val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
                 deletedRows > 0 || apiSuccess
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("MessageRepo", "Operation failed", e)
                 val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
                 val syncData = workDataOf(
                     "ACTION_TYPE" to "DELETE",
@@ -120,7 +124,7 @@ class MessageRepo(
             apiService.updateMessage(messageId = message.id, request = request)
             messageDao.updateMessage(message)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MessageRepo", "Operation failed", e)
             messageDao.updateMessage(message)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPDATE",
@@ -172,7 +176,7 @@ class MessageRepo(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("MessageRepo", "Operation failed", e)
             }
             delay(3000)
         }
@@ -189,8 +193,11 @@ class MessageRepo(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
             .build()
 
+        // Unique per message, not per entity TYPE — see ChannelRepo.enqueueSync for why a shared
+        // name across every message would let one permanently-failed sync cancel every other one's queue.
+        val messageId = data.getInt("MESSAGE_ID", 0)
         workManager.enqueueUniqueWork(
-            "MESSAGE_SYNC_QUEUE",
+            "MESSAGE_SYNC_$messageId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

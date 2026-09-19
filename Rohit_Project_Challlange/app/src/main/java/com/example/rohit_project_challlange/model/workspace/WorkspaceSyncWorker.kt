@@ -5,7 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.rohit_project_challlange.dto.workspace.AddMemberRequest
 import com.example.rohit_project_challlange.dto.workspace.WorkspaceRequest
-import com.example.rohit_project_challlange.remote.worlspace.WorkspaceApiService
+import com.example.rohit_project_challlange.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

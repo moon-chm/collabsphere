@@ -6,6 +6,7 @@ import com.example.rohit_project_challlange.model.UserEntity
 import com.example.rohit_project_challlange.model.task.TaskEntity
 import com.example.rohit_project_challlange.model.task.TaskRepo
 import com.example.rohit_project_challlange.model.task.TaskStatus
+import com.example.rohit_project_challlange.model.task.TaskSyncOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -142,8 +143,11 @@ class TaskViewModel(
         }
 
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val outcome = withContext(Dispatchers.IO) {
                 repo.updateTask(task.copy(status = newStatus))
+            }
+            if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
+                sendUiEvent("Saved offline — will sync when you're back online.")
             }
         }
     }
@@ -155,16 +159,22 @@ class TaskViewModel(
         }
 
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val outcome = withContext(Dispatchers.IO) {
                 repo.updateTask(task.copy(assignedToUserId = userId))
+            }
+            if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
+                sendUiEvent("Saved offline — will sync when you're back online.")
             }
         }
     }
 
     fun onDeleteTask(taskId: Int) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val outcome = withContext(Dispatchers.IO) {
                 repo.deleteTask(taskId)
+            }
+            if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
+                sendUiEvent("Deleted offline — will sync when you're back online.")
             }
         }
     }
@@ -185,8 +195,11 @@ class TaskViewModel(
                 taskName = updatedTaskName,
                 taskDescription = updatedTaskDescription
             )
-            withContext(Dispatchers.IO) {
+            val outcome = withContext(Dispatchers.IO) {
                 repo.updateTask(updatedTask)
+            }
+            if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
+                sendUiEvent("Saved offline — will sync when you're back online.")
             }
         }
     }

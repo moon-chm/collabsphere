@@ -2,6 +2,7 @@ package com.example.rohit_project_challlange.di
 
 import androidx.room.Room
 import androidx.work.WorkManager
+import com.example.rohit_project_challlange.SessionManager
 import com.example.rohit_project_challlange.UserPreferences
 import com.example.rohit_project_challlange.dataStore
 import com.example.rohit_project_challlange.viewmodel.file.FileViewModel
@@ -20,7 +21,7 @@ import com.example.rohit_project_challlange.remote.channel.ChannelApiService
 import com.example.rohit_project_challlange.remote.task.TaskApiService
 import com.example.rohit_project_challlange.remote.message.MessageApiService
 import com.example.rohit_project_challlange.remote.dm.DmApiService
-import com.example.rohit_project_challlange.remote.worlspace.WorkspaceApiService
+import com.example.rohit_project_challlange.remote.workspace.WorkspaceApiService
 import com.example.rohit_project_challlange.viewmodel.LoginViewModel
 import com.example.rohit_project_challlange.viewmodel.DashboardViewModel
 import com.example.rohit_project_challlange.viewmodel.task.TaskViewModel
@@ -41,9 +42,13 @@ import com.example.rohit_project_challlange.model.notes.NotesSyncWorker
 import com.example.rohit_project_challlange.model.task.TaskSyncWorker
 import com.example.rohit_project_challlange.model.workspace.WorkspaceSyncWorker
 import com.example.rohit_project_challlange.remote.file.FileApiService
+import com.example.rohit_project_challlange.AuthTokenHolder
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.koin.androidContext
@@ -58,7 +63,12 @@ val databaseModule = module {
             androidContext(),
             AppDatabase::class.java,
             "app_database"
-        ).fallbackToDestructiveMigration(dropAllTables = true).build()
+        )
+            // Downgrading (installing an older APK over a newer DB) has no migration path and is rare —
+            // destructive there is acceptable. An *upgrade* with no matching Migration now fails loudly
+            // instead of silently wiping every user's local data, as it has on every version bump so far.
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+            .build()
     }
 
     single { get<AppDatabase>().userDao() }
@@ -83,15 +93,25 @@ val networkModule = module {
                 })
             }
             install(HttpTimeout) {
-                requestTimeoutMillis = 15000
-                connectTimeoutMillis = 15000
-                socketTimeoutMillis = 15000
+                // Render free tier cold-starts in 30–60 s — give it enough room
+                requestTimeoutMillis = 60000
+                connectTimeoutMillis = 60000
+                socketTimeoutMillis  = 60000
+            }
+            install(DefaultRequest) {
+                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
         }
     }
 
     single(named("WebSocketHttpClient")) {
         HttpClient(OkHttp) {
+            engine {
+                config {
+                    pingInterval(15, java.util.concurrent.TimeUnit.SECONDS)
+                    retryOnConnectionFailure(true)
+                }
+            }
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
@@ -100,6 +120,9 @@ val networkModule = module {
             }
             install(WebSockets) {
                 pingIntervalMillis = 15000
+            }
+            install(DefaultRequest) {
+                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
         }
     }
@@ -115,7 +138,7 @@ val networkModule = module {
 }
 
 val repositoryModule = module {
-    single { UserRepo(get(), get()) }
+    single { UserRepo(get(), get(), get()) }
     single { WorkspaceRepo(get(), get(), get(), get()) }
     single { ChannelRepo(get(), get(), get(), get()) }
     single { TaskRepo(get(), get(), get(), get(), get(), get()) }
@@ -128,7 +151,8 @@ val repositoryModule = module {
 val appModule = module {
     single { androidContext().dataStore }
     single { UserPreferences(get()) }
-    single { NotificationHelper(androidContext()) }
+    single { SessionManager(androidContext(), get(), get()) }
+    single { NotificationHelper(androidContext(), get()) }
     single { WorkManager.getInstance(androidContext()) }
 }
 
@@ -143,13 +167,14 @@ val workerModule = module {
 }
 
 val viewModelModule = module {
-    viewModel { LoginViewModel(get(), get()) }
+    viewModel { LoginViewModel(get(), get(), get()) }
 
     viewModel { (initialUserId: Int) ->
         DashboardViewModel(
             repository = get(),
             initialUserId = initialUserId,
-            userPreferences = get()
+            userPreferences = get(),
+            sessionManager = get()
         )
     }
 
@@ -217,7 +242,8 @@ val viewModelModule = module {
             loggedInUserId = loggedInUserId,
             userEmail = userEmail,
             repo = get(),
-            userPreferences = get()
+            userPreferences = get(),
+            sessionManager = get()
         )
     }
 }

@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.dm
+import android.util.Log
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -79,7 +80,7 @@ class DmSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("DmSyncWorker", "Operation failed", e)
             return@withContext Result.retry()
         }
     }

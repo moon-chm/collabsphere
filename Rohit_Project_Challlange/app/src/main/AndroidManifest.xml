@@ -11,14 +11,11 @@
 
     <application
         android:name=".MyApplication"
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.Rohit_Project_Challlange">
 
@@ -27,6 +24,15 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
+
+        <receiver
+            android:name=".remote.dm.DmNotificationReplyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.rohit_project_challlange.ACTION_REPLY" />
+                <action android:name="com.example.rohit_project_challlange.ACTION_MARK_READ" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.startup.InitializationProvider"
@@ -53,6 +59,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Rohit_Project_Challlange"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

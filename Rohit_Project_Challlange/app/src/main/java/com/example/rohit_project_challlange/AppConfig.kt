@@ -5,7 +5,7 @@ object AppConfig {
      * Production Cloud URL on Render (update once deployed to Render)
      * e.g., "https://collabsphere-server.onrender.com"
      */
-    const val PRODUCTION_BASE_URL = "https://collabsphere-server.onrender.com"
+    const val PRODUCTION_BASE_URL = "https://collabsphere-server-qtke.onrender.com"
 
     /**
      * Local Development Server IP:
@@ -18,10 +18,10 @@ object AppConfig {
     const val LOCAL_DEV_BASE_URL = "http://$LOCAL_DEV_IP:$LOCAL_DEV_PORT"
 
     /**
-     * Set to TRUE to connect to Render Cloud Production.
-     * Set to FALSE to connect to Local Laptop Development server.
+     * Driven by the build type (see app/build.gradle.kts) instead of a hand-edited constant, so a
+     * debug build can never accidentally ship pointed at production, or a release build at localhost.
      */
-    const val USE_PRODUCTION_BACKEND = false
+    val USE_PRODUCTION_BACKEND = BuildConfig.USE_PRODUCTION_BACKEND
 
     val BASE_URL: String
         get() = if (USE_PRODUCTION_BACKEND) PRODUCTION_BASE_URL else LOCAL_DEV_BASE_URL

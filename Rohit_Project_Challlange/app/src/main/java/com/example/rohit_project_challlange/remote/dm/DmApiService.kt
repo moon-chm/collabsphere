@@ -1,10 +1,13 @@
 package com.example.rohit_project_challlange.remote.dm
 
 import android.util.Log
+import com.example.rohit_project_challlange.AuthTokenHolder
 import com.example.rohit_project_challlange.dto.dm.DmDto
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocketSession
+import io.ktor.client.request.header
 import io.ktor.client.request.url
+import io.ktor.http.HttpHeaders
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.close
@@ -41,7 +44,8 @@ class DmApiService(
 
         try {
             val newSession = client.webSocketSession {
-                url("$wsUrl/ws/dm?userId=$userId")
+                url("$wsUrl/ws/dm")
+                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
             session = newSession
         } catch (e: Exception) {
@@ -78,6 +82,8 @@ class DmApiService(
                         emit(dto)
                     }
                 }
+                sessionMutex.withLock { session = null }
+                throw IllegalStateException("WebSocket incoming channel closed by remote host")
             } catch (e: Exception) {
                 Log.e("DM_DEBUG", "Exception inside websocket incoming iteration loop", e)
                 sessionMutex.withLock { session = null }

@@ -24,6 +24,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.rohit_project_challlange.NotificationDeepLink
 import com.example.rohit_project_challlange.NotificationHelper
 import com.example.rohit_project_challlange.model.UserRepo
 import com.example.rohit_project_challlange.model.channels.ChannelRepo
@@ -50,7 +51,8 @@ import com.example.rohit_project_challlange.viewmodel.notes.NotesViewModel
 import com.example.rohit_project_challlange.viewmodel.profile.ProfileViewModel
 import com.example.rohit_project_challlange.viewmodel.task.TaskViewModel
 import com.example.rohit_project_challlange.viewmodel.workspace.WorkspaceViewModel
-import com.example.rohit_project_challlange.viewmodel.workspace.WorkspaceViewModelFactory
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import com.example.rohit_project_challlange.viewmodel.message.MessageViewModel
 import com.example.rohit_project_challlange.viewmodel.dm.DmViewModel
 import org.koin.android.ext.koin.androidContext
@@ -70,7 +72,9 @@ fun AppNavigation(
     dmRepo: DmRepo,
     notificationHelper: NotificationHelper,
     dashboardViewModel: DashboardViewModel,
-    startDestination: String = "login"
+    startDestination: String = "login",
+    notificationDeepLink: NotificationDeepLink? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
     KoinContext {
         val navController = rememberNavController()
@@ -103,8 +107,17 @@ fun AppNavigation(
             }
         }
 
-        val workspaceViewModelFactory = remember(loggedInUserId) {
-            WorkspaceViewModelFactory(workspaceRepo, loggedInUserId.toInt())
+        LaunchedEffect(notificationDeepLink, isLoggedIn) {
+            val deepLink = notificationDeepLink
+            if (deepLink != null && isLoggedIn) {
+                val workspaces = dashboardViewModel.workspaces.value
+                val matchedWs = workspaces.find { it.id == deepLink.workspaceId }
+                val wsName = matchedWs?.workspaceName ?: deepLink.senderName.ifEmpty { "Workspace" }
+                val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
+
+                navController.navigate("workspace_detailed/${deepLink.workspaceId}/$encodedWsName?initialTab=4&initialPartnerId=${deepLink.partnerId}")
+                onDeepLinkConsumed()
+            }
         }
 
         NavHost(
@@ -192,7 +205,7 @@ fun AppNavigation(
                     viewModel = dashboardViewModel,
                     onNavigateToWorkspace = {
                         if (navController.currentDestination?.route == "dashboard") {
-                            navController.navigate("workspace_main")
+                            navController.navigate("workspace_create")
                         }
                     },
                     onWorkspaceClick = { workspace ->
@@ -217,7 +230,7 @@ fun AppNavigation(
 
             composable("workspace_main") {
                 val workspaceViewModel: WorkspaceViewModel =
-                    viewModel(factory = workspaceViewModelFactory)
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 WorkspaceAction(
                     viewModel = workspaceViewModel,
                     onNavigateToCreate = {
@@ -230,6 +243,7 @@ fun AppNavigation(
 
             composable("profile") {
                 val userPreferences = koinInject<com.example.rohit_project_challlange.UserPreferences>()
+                val sessionManager = koinInject<com.example.rohit_project_challlange.SessionManager>()
 
                 val profileViewModel: ProfileViewModel = viewModel(
                     factory = object : ViewModelProvider.Factory {
@@ -239,7 +253,8 @@ fun AppNavigation(
                                 loggedInUserId = loggedInUserId.toInt(),
                                 userEmail = loggedInUserEmail,
                                 repo = userRepo,
-                                userPreferences = userPreferences
+                                userPreferences = userPreferences,
+                                sessionManager = sessionManager
                             ) as T
                         }
                     }
@@ -260,14 +275,25 @@ fun AppNavigation(
             }
 
             composable(
-                route = "workspace_detailed/{workspaceId}/{workspaceName}",
+                route = "workspace_detailed/{workspaceId}/{workspaceName}?initialTab={initialTab}&initialPartnerId={initialPartnerId}",
                 arguments = listOf(
                     navArgument("workspaceId") { type = NavType.IntType },
-                    navArgument("workspaceName") { type = NavType.StringType }
+                    navArgument("workspaceName") { type = NavType.StringType },
+                    navArgument("initialTab") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                    navArgument("initialPartnerId") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    }
                 )
             ) { backStackEntry ->
                 val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
                 val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
+                val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
+                val rawPartnerId = backStackEntry.arguments?.getInt("initialPartnerId") ?: -1
+                val initialPartnerId = if (rawPartnerId != -1) rawPartnerId else null
                 val workspaceName = try {
                     URLDecoder.decode(rawWorkspaceName, StandardCharsets.UTF_8.toString())
                 } catch (e: Exception) {
@@ -275,7 +301,7 @@ fun AppNavigation(
                 }
 
                 val workspaceViewModel: WorkspaceViewModel =
-                    viewModel(factory = workspaceViewModelFactory)
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 val workspaceStatus by workspaceViewModel.workspaceStatus.collectAsStateWithLifecycle()
                 val workspaceMembers by workspaceViewModel.workspaceMembers.collectAsStateWithLifecycle()
 
@@ -355,6 +381,8 @@ fun AppNavigation(
                     workspaceName = workspaceName,
                     userId = loggedInUserId,
                     workspaceId = workspaceId,
+                    initialTab = initialTab,
+                    initialPartnerId = initialPartnerId,
                     channelViewModel = channelViewModel,
                     taskViewModel = taskViewModel,
                     notesViewModel = notesViewModel,
@@ -438,7 +466,7 @@ fun AppNavigation(
 
             composable("workspace_create") {
                 val workspaceViewModel: WorkspaceViewModel =
-                    viewModel(factory = workspaceViewModelFactory)
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 CreateWorkspaceScreen(
                     viewModel = workspaceViewModel,
                     onBack = { navController.popBackStack() }
@@ -459,7 +487,7 @@ fun AppNavigation(
                 }
 
                 val workspaceViewModel: WorkspaceViewModel =
-                    viewModel(factory = workspaceViewModelFactory)
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 DeleteWorkspaceScreen(
                     viewModel = workspaceViewModel,
                     workspaceNameToDelete = workspaceName,

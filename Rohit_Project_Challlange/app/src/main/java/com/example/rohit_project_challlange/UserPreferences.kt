@@ -32,6 +32,28 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         val USER_ID = intPreferencesKey("saved_user_id")
         val USER_NAME = stringPreferencesKey("saved_user_name")
         val USER_EMAIL = stringPreferencesKey("saved_user_email")
+        val AUTH_TOKEN = stringPreferencesKey("saved_auth_token")
+    }
+
+    val authTokenFlow: Flow<String?> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[AUTH_TOKEN] }
+
+    suspend fun saveAuthToken(token: String?) {
+        dataStore.edit { preferences ->
+            if (token.isNullOrBlank()) {
+                preferences.remove(AUTH_TOKEN)
+            } else {
+                preferences[AUTH_TOKEN] = token
+            }
+        }
+        AuthTokenHolder.token = token
     }
 
     val userIdFlow: Flow<Int> = dataStore.data
@@ -94,5 +116,6 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { preferences ->
             preferences.clear()
         }
+        AuthTokenHolder.token = null
     }
 }

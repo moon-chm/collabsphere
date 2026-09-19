@@ -7,9 +7,9 @@ import androidx.compose.ui.graphics.Color
 // ─────────────────────────────────────────────────────────────────
 
 // Base Surfaces — Light Mode
-val Background       = Color(0xFFEFEDE7)   // Warm grey canvas
-val Surface          = Color(0xFFF6F4EF)   // Raised card surface
-val SurfaceRaised    = Color(0xFFF9F7F2)   // Modals / bottom sheets
+val Background       = Color(0xFFE8E4DA)   // darker, more saturated warm grey (was EFEDE7)
+val Surface          = Color(0xFFFAF8F3)   // push lighter/whiter (was F6F4EF)
+val SurfaceRaised    = Color(0xFFFDFBF7)   // even lighter for modals
 
 // Base Surfaces — Dark Mode
 val BackgroundDark   = Color(0xFF1C1A17)

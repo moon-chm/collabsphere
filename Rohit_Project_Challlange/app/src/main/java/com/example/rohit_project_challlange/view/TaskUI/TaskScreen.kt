@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -470,12 +471,28 @@ fun SkeuoKanbanTaskCard(
     modifier: Modifier = Modifier
 ) {
     val isEditable = taskUi.isEditableByMe
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "taskCardScale"
+    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .skeuoFloatingCard(cornerRadius = 14.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .skeuoFloatingCard(cornerRadius = 14.dp, isPressed = isPressed)
             .clip(RoundedCornerShape(14.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onUpdate
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Column {
@@ -556,62 +573,53 @@ fun SkeuoKanbanTaskCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
+                SkeuoActionIconButton(
                     onClick = onDelete,
                     enabled = isEditable,
-                    modifier = Modifier.size(30.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete task",
-                        tint = if (isEditable) Destructive else Muted.copy(alpha = 0.3f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                    icon = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete task",
+                    tint = DestructiveStart,
+                    size = 30.dp,
+                    iconSize = 15.dp
+                )
 
-                IconButton(
+                Spacer(modifier = Modifier.width(6.dp))
+
+                SkeuoActionIconButton(
                     onClick = onUpdate,
                     enabled = isEditable,
-                    modifier = Modifier.size(30.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit task",
-                        tint = if (isEditable) IndigoStart else Muted.copy(alpha = 0.3f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                    icon = Icons.Default.Edit,
+                    contentDescription = "Edit task",
+                    tint = IndigoStart,
+                    size = 30.dp,
+                    iconSize = 15.dp
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
 
                 if (onMoveBackward != null) {
-                    IconButton(
+                    SkeuoActionIconButton(
                         onClick = { onMoveBackward(taskUi.task) },
                         enabled = isEditable,
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Move back",
-                            tint = if (isEditable) Ink else Muted.copy(alpha = 0.3f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Move back",
+                        tint = Ink,
+                        size = 30.dp,
+                        iconSize = 15.dp
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                 }
 
                 if (onMoveForward != null) {
-                    IconButton(
+                    SkeuoActionIconButton(
                         onClick = { onMoveForward(taskUi.task) },
                         enabled = isEditable,
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Move forward",
-                            tint = if (isEditable) CoralStart else Muted.copy(alpha = 0.3f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                        icon = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Move forward",
+                        tint = CoralStart,
+                        size = 30.dp,
+                        iconSize = 15.dp
+                    )
                 }
             }
         }
@@ -688,24 +696,8 @@ fun CreateTaskDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -716,6 +708,7 @@ fun CreateTaskDialog(
                             .padding(horizontal = 14.dp),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -723,7 +716,7 @@ fun CreateTaskDialog(
                                     Text(
                                         text = "Task name",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -737,24 +730,8 @@ fun CreateTaskDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.22f),
-                                topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                                size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Background.copy(alpha = 0.85f),
-                                cornerRadius = CornerRadius(14.dp.toPx())
-                            )
-                        },
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
@@ -765,6 +742,7 @@ fun CreateTaskDialog(
                             .padding(horizontal = 14.dp),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -772,7 +750,7 @@ fun CreateTaskDialog(
                                     Text(
                                         text = "Description (optional)",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted.copy(alpha = 0.6f)
+                                        color = Ink.copy(alpha = 0.65f)
                                     )
                                 }
                                 inner()
@@ -838,21 +816,24 @@ fun CreateTaskDialog(
                     }
 
                     val canCreate = name.trim().isNotEmpty()
-                    val btnColor = if (canCreate) CoralStart else Muted.copy(alpha = 0.45f)
+                    val createAlpha = if (canCreate) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = CoralStart.copy(alpha = 0.25f * createAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canCreate) CoralEnd else btnColor),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = createAlpha),
+                                            CoralEnd.copy(alpha = createAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -871,7 +852,7 @@ fun CreateTaskDialog(
                         Text(
                             text = "Create",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
                         )
                     }
                 }
@@ -940,22 +921,73 @@ fun UpdateTaskDialog(
                     color = Ink
                 )
 
-                OutlinedTextField(
-                    value = updatedName,
-                    onValueChange = { updatedName = it },
-                    label = { Text("Task name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                )
+                // Debossed Name Field
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    BasicTextField(
+                        value = updatedName,
+                        onValueChange = { updatedName = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (updatedName.isEmpty()) {
+                                    Text(
+                                        text = "Task name",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Ink.copy(alpha = 0.65f)
+                                    )
+                                }
+                                inner()
+                            }
+                        }
+                    )
+                }
 
-                OutlinedTextField(
-                    value = updatedDescription,
-                    onValueChange = { updatedDescription = it },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                )
+                // Debossed Description Field
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    BasicTextField(
+                        value = updatedDescription,
+                        onValueChange = { updatedDescription = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        cursorBrush = SolidColor(CoralStart),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (updatedDescription.isEmpty()) {
+                                    Text(
+                                        text = "Description (optional)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Ink.copy(alpha = 0.65f)
+                                    )
+                                }
+                                inner()
+                            }
+                        }
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -974,21 +1006,24 @@ fun UpdateTaskDialog(
                     }
 
                     val canUpdate = updatedName.trim().isNotEmpty()
-                    val btnColor = if (canUpdate) IndigoStart else Muted.copy(alpha = 0.45f)
+                    val updateAlpha = if (canUpdate) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = IndigoStart.copy(alpha = 0.25f * updateAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canUpdate) IndigoEnd else btnColor),
+                                        colors = listOf(
+                                            IndigoStart.copy(alpha = updateAlpha),
+                                            IndigoEnd.copy(alpha = updateAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -1007,7 +1042,7 @@ fun UpdateTaskDialog(
                         Text(
                             text = "Update",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White.copy(alpha = if (canUpdate) 1f else 0.85f)
                         )
                     }
                 }

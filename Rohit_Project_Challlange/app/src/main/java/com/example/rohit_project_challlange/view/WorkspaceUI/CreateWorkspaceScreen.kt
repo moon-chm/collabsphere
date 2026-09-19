@@ -1,11 +1,14 @@
 package com.example.rohit_project_challlange.view.WorkspaceUI
 
 import android.widget.Toast
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -127,6 +131,7 @@ fun CreateWorkspaceScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -209,40 +214,7 @@ fun CreateWorkspaceScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.25f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = SurfaceRaised,
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            // Specular hairline highlight hugging rounded contour
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.70f),
-                                        Color.White.copy(alpha = 0.15f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = 24.dp.toPx()
-                                ),
-                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                cornerRadius = CornerRadius(24.dp.toPx()),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                        }
+                        .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
                 ) {
                     Column(
                         modifier = Modifier
@@ -311,15 +283,19 @@ fun CreateWorkspaceScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         // Tactile Submit Button
-                        var btnPressed by remember { mutableStateOf(false) }
+                        val submitInteractionSource = remember { MutableInteractionSource() }
+                        val isSubmitPressed by submitInteractionSource.collectIsPressedAsState()
                         val btnScale by animateFloatAsState(
-                            targetValue = if (btnPressed) 0.96f else 1f,
-                            animationSpec = tween(80),
+                            targetValue = if (isSubmitPressed) 0.95f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
                             label = "createSubmitScale"
                         )
 
-                        val activeColor = if (isFormValid) CoralStart else Muted.copy(alpha = 0.45f)
-                        val activeColorEnd = if (isFormValid) CoralEnd else Muted.copy(alpha = 0.35f)
+                        val shadowAlpha = if (isSubmitPressed) 0.15f else if (isFormValid) 0.38f else 0.20f
+                        val shadowOffset = if (isSubmitPressed) 2.dp else 5.dp
 
                         Box(
                             modifier = Modifier
@@ -327,35 +303,37 @@ fun CreateWorkspaceScreen(
                                 .height(54.dp)
                                 .graphicsLayer { scaleX = btnScale; scaleY = btnScale }
                                 .drawBehind {
-                                    val shadowOffset = if (btnPressed) 2.dp else 5.dp
-                                    val shadowAlpha = if (btnPressed) 0.12f else 0.32f
-
+                                    val cr = CornerRadius(16.dp.toPx())
                                     drawRoundRect(
-                                        color = activeColor.copy(alpha = shadowAlpha),
+                                        color = CoralStart.copy(alpha = shadowAlpha),
                                         topLeft = Offset(0f, shadowOffset.toPx()),
                                         size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        cornerRadius = cr
                                     )
                                     drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.25f),
+                                        color = Color.White.copy(alpha = 0.30f),
                                         topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
                                         size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        cornerRadius = cr
                                     )
                                     drawRoundRect(
                                         brush = Brush.linearGradient(
-                                            colors = listOf(activeColor, activeColorEnd),
+                                            colors = if (isFormValid) {
+                                                listOf(CoralStart, CoralEnd)
+                                            } else {
+                                                listOf(CoralStart.copy(alpha = 0.72f), CoralEnd.copy(alpha = 0.72f))
+                                            },
                                             start = Offset(0f, 0f),
                                             end = Offset(size.width, size.height)
                                         ),
-                                        cornerRadius = CornerRadius(16.dp.toPx())
+                                        cornerRadius = cr
                                     )
                                     // Specular hairline highlight hugging rounded contour
                                     drawRoundRect(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
-                                                Color.White.copy(alpha = 0.35f),
-                                                Color.White.copy(alpha = 0.10f),
+                                                Color.White.copy(alpha = 0.40f),
+                                                Color.White.copy(alpha = 0.12f),
                                                 Color.Transparent
                                             ),
                                             startY = 0f,
@@ -363,21 +341,21 @@ fun CreateWorkspaceScreen(
                                         ),
                                         topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
                                         size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                        cornerRadius = CornerRadius(16.dp.toPx()),
+                                        cornerRadius = cr,
                                         style = Stroke(width = 1.dp.toPx())
                                     )
                                 }
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(
-                                    enabled = isFormValid,
-                                    interactionSource = remember { MutableInteractionSource() },
+                                    interactionSource = submitInteractionSource,
                                     indication = null
                                 ) {
-                                    btnPressed = true
                                     val currentTime = System.currentTimeMillis()
-                                    if (currentTime - lastClickTime > 500L) {
+                                    if (isFormValid && currentTime - lastClickTime > 500L) {
                                         lastClickTime = currentTime
                                         viewModel.onCreateWorkspace()
+                                    } else if (!isFormValid) {
+                                        Toast.makeText(context, "Please enter workspace name & email", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -400,7 +378,7 @@ fun CreateWorkspaceScreen(
     }
 }
 
-/** Inset debossed field tailored for workspace forms */
+/** Inset debossed field tailored for workspace forms using shared skeuoInset modifier */
 @Composable
 private fun WorkspaceDebossedField(
     value: String,
@@ -418,7 +396,7 @@ private fun WorkspaceDebossedField(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Muted,
+            color = Ink.copy(alpha = 0.75f),
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(6.dp))
@@ -426,27 +404,8 @@ private fun WorkspaceDebossedField(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
-                .drawBehind {
-                    // Inset dark top-left shadow
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.22f),
-                        topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                        size = Size(size.width - 1.5.dp.toPx(), size.height - 1.5.dp.toPx()),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                    // Inset light bottom-right rim
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.85f),
-                        topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                        size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                    // Field parchment background
-                    drawRoundRect(
-                        color = Background.copy(alpha = 0.85f),
-                        cornerRadius = CornerRadius(14.dp.toPx())
-                    )
-                },
+                .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                .clip(RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
@@ -465,6 +424,7 @@ private fun WorkspaceDebossedField(
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                    cursorBrush = SolidColor(CoralStart),
                     visualTransformation = visualTransformation,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboardType,
@@ -480,7 +440,7 @@ private fun WorkspaceDebossedField(
                                 Text(
                                     text = placeholder,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = Muted.copy(alpha = 0.6f)
+                                    color = Ink.copy(alpha = 0.65f)
                                 )
                             }
                             innerTextField()

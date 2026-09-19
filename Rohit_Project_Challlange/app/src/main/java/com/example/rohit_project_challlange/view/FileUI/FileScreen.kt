@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.view.FileUI
+import android.util.Log
 
 import android.content.Context
 import android.content.Intent
@@ -75,7 +76,7 @@ fun openFile(
                 context.startActivity(intent)
                 return
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
             }
         }
     }
@@ -86,15 +87,12 @@ fun openFile(
     }
 
     onLoadingStateChange(true)
-    viewModel.downloadFile(fileEntity.url) { bytes ->
+    val cleanFileName = fileEntity.fileName.replace("\\s+".toRegex(), "_")
+    val targetFile = File(context.cacheDir, "view_${System.currentTimeMillis()}_$cleanFileName")
+    viewModel.downloadFile(fileEntity.url, targetFile) { success ->
         onLoadingStateChange(false)
-        if (bytes != null) {
+        if (success) {
             try {
-                val cleanFileName = fileEntity.fileName.replace("\\s+".toRegex(), "_")
-                val targetFile = File(context.cacheDir, "view_${System.currentTimeMillis()}_$cleanFileName")
-
-                targetFile.outputStream().use { output -> output.write(bytes) }
-
                 var resolvedMimeType = viewModel.getMimeTypeFromExtension(cleanFileName)
                 if (resolvedMimeType == "application/octet-stream" && fileEntity.mimeType.isNotEmpty()) {
                     resolvedMimeType = fileEntity.mimeType
@@ -108,7 +106,7 @@ fun openFile(
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
                 Toast.makeText(context, "No app found to open this type of file.", Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -486,17 +484,14 @@ fun SkeuoFileItemRow(
                 }
             }
 
-            IconButton(
+            SkeuoActionIconButton(
                 onClick = deleteFile,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Delete file",
-                    tint = Destructive.copy(alpha = 0.6f),
-                    modifier = Modifier.size(17.dp)
-                )
-            }
+                icon = Icons.Default.DeleteOutline,
+                contentDescription = "Delete file",
+                tint = DestructiveStart,
+                size = 32.dp,
+                iconSize = 16.dp
+            )
         }
     }
 }
@@ -538,7 +533,7 @@ fun UploadFileDialog(
                     selectedFileObject = tempFile
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FileScreen", "Operation failed", e)
                 Toast.makeText(context, "Error staging file target local buffer.", Toast.LENGTH_SHORT).show()
             }
         }
@@ -688,21 +683,24 @@ fun UploadFileDialog(
                     }
 
                     val canUpload = selectedFileName.isNotEmpty()
-                    val btnColor = if (canUpload) CoralStart else Muted.copy(alpha = 0.45f)
+                    val uploadAlpha = if (canUpload) 1f else 0.72f
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = btnColor.copy(alpha = 0.25f),
+                                    color = CoralStart.copy(alpha = 0.25f * uploadAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(btnColor, if (canUpload) CoralEnd else btnColor),
+                                        colors = listOf(
+                                            CoralStart.copy(alpha = uploadAlpha),
+                                            CoralEnd.copy(alpha = uploadAlpha)
+                                        ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
@@ -724,7 +722,7 @@ fun UploadFileDialog(
                         Text(
                             text = "Upload",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White.copy(alpha = if (canUpload) 1f else 0.85f)
                         )
                     }
                 }

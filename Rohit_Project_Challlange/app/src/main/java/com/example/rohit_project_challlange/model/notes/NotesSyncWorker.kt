@@ -1,4 +1,5 @@
 package com.example.rohit_project_challlange.model.notes
+import android.util.Log
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -65,7 +66,7 @@ class NotesSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("NotesSyncWorker", "Operation failed", e)
             return@withContext Result.retry()
         }
     }

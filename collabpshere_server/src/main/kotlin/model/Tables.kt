@@ -9,6 +9,19 @@ object UsersTable : Table("users") {
     val password = varchar("password", 255)
     val username = varchar("user_name", 255)
 
+    // Profile enrichment fields
+    val avatarUrl = varchar("avatar_url", 500).nullable()
+    val bio = text("bio").nullable()
+    val statusMessage = varchar("status_message", 255).nullable()
+    val isEmailVerified = bool("is_email_verified").default(false)
+    val lastSeen = long("last_seen").nullable()
+
+    // Privacy settings
+    val showEmail = bool("show_email").default(true)
+    val showOnlineStatus = bool("show_online_status").default(true)
+    val showLastSeen = bool("show_last_seen").default(true)
+    val profileVisibility = varchar("profile_visibility", 20).default("public") // "public" | "members_only"
+
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -19,14 +32,14 @@ object WorkspacesTable : Table("workspace") {
     val workspaceOwner = varchar("workspace_owner", 255)
     val workspacePassword = varchar("workspace_password", 255)
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
 }
 
 object WorkspaceMembersTable : Table("workspace_members") {
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
-    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
 
     override val primaryKey = PrimaryKey(workspaceId, userId)
 }
@@ -35,9 +48,9 @@ object ChannelsTable : Table("channels") {
     val id = integer("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val channelName = varchar("channel_name", 255)
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val description = text("description")
-    val updatedAt = long("updated_at").default(System.currentTimeMillis()) 
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)
@@ -46,7 +59,7 @@ object ChannelsTable : Table("channels") {
 object LocalFilesTable : Table("local_files") {
     val id = long("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val userName = varchar("user_name", 255)
     val url = varchar("url", 500)
     val mimeType = varchar("mime_type", 100)
@@ -54,7 +67,7 @@ object LocalFilesTable : Table("local_files") {
     val fileName = varchar("file_name", 255)
     val sizeBytes = long("sizebytes")
     val fileLocation = varchar("file_location", 500)
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)
@@ -64,12 +77,12 @@ object MessageTable : Table("message") {
     val id = integer("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
-    val channelId = integer("channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.CASCADE)
+    val channelId = integer("channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.CASCADE).index()
     val userName = varchar("user_name", 255)
     val content = text("content")
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -77,11 +90,11 @@ object MessageTable : Table("message") {
 object NotesTable : Table("notes") {
     val id = integer("id").autoIncrement()
     val userIdNotes = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val notesName = varchar("notes_name", 255)
     val notesDescription = text("description")
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -89,13 +102,13 @@ object NotesTable : Table("notes") {
 object TasksTable : Table("task") {
     val id = integer("id").autoIncrement()
     val createdByUserId = integer("created_by_user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
-    val assignedToUserId = integer("assigned_to_user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val assignedToUserId = integer("assigned_to_user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable().index()
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val taskName = varchar("task_name", 255)
     val taskDescription = text("task_description")
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -103,10 +116,40 @@ object TasksTable : Table("task") {
 object DirectMessagesTable : Table("direct_messages") {
     val id = integer("id").autoIncrement()
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
-    val senderId = integer("sender_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
-    val receiverId = integer("receiver_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val senderId = integer("sender_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val receiverId = integer("receiver_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val content = text("content")
     val timestamp = long("timestamp")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object UserBlocksTable : Table("user_blocks") {
+    val blockerId = integer("blocker_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val blockedId = integer("blocked_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+
+    override val primaryKey = PrimaryKey(blockerId, blockedId)
+}
+
+object UserVerificationTable : Table("user_verification") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).uniqueIndex()
+    val token = varchar("token", 255)
+    val expiresAt = long("expires_at")
+
+    override val primaryKey = PrimaryKey(userId)
+}
+
+object NotificationsTable : Table("notifications") {
+    val id = integer("id").autoIncrement()
+    val recipientId = integer("recipient_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val actorId = integer("actor_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val type = varchar("type", 30)          // DM | CHANNEL_MESSAGE | MENTION | TASK_ASSIGNED | TASK_UPDATED
+    val title = varchar("title", 255)
+    val body = text("body")
+    val workspaceId = integer("workspace_id").nullable()
+    val referenceId = integer("reference_id").nullable()  // message id, task id, etc.
+    val isRead = bool("is_read").default(false)
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
 }

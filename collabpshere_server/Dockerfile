@@ -34,6 +34,11 @@ COPY --from=builder /app/build/install/server /app
 # Create directory for persistent file uploads
 RUN mkdir -p /app/local_files_upload
 
+# Run as a non-root user instead of the container default root
+RUN addgroup -S app && adduser -S app -G app \
+    && chown -R app:app /app
+USER app
+
 # Expose default port
 EXPOSE 8080
 
