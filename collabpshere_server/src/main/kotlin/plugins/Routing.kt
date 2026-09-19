@@ -30,6 +30,7 @@ import kotlinx.serialization.encodeToString
 import com.collabsphere.util.JwtConfig
 import com.collabsphere.util.PasswordHasher
 import com.collabsphere.util.AvatarGenerator
+import com.collabsphere.util.CloudinaryService
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -174,14 +175,9 @@ fun Application.configureRouting() {
             call.respondText(svg, ContentType.parse("image/svg+xml"), HttpStatusCode.OK)
         }
 
+        // ── Legacy local-file avatar route — no longer used (Cloudinary stores avatars now) ──
         get("/avatars/{filename}") {
-            val filename = call.parameters["filename"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-            val file = File("local_files_upload/avatars/$filename")
-            if (file.exists()) {
-                call.respondFile(file)
-            } else {
-                call.respond(HttpStatusCode.NotFound, "Avatar not found")
-            }
+            call.respond(HttpStatusCode.Gone, "Local file serving removed — avatars are now served directly from Cloudinary")
         }
 
         post("/api/login") {
@@ -325,48 +321,49 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UPLOAD avatar ──────────────────────────────────────────────────
+            // ── UPLOAD avatar (stored permanently on Cloudinary) ───────────────
             post("/api/user/avatar") {
                 val avatarMaxBytes = 5L * 1024 * 1024 // 5 MB
                 try {
                     val actingUserId = call.authenticatedUserId()
                     val multipart = call.receiveMultipart()
-                    var savedUrl: String? = null
+                    var imageBytes: ByteArray? = null
 
                     multipart.forEachPart { part ->
                         if (part is PartData.FileItem) {
                             val bytes = part.streamProvider().readBytes()
                             if (bytes.size > avatarMaxBytes) throw IllegalArgumentException("Avatar exceeds 5 MB limit")
-                            val ext = part.originalFileName?.substringAfterLast('.', "jpg") ?: "jpg"
-                            val filename = "avatar_${actingUserId}_${UUID.randomUUID()}.$ext"
-                            val dir = File("local_files_upload/avatars").apply { mkdirs() }
-                            File(dir, filename).writeBytes(bytes)
-                            savedUrl = "/avatars/$filename"
+                            imageBytes = bytes
                         }
                         part.dispose()
                     }
 
-                    if (savedUrl != null) {
+                    if (imageBytes != null) {
+                        // publicId is stable per-user so re-uploads overwrite the old file automatically
+                        val publicId = "avatar_$actingUserId"
+                        val cloudUrl = CloudinaryService.uploadAvatar(imageBytes!!, publicId)
                         dbQuery {
                             UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                it[avatarUrl] = savedUrl
+                                it[avatarUrl] = cloudUrl
                             }
                         }
-                        call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = savedUrl!!))
+                        call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = cloudUrl))
                     } else {
                         call.respond(HttpStatusCode.BadRequest, "No file received")
                     }
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed")
+                    call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed: ${e.message}")
                 }
             }
 
-            // ── DELETE avatar (revert to generated default) ────────────────────
+            // ── DELETE avatar (remove from Cloudinary + revert to generated default) ──
             delete("/api/user/avatar") {
                 try {
                     val actingUserId = call.authenticatedUserId()
+                    // Fire-and-forget Cloudinary deletion (stable publicId)
+                    CloudinaryService.deleteAvatar("avatar_$actingUserId")
                     dbQuery {
                         UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[avatarUrl] = null

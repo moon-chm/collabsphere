@@ -5,7 +5,14 @@ import com.example.rohit_project_challlange.UserPreferences
 import com.example.rohit_project_challlange.dto.login.LoginRequest
 import com.example.rohit_project_challlange.dto.login.RegisterRequest
 import com.example.rohit_project_challlange.dto.login.LoginResponse
+import com.example.rohit_project_challlange.dto.login.ChangeEmailRequest
+import com.example.rohit_project_challlange.dto.login.DeleteAccountRequest
+import com.example.rohit_project_challlange.dto.login.UserProfileResponse
 import com.example.rohit_project_challlange.remote.login.LoginApiService
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import java.io.File
 
 class UserRepo(
     private val userDao: UserDao,
@@ -22,7 +29,9 @@ class UserRepo(
                 id = apiResponse.id,
                 email = email,
                 userName = username,
-                password = PasswordHasher.hash(pass)
+                password = PasswordHasher.hash(pass),
+                avatarUrl = apiResponse.avatarUrl,
+                isEmailVerified = apiResponse.isEmailVerified
             )
             userDao.registerUser(localUser)
 
@@ -42,7 +51,9 @@ class UserRepo(
                 id = responseDto.id,
                 email = responseDto.email,
                 userName = responseDto.userName,
-                password = PasswordHasher.hash(pass)
+                password = PasswordHasher.hash(pass),
+                avatarUrl = responseDto.avatarUrl,
+                isEmailVerified = responseDto.isEmailVerified
             )
             userDao.registerUser(userEntity)
             Result.success(userEntity)
@@ -70,6 +81,8 @@ class UserRepo(
         userId: Int,
         userEmail: String,
         newName: String,
+        bio: String? = null,
+        statusMessage: String? = null,
         currentPassword: String?,
         newPassword: String?
     ): Boolean {
@@ -87,6 +100,8 @@ class UserRepo(
                     com.example.rohit_project_challlange.dto.login.UpdateProfileRequest(
                         userId = userId,
                         userName = newName,
+                        bio = bio,
+                        statusMessage = statusMessage,
                         currentPassword = currentPassword,
                         newPassword = newPassword
                     )
@@ -105,11 +120,132 @@ class UserRepo(
             } else {
                 userDao.updateUsername(userId, newName)
             }
+            userDao.updateProfileDetails(userId, newName, bio, statusMessage)
 
             true
         } catch (e: Exception) {
             Log.e("UserRepo", "Operation failed", e)
             false
+        }
+    }
+
+    /** Fetches the full profile from the server and caches it; falls back to the local cache when offline. */
+    suspend fun fetchProfile(userId: Int): Result<UserProfileResponse> {
+        return try {
+            val profile = apiService.getProfile()
+            userDao.cacheProfile(
+                userId = profile.id,
+                userName = profile.username,
+                email = profile.email,
+                avatarUrl = profile.avatarUrl,
+                bio = profile.bio,
+                statusMessage = profile.statusMessage,
+                isEmailVerified = profile.isEmailVerified,
+                lastSeen = profile.lastSeen
+            )
+            Result.success(profile)
+        } catch (e: Exception) {
+            val cached = userDao.getUserById(userId)
+            if (cached != null) {
+                Result.success(
+                    UserProfileResponse(
+                        id = cached.id,
+                        username = cached.userName,
+                        email = cached.email,
+                        avatarUrl = cached.avatarUrl ?: "",
+                        bio = cached.bio,
+                        statusMessage = cached.statusMessage,
+                        isEmailVerified = cached.isEmailVerified,
+                        lastSeen = cached.lastSeen
+                    )
+                )
+            } else {
+                Log.e("UserRepo", "Operation failed", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun uploadAvatar(userId: Int, file: File): Result<String> {
+        return try {
+            val response = apiService.uploadAvatar(file)
+            userDao.updateAvatarUrl(userId, response.avatarUrl)
+            Result.success(response.avatarUrl)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeAvatar(userId: Int): Result<String> {
+        return try {
+            val response = apiService.deleteAvatar()
+            userDao.updateAvatarUrl(userId, response.avatarUrl)
+            Result.success(response.avatarUrl)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun changeEmail(userId: Int, currentPassword: String, newEmail: String): Result<Unit> {
+        return try {
+            val response = apiService.changeEmail(ChangeEmailRequest(newEmail, currentPassword))
+            when (response.status) {
+                HttpStatusCode.OK -> {
+                    userDao.updateEmail(userId, newEmail, false)
+                    userPreferences.updateUserEmail(newEmail)
+                    Result.success(Unit)
+                }
+                HttpStatusCode.Unauthorized -> Result.failure(Exception("Incorrect password"))
+                HttpStatusCode.Conflict -> Result.failure(Exception("Email already in use"))
+                else -> Result.failure(Exception(response.bodyAsText().ifBlank { "Failed to update email" }))
+            }
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendVerificationEmail(): Result<Unit> {
+        return try {
+            val response = apiService.sendEmailVerification()
+            if (response.status.isSuccess()) Result.success(Unit)
+            else Result.failure(Exception(response.bodyAsText().ifBlank { "Failed to send verification email" }))
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun confirmVerificationEmail(userId: Int, token: String): Result<Unit> {
+        return try {
+            val response = apiService.confirmEmailVerification(token)
+            when {
+                response.status.isSuccess() -> {
+                    userDao.getUserById(userId)?.let { userDao.updateEmail(userId, it.email, true) }
+                    Result.success(Unit)
+                }
+                response.status == HttpStatusCode.Gone -> Result.failure(Exception("Code expired — request a new one"))
+                else -> Result.failure(Exception(response.bodyAsText().ifBlank { "Invalid verification code" }))
+            }
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteAccountRemote(password: String): Result<Unit> {
+        return try {
+            val response = apiService.deleteAccount(DeleteAccountRequest(password))
+            when (response.status) {
+                HttpStatusCode.OK -> Result.success(Unit)
+                HttpStatusCode.Unauthorized -> Result.failure(Exception("Incorrect password"))
+                else -> Result.failure(Exception(response.bodyAsText().ifBlank { "Failed to delete account" }))
+            }
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
         }
     }
 }

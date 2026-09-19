@@ -36,7 +36,7 @@ android {
             buildConfigField("boolean", "USE_PRODUCTION_BACKEND", "true")
         }
         debug {
-            buildConfigField("boolean", "USE_PRODUCTION_BACKEND", "false")
+            buildConfigField("boolean", "USE_PRODUCTION_BACKEND", "true")
         }
     }
 
@@ -87,6 +87,10 @@ dependencies {
 
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // ── Coil (avatar images: uploaded JPG/PNG + server-generated default SVG) ──
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

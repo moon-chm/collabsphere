@@ -1,5 +1,9 @@
 package com.example.rohit_project_challlange.view.ProfileUI
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -18,11 +22,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +49,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -47,8 +59,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.ui.theme.*
 import com.example.rohit_project_challlange.viewmodel.profile.ProfileViewModel
+import java.io.File
 
 @Composable
 fun ProfileRoute(
@@ -62,6 +79,21 @@ fun ProfileRoute(
     val currentPassword by viewModel.currentPassword.collectAsState()
     val newPassword by viewModel.newPassword.collectAsState()
     val profileStatus by viewModel.profileStatus.collectAsState()
+    val bio by viewModel.bio.collectAsState()
+    val statusMessage by viewModel.statusMessage.collectAsState()
+    val email by viewModel.email.collectAsState()
+    val avatarUrl by viewModel.avatarUrl.collectAsState()
+    val isEmailVerified by viewModel.isEmailVerified.collectAsState()
+    val lastSeen by viewModel.lastSeen.collectAsState()
+    val isUploadingAvatar by viewModel.isUploadingAvatar.collectAsState()
+    val showEmailDialog by viewModel.showEmailDialog.collectAsState()
+    val newEmailInput by viewModel.newEmailInput.collectAsState()
+    val emailChangePassword by viewModel.emailChangePassword.collectAsState()
+    val awaitingVerification by viewModel.awaitingVerification.collectAsState()
+    val verificationToken by viewModel.verificationToken.collectAsState()
+    val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
+    val deleteAccountPassword by viewModel.deleteAccountPassword.collectAsState()
+    val isDeletingAccount by viewModel.isDeletingAccount.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var changePasswordChecked by remember { mutableStateOf(false) }
@@ -70,6 +102,10 @@ fun ProfileRoute(
         if (updatedName.isEmpty()) {
             viewModel.onUserNameChanged(initialUserName)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadProfile()
     }
 
     LaunchedEffect(profileStatus) {
@@ -89,10 +125,27 @@ fun ProfileRoute(
         currentPassword = currentPassword,
         newPassword = newPassword,
         changePasswordChecked = changePasswordChecked,
+        bio = bio,
+        statusMessage = statusMessage,
+        email = email,
+        avatarUrl = avatarUrl,
+        isEmailVerified = isEmailVerified,
+        lastSeen = lastSeen,
+        isUploadingAvatar = isUploadingAvatar,
+        showEmailDialog = showEmailDialog,
+        newEmailInput = newEmailInput,
+        emailChangePassword = emailChangePassword,
+        awaitingVerification = awaitingVerification,
+        verificationToken = verificationToken,
+        showDeleteDialog = showDeleteDialog,
+        deleteAccountPassword = deleteAccountPassword,
+        isDeletingAccount = isDeletingAccount,
         snackbarHostState = snackbarHostState,
         onNameChange = viewModel::onUserNameChanged,
         onCurrentPasswordChange = viewModel::onCurrentPasswordChanged,
         onNewPasswordChange = viewModel::onNewPasswordChanged,
+        onBioChange = viewModel::onBioChanged,
+        onStatusMessageChange = viewModel::onStatusMessageChanged,
         onChangePasswordCheckedChange = { checked ->
             changePasswordChecked = checked
             if (!checked) {
@@ -102,7 +155,21 @@ fun ProfileRoute(
         },
         onBack = onBack,
         onUpdateProfile = { viewModel.onUpdateProfile() },
-        onLogout = { viewModel.onLogout(onLogoutComplete) }
+        onLogout = { viewModel.onLogout(onLogoutComplete) },
+        onAvatarPicked = { file -> viewModel.onAvatarPicked(file) },
+        onRemoveAvatar = { viewModel.onRemoveAvatar() },
+        onOpenEmailDialog = { viewModel.onOpenEmailDialog() },
+        onDismissEmailDialog = { viewModel.onDismissEmailDialog() },
+        onNewEmailChange = viewModel::onNewEmailChanged,
+        onEmailChangePasswordChange = viewModel::onEmailChangePasswordChanged,
+        onSubmitEmailChange = { viewModel.onSubmitEmailChange() },
+        onVerificationTokenChange = viewModel::onVerificationTokenChanged,
+        onConfirmVerification = { viewModel.onConfirmVerification() },
+        onResendVerification = { viewModel.onResendVerification() },
+        onOpenDeleteDialog = { viewModel.onOpenDeleteDialog() },
+        onDismissDeleteDialog = { viewModel.onDismissDeleteDialog() },
+        onDeleteAccountPasswordChange = viewModel::onDeleteAccountPasswordChanged,
+        onConfirmDeleteAccount = { viewModel.onConfirmDeleteAccount(onLogoutComplete) }
     )
 }
 
@@ -114,20 +181,72 @@ fun ProfileScreen(
     currentPassword: String,
     newPassword: String,
     changePasswordChecked: Boolean,
+    bio: String,
+    statusMessage: String,
+    email: String,
+    avatarUrl: String,
+    isEmailVerified: Boolean,
+    lastSeen: Long?,
+    isUploadingAvatar: Boolean,
+    showEmailDialog: Boolean,
+    newEmailInput: String,
+    emailChangePassword: String,
+    awaitingVerification: Boolean,
+    verificationToken: String,
+    showDeleteDialog: Boolean,
+    deleteAccountPassword: String,
+    isDeletingAccount: Boolean,
     snackbarHostState: SnackbarHostState,
     onNameChange: (String) -> Unit,
     onCurrentPasswordChange: (String) -> Unit,
     onNewPasswordChange: (String) -> Unit,
+    onBioChange: (String) -> Unit,
+    onStatusMessageChange: (String) -> Unit,
     onChangePasswordCheckedChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onUpdateProfile: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onAvatarPicked: (File) -> Unit,
+    onRemoveAvatar: () -> Unit,
+    onOpenEmailDialog: () -> Unit,
+    onDismissEmailDialog: () -> Unit,
+    onNewEmailChange: (String) -> Unit,
+    onEmailChangePasswordChange: (String) -> Unit,
+    onSubmitEmailChange: () -> Unit,
+    onVerificationTokenChange: (String) -> Unit,
+    onConfirmVerification: () -> Unit,
+    onResendVerification: () -> Unit,
+    onOpenDeleteDialog: () -> Unit,
+    onDismissDeleteDialog: () -> Unit,
+    onDeleteAccountPasswordChange: (String) -> Unit,
+    onConfirmDeleteAccount: () -> Unit
 ) {
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val tempFile = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    tempFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                if (tempFile.exists()) {
+                    onAvatarPicked(tempFile)
+                }
+            } catch (_: Exception) {
+                // Silently ignored — a failed local copy simply means the user can retry the picker.
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -213,62 +332,162 @@ fun ProfileScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(22.dp)
             ) {
-                // Tactile 3D Avatar Badge
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .drawBehind {
-                            drawCircle(
-                                color = ShadowDark.copy(alpha = 0.35f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x + 3.dp.toPx(), center.y + 5.dp.toPx())
-                            )
-                            drawCircle(
-                                color = ShadowLight.copy(alpha = 0.95f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                            )
-                        }
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(SurfaceRaised, Surface),
-                                start = Offset(0f, 0f),
-                                end = Offset(100.dp.value, 100.dp.value)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
+                // Tactile 3D Avatar Badge — tap to change photo
+                Box(contentAlignment = Alignment.BottomEnd) {
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
+                            .size(100.dp)
                             .drawBehind {
                                 drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(CoralLight, CoralStart),
-                                        center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
+                                    color = ShadowDark.copy(alpha = 0.35f),
+                                    radius = size.minDimension / 2f,
+                                    center = Offset(center.x + 3.dp.toPx(), center.y + 5.dp.toPx())
                                 )
                                 drawCircle(
-                                    color = Color.White.copy(alpha = 0.35f),
-                                    radius = 12.dp.toPx(),
-                                    center = Offset(center.x - 14.dp.toPx(), center.y - 14.dp.toPx())
+                                    color = ShadowLight.copy(alpha = 0.95f),
+                                    radius = size.minDimension / 2f,
+                                    center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
+                                )
+                            }
+                            .clip(CircleShape)
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(SurfaceRaised, Surface),
+                                    start = Offset(0f, 0f),
+                                    end = Offset(100.dp.value, 100.dp.value)
+                                )
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = !isUploadingAvatar
+                            ) {
+                                avatarPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        val initial = userName.trim().take(1).uppercase().ifEmpty { "U" }
-                        Text(
-                            text = initial,
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 32.sp
-                            ),
-                            color = Color.White
+                        val initialsFallback: @Composable () -> Unit = {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .drawBehind {
+                                        drawCircle(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(CoralLight, CoralStart),
+                                                center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx()),
+                                                radius = size.minDimension / 2f
+                                            )
+                                        )
+                                        drawCircle(
+                                            color = Color.White.copy(alpha = 0.35f),
+                                            radius = 12.dp.toPx(),
+                                            center = Offset(center.x - 14.dp.toPx(), center.y - 14.dp.toPx())
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val initial = userName.trim().take(1).uppercase().ifEmpty { "U" }
+                                Text(
+                                    text = initial,
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 32.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        if (avatarUrl.isEmpty()) {
+                            initialsFallback()
+                        } else {
+                            val fullAvatarUrl = if (avatarUrl.startsWith("http")) avatarUrl
+                                else "${AppConfig.BASE_URL}$avatarUrl"
+                            SubcomposeAsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(fullAvatarUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Profile picture",
+                                modifier = Modifier
+                                    .size(84.dp)
+                                    .clip(CircleShape),
+                                loading = { initialsFallback() },
+                                error = { initialsFallback() }
+                            )
+                        }
+
+                        if (isUploadingAvatar) {
+                            Box(
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.35f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.5.dp
+                                )
+                            }
+                        }
+                    }
+
+                    // Raised camera badge, bottom-right of the avatar
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .drawBehind {
+                                drawCircle(
+                                    color = ShadowDark.copy(alpha = 0.30f),
+                                    radius = size.minDimension / 2f,
+                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
+                                )
+                                drawCircle(
+                                    color = ShadowLight.copy(alpha = 0.90f),
+                                    radius = size.minDimension / 2f,
+                                    center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx())
+                                )
+                                drawCircle(color = CoralStart)
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = !isUploadingAvatar
+                            ) {
+                                avatarPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Change profile picture",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
+                }
+
+                if (avatarUrl.isNotEmpty() && !avatarUrl.contains("/avatars/default/")) {
+                    Text(
+                        text = "Remove photo",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = Destructive,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = !isUploadingAvatar
+                            ) { onRemoveAvatar() }
+                            .padding(top = 2.dp, bottom = 2.dp)
+                    )
                 }
 
                 // Name & ID Pill
@@ -311,6 +530,40 @@ fun ProfileScreen(
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = IndigoStart
                         )
+                    }
+
+                    if (statusMessage.isNotBlank()) {
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Muted,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // Online indicator — accurate for one's own profile since the app is in active use
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Mint)
+                        )
+                        Text(
+                            text = "Online now",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Muted
+                        )
+                        if (lastSeen != null) {
+                            Text(
+                                text = "· Last seen ${formatLastSeen(lastSeen)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Muted
+                            )
+                        }
                     }
                 }
 
@@ -403,6 +656,99 @@ fun ProfileScreen(
                                         cursorBrush = SolidColor(CoralStart)
                                     )
                                 }
+                            }
+                        }
+
+                        // Status message field
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Status",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Muted,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = IndigoStart,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    BasicTextField(
+                                        value = statusMessage,
+                                        onValueChange = { if (it.length <= 60) onStatusMessageChange(it) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                                        cursorBrush = SolidColor(CoralStart),
+                                        decorationBox = { inner ->
+                                            Box(contentAlignment = Alignment.CenterStart) {
+                                                if (statusMessage.isEmpty()) {
+                                                    Text(
+                                                        text = "What are you up to?",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = Ink.copy(alpha = 0.5f)
+                                                    )
+                                                }
+                                                inner()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Bio field
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Bio",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Muted,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 80.dp)
+                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                            ) {
+                                BasicTextField(
+                                    value = bio,
+                                    onValueChange = { if (it.length <= 300) onBioChange(it) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                                    cursorBrush = SolidColor(CoralStart),
+                                    decorationBox = { inner ->
+                                        Box {
+                                            if (bio.isEmpty()) {
+                                                Text(
+                                                    text = "Tell your team a little about yourself",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = Ink.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                            inner()
+                                        }
+                                    }
+                                )
                             }
                         }
 
@@ -577,6 +923,201 @@ fun ProfileScreen(
                     }
                 }
 
+                // ── Email card ──────────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawRoundRect(
+                                color = ShadowDark.copy(alpha = 0.24f),
+                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(
+                                color = ShadowLight.copy(alpha = 0.85f),
+                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                        }
+                        .padding(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Email",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Ink
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Email,
+                                    contentDescription = null,
+                                    tint = IndigoStart,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = email,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Ink,
+                                    maxLines = 1
+                                )
+                                Icon(
+                                    imageVector = if (isEmailVerified) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = if (isEmailVerified) "Verified" else "Unverified",
+                                    tint = if (isEmailVerified) Mint else AmberWarn,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Text(
+                                text = "Change",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = CoralStart,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onOpenEmailDialog() }
+                            )
+                        }
+
+                        AnimatedVisibility(visible = awaitingVerification && !isEmailVerified) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Enter the verification code (check server logs) to confirm this email",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Muted
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(46.dp)
+                                            .skeuoInset(cornerRadius = 12.dp, depth = 2.dp)
+                                            .clip(RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        BasicTextField(
+                                            value = verificationToken,
+                                            onValueChange = onVerificationTokenChange,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp),
+                                            singleLine = true,
+                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                                            cursorBrush = SolidColor(CoralStart),
+                                            decorationBox = { inner ->
+                                                Box(contentAlignment = Alignment.CenterStart) {
+                                                    if (verificationToken.isEmpty()) {
+                                                        Text(
+                                                            text = "Verification code",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = Ink.copy(alpha = 0.5f)
+                                                        )
+                                                    }
+                                                    inner()
+                                                }
+                                            }
+                                        )
+                                    }
+                                    Text(
+                                        text = "Verify",
+                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = Mint,
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onConfirmVerification() }
+                                    )
+                                    Text(
+                                        text = "Resend",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Muted,
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onResendVerification() }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Danger zone ──────────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawRoundRect(
+                                color = ShadowDark.copy(alpha = 0.24f),
+                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(
+                                color = ShadowLight.copy(alpha = 0.85f),
+                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                        }
+                        .padding(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Danger zone",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Destructive
+                        )
+                        Text(
+                            text = "Deleting your account permanently removes your profile, messages, files, and workspace memberships. This can't be undone.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Muted
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onOpenDeleteDialog() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = Destructive,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Delete account",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Destructive
+                            )
+                        }
+                    }
+                }
+
                 val isSubmissionReady = userName.isNotBlank() &&
                         (!changePasswordChecked || (currentPassword.isNotBlank() && newPassword.isNotBlank()))
 
@@ -745,5 +1286,138 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(28.dp))
             }
         }
+    }
+
+    if (showEmailDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissEmailDialog,
+            containerColor = SurfaceRaised,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "Change email",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Verify your current password to update your email address.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                    OutlinedTextField(
+                        value = newEmailInput,
+                        onValueChange = onNewEmailChange,
+                        label = { Text("New email") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    var showPw by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = emailChangePassword,
+                        onValueChange = onEmailChangePasswordChange,
+                        label = { Text("Current password") },
+                        singleLine = true,
+                        visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPw = !showPw }) {
+                                Icon(
+                                    imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = "Toggle password visibility"
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onSubmitEmailChange,
+                    enabled = newEmailInput.isNotBlank() && emailChangePassword.isNotBlank()
+                ) {
+                    Text("Update email", color = CoralStart, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissEmailDialog) {
+                    Text("Cancel", color = Muted)
+                }
+            }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissDeleteDialog,
+            containerColor = SurfaceRaised,
+            shape = RoundedCornerShape(24.dp),
+            icon = {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = Destructive)
+            },
+            title = {
+                Text(
+                    text = "Delete account?",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Destructive
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "This permanently deletes your account and all associated data — workspaces you own, messages, files, and tasks. This cannot be undone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                    var showPw by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = deleteAccountPassword,
+                        onValueChange = onDeleteAccountPasswordChange,
+                        label = { Text("Confirm password") },
+                        singleLine = true,
+                        visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPw = !showPw }) {
+                                Icon(
+                                    imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = "Toggle password visibility"
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onConfirmDeleteAccount,
+                    enabled = deleteAccountPassword.isNotBlank() && !isDeletingAccount
+                ) {
+                    Text("Delete permanently", color = Destructive, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissDeleteDialog, enabled = !isDeletingAccount) {
+                    Text("Cancel", color = Muted)
+                }
+            }
+        )
+    }
+}
+
+/** Rough human-readable relative time for the "Last seen" line — e.g. "5m ago", "3h ago", "2d ago". */
+private fun formatLastSeen(timestampMillis: Long): String {
+    val diffMs = (System.currentTimeMillis() - timestampMillis).coerceAtLeast(0)
+    val minutes = diffMs / 60_000
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "${minutes}m ago"
+        minutes < 24 * 60 -> "${minutes / 60}h ago"
+        else -> "${minutes / (24 * 60)}d ago"
     }
 }
