@@ -64,13 +64,8 @@ val databaseModule = module {
             AppDatabase::class.java,
             "app_database"
         )
-            // Downgrading (installing an older APK over a newer DB) has no migration path and is rare —
-            // destructive there is acceptable. An *upgrade* with no matching Migration now fails loudly
-            // instead of silently wiping every user's local data, as it has on every version bump so far.
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            // The users table is a resyncable cache of GET /api/user/profile — safe to drop and
-            // rebuild on an upgrade rather than hand-writing a Migration for every added column.
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .addMigrations(AppDatabase.MIGRATION_35_36)
             .build()
     }
 
@@ -82,6 +77,7 @@ val databaseModule = module {
     single { get<AppDatabase>().messageDao() }
     single { get<AppDatabase>().fileDao() }
     single { get<AppDatabase>().dmDao() }
+    single { get<AppDatabase>().dmReactionDao() }
 }
 
 val networkModule = module {
@@ -148,7 +144,7 @@ val repositoryModule = module {
     single { NotesRepo(get(), get(), get(), get()) }
     single { MessageRepo(get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
-    single { DmRepo(get(), get(), get()) }
+    single { DmRepo(get(), get(), get(), get()) }
 }
 
 val appModule = module {

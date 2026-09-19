@@ -17,6 +17,7 @@ import com.collabsphere.model.NotesTable
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspacesTable
 import com.collabsphere.model.DirectMessagesTable
+import com.collabsphere.model.DmReactionsTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UserBlocksTable
@@ -2285,6 +2286,40 @@ fun Application.configureRouting() {
                 }
             }
 
+            // ── DM Media Upload ────────────────────────────────────────────────────────
+            post("/api/dm/upload-media") {
+                val actingUserId = call.authenticatedUserId()
+                try {
+                    val multipart = call.receiveMultipart()
+                    var fileBytes: ByteArray? = null
+                    var mimeType = "image/jpeg"
+                    var fileName = "dm_media_${System.currentTimeMillis()}"
+
+                    multipart.forEachPart { part ->
+                        if (part is io.ktor.http.content.PartData.FileItem) {
+                            mimeType = part.contentType?.toString() ?: mimeType
+                            fileName = part.originalFileName?.let {
+                                java.io.File(it).name // strip any path components
+                            } ?: fileName
+                            fileBytes = part.streamProvider().readBytes()
+                        }
+                        part.dispose()
+                    }
+
+                    val bytes = fileBytes ?: return@post call.respond(HttpStatusCode.BadRequest, "No file provided")
+                    if (bytes.size > MAX_UPLOAD_BYTES) throw UploadTooLargeException()
+
+                    val publicId = "dm_${actingUserId}_${System.currentTimeMillis()}"
+                    val uploadedUrl = CloudinaryService.uploadAvatar(bytes, publicId)
+                    call.respond(HttpStatusCode.OK, mapOf("url" to uploadedUrl))
+                } catch (e: UploadTooLargeException) {
+                    call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(HttpStatusCode.InternalServerError, "Upload failed: ${e.message}")
+                }
+            }
+
             route("/ws") {
                 webSocket("/dm") {
                     val userIdParam = call.authenticatedUserId().toLong()
@@ -2466,6 +2501,70 @@ fun Application.configureRouting() {
                                         val typingPayload = dmDto.copy(senderId = userIdParam.toInt())
                                         val typingJson = Json.encodeToString(DmDto.serializer(), typingPayload)
                                         sendToUser(dmDto.receiverId.toLong(), typingJson)
+                                    } else if (dmDto.action == "REACT_MESSAGE" || dmDto.action == "UNREACT_MESSAGE") {
+                                        val messageId = dmDto.id
+                                        val emoji = dmDto.emoji
+                                        if (messageId != null && messageId != 0 && !emoji.isNullOrBlank()) {
+                                            val (targetReceiverId, aggregated) = dbQuery {
+                                                val existing = DirectMessagesTable.selectAll()
+                                                    .where { DirectMessagesTable.id eq messageId }.singleOrNull()
+                                                val computedTarget = when {
+                                                    existing == null -> dmDto.receiverId
+                                                    existing[DirectMessagesTable.senderId] == userIdParam.toInt() -> existing[DirectMessagesTable.receiverId]
+                                                    else -> existing[DirectMessagesTable.senderId]
+                                                }
+                                                if (dmDto.action == "REACT_MESSAGE") {
+                                                    DmReactionsTable.insertIgnore {
+                                                        it[DmReactionsTable.messageId] = messageId
+                                                        it[DmReactionsTable.userId] = userIdParam.toInt()
+                                                        it[DmReactionsTable.emoji] = emoji
+                                                    }
+                                                } else {
+                                                    DmReactionsTable.deleteWhere {
+                                                        (DmReactionsTable.messageId eq messageId) and
+                                                        (DmReactionsTable.userId eq userIdParam.toInt()) and
+                                                        (DmReactionsTable.emoji eq emoji)
+                                                    }
+                                                }
+                                                // Build aggregated counts
+                                                val counts = DmReactionsTable.selectAll()
+                                                    .where { DmReactionsTable.messageId eq messageId }
+                                                    .groupBy { it[DmReactionsTable.emoji] }
+                                                    .mapValues { (_, rows) -> rows.size }
+                                                Pair(computedTarget, counts)
+                                            }
+                                            val reactPayload = dmDto.copy(
+                                                senderId = userIdParam.toInt(),
+                                                receiverId = targetReceiverId,
+                                                reactions = aggregated
+                                            )
+                                            val reactJson = Json.encodeToString(DmDto.serializer(), reactPayload)
+                                            sendToUser(targetReceiverId.toLong(), reactJson)
+                                            if (this.isActive) this.send(Frame.Text(reactJson))
+                                        }
+                                    } else if (dmDto.action == "MARK_READ") {
+                                        val wsId = dmDto.workspaceId
+                                        val readerId = userIdParam.toInt()   // the one who just read
+                                        val senderId = dmDto.receiverId       // the original sender
+                                        dbQuery {
+                                            DirectMessagesTable.update({
+                                                (DirectMessagesTable.workspaceId eq wsId) and
+                                                (DirectMessagesTable.senderId eq senderId) and
+                                                (DirectMessagesTable.receiverId eq readerId) and
+                                                (DirectMessagesTable.isRead eq false)
+                                            }) {
+                                                it[DirectMessagesTable.isRead] = true
+                                            }
+                                        }
+                                        // Notify the original sender their messages were read
+                                        val receiptPayload = DmDto(
+                                            action = "READ_RECEIPT",
+                                            workspaceId = wsId,
+                                            senderId = readerId,
+                                            receiverId = senderId
+                                        )
+                                        val receiptJson = Json.encodeToString(DmDto.serializer(), receiptPayload)
+                                        sendToUser(senderId.toLong(), receiptJson)
                                     }
                                 } catch (_: Exception) {
                                 }

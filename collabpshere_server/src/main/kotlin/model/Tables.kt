@@ -119,9 +119,19 @@ object DirectMessagesTable : Table("direct_messages") {
     val senderId = integer("sender_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val receiverId = integer("receiver_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val content = text("content")
+    val mediaUrl = varchar("media_url", 500).nullable()
+    val isRead = bool("is_read").default(false)
     val timestamp = long("timestamp")
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object DmReactionsTable : Table("dm_reactions") {
+    val messageId = integer("message_id").references(DirectMessagesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val emoji = varchar("emoji", 10)
+
+    override val primaryKey = PrimaryKey(messageId, userId, emoji)
 }
 
 object UserBlocksTable : Table("user_blocks") {

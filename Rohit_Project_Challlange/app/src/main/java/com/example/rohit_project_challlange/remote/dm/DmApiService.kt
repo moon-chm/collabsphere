@@ -8,8 +8,14 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.request.url
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.close
@@ -20,6 +26,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class DmApiService(
     private val client: HttpClient,
@@ -115,6 +123,47 @@ class DmApiService(
         try {
             sendDm(payload)
         } catch (_: Exception) {}
+    }
+
+    /**
+     * Uploads a file/image to the server's Cloudinary proxy endpoint.
+     * Returns the secure Cloudinary URL on success.
+     */
+    suspend fun uploadDmMedia(baseUrl: String, fileBytes: ByteArray, mimeType: String, fileName: String): String {
+        val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
+        val boundary = "Boundary${System.currentTimeMillis()}"
+        val token = AuthTokenHolder.token ?: throw IllegalStateException("Not authenticated")
+
+        // Build raw multipart body manually (avoids extra ktor multipart plugin)
+        val crlf = "\r\n"
+        val headerPart = "--$boundary$crlf" +
+            "Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"$crlf" +
+            "Content-Type: $mimeType$crlf$crlf"
+        val footer = "$crlf--$boundary--$crlf"
+        val body = headerPart.toByteArray(Charsets.UTF_8) + fileBytes + footer.toByteArray(Charsets.UTF_8)
+
+        // Use a plain HttpURLConnection so we don't need extra Ktor multipart support
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val url = java.net.URL("$cleanBaseUrl/api/dm/upload-media")
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                doInput = true
+                setRequestProperty("Authorization", "Bearer $token")
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            }
+            conn.outputStream.use { it.write(body) }
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
+                val element = Json { ignoreUnknownKeys = true }.parseToJsonElement(responseBody)
+                element.jsonObject["url"]?.jsonPrimitive?.content
+                    ?: error("Server response missing url field: $responseBody")
+            } else {
+                val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+                error("Media upload failed ($responseCode): $err")
+            }
+        }
     }
 
     suspend fun disconnect() = sessionMutex.withLock {

@@ -24,6 +24,15 @@ interface DmDao {
     @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
     suspend fun updateDmContent(dmId: Int, newContent: String)
 
+    @Query("UPDATE DM SET isRead = :isRead WHERE id = :dmId")
+    suspend fun updateIsRead(dmId: Int, isRead: Boolean)
+
+    @Query("UPDATE DM SET isRead = 1 WHERE receiverId = :currentUserId AND senderId = :partnerId AND workspaceId = :workspaceId AND isRead = 0")
+    suspend fun markAllReadFrom(currentUserId: Int, partnerId: Int, workspaceId: Int)
+
+    @Query("UPDATE DM SET mediaUrl = :mediaUrl WHERE id = :dmId")
+    suspend fun updateMediaUrl(dmId: Int, mediaUrl: String?)
+
     @Query("DELETE FROM DM WHERE id = :dmId AND workspaceId = :workspaceId")
     suspend fun deleteDm(dmId: Int, workspaceId: Int)
 

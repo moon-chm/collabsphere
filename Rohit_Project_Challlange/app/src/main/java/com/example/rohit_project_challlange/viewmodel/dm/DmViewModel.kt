@@ -42,6 +42,14 @@ class DmViewModel(
     private val _typingPartnerIds = MutableStateFlow<Set<Int>>(emptySet())
     val typingPartnerIds: StateFlow<Set<Int>> = _typingPartnerIds.asStateFlow()
 
+    // ── Reactions State — messageId → (emoji → count) ────────────────────────────
+    private val _reactions = MutableStateFlow<Map<Int, Map<String, Int>>>(emptyMap())
+    val reactions: StateFlow<Map<Int, Map<String, Int>>> = _reactions.asStateFlow()
+
+    // ── Media upload progress ─────────────────────────────────────────────────────
+    private val _isUploadingMedia = MutableStateFlow(false)
+    val isUploadingMedia: StateFlow<Boolean> = _isUploadingMedia.asStateFlow()
+
     private var historyCollectionJob: Job? = null
     private var memberCollectionJob: Job? = null
     private var eventsCollectionJob: Job? = null
@@ -93,7 +101,6 @@ class DmViewModel(
                         val sender = dto.senderId
                         if (sender != 0 && sender != currentUserId) {
                             _typingPartnerIds.value = _typingPartnerIds.value + sender
-                            // Auto-expire after 4s in case TYPING_STOP was lost
                             incomingTypingTimers[sender]?.cancel()
                             incomingTypingTimers[sender] = viewModelScope.launch {
                                 delay(4000)
@@ -108,6 +115,25 @@ class DmViewModel(
                             _typingPartnerIds.value = _typingPartnerIds.value - sender
                         }
                     }
+                    "REACT_MESSAGE", "UNREACT_MESSAGE" -> {
+                        val msgId = dto.id ?: return@collect
+                        val incomingReactions = dto.reactions ?: return@collect
+                        // Merge into our local reactions state map
+                        val current = _reactions.value.toMutableMap()
+                        current[msgId] = incomingReactions
+                        _reactions.value = current
+                    }
+                    "READ_RECEIPT" -> {
+                        // The sender of READ_RECEIPT is the one who read our messages
+                        // Mark all messages sent by us to that person as read in local state
+                        val readerId = dto.senderId
+                        val updated = _messages.value.map { msg ->
+                            if (msg.senderId == currentUserId && msg.receiverId == readerId) {
+                                msg.copy(isRead = true)
+                            } else msg
+                        }
+                        _messages.value = updated
+                    }
                 }
             }
         }
@@ -121,7 +147,6 @@ class DmViewModel(
                 workspaceRepo.syncWorkspaceMembers(workspaceId)
             } catch (_: Exception) {}
 
-            // Fetch initial presence list
             try {
                 val initialOnline = repo.fetchOnlineUsers(baseUrl, workspaceId)
                 _onlineUserIds.value = initialOnline.toSet()
@@ -156,6 +181,13 @@ class DmViewModel(
                     _messages.value = history
                 }
         }
+
+        // Mark conversation as read when opened
+        viewModelScope.launch {
+            try {
+                repo.markConversationRead(workspaceId, userId, chatPartnerId)
+            } catch (_: Exception) {}
+        }
     }
 
     // ── Outgoing Typing Status ───────────────────────────────────────────────────
@@ -169,7 +201,6 @@ class DmViewModel(
                 isCurrentlyTyping = true
                 repo.sendTypingStatus(workspaceId, senderId, partnerId, isTyping = true)
             }
-            // If no keystrokes for 2.5s, signal stop
             delay(2500)
             isCurrentlyTyping = false
             repo.sendTypingStatus(workspaceId, senderId, partnerId, isTyping = false)
@@ -216,14 +247,64 @@ class DmViewModel(
     }
 
     fun sendMessage(id: Int, workspaceId: Int, senderId: Int, receiverId: Int, content: String) {
-        // Immediately cancel typing indicator when message is sent
         onUserStoppedTyping(workspaceId, receiverId)
-
         viewModelScope.launch {
             try {
                 repo.sendRealtimeDm(id, workspaceId, senderId, receiverId, content)
             } catch (e: Exception) {
                 Log.e("DmViewModel", "Operation failed", e)
+            }
+        }
+    }
+
+    fun sendMediaMessage(
+        baseUrl: String,
+        workspaceId: Int,
+        senderId: Int,
+        receiverId: Int,
+        fileBytes: ByteArray,
+        mimeType: String,
+        fileName: String
+    ) {
+        viewModelScope.launch {
+            _isUploadingMedia.value = true
+            try {
+                repo.sendMediaDm(baseUrl, workspaceId, senderId, receiverId, fileBytes, mimeType, fileName)
+            } catch (e: Exception) {
+                Log.e("DmViewModel", "Media send failed", e)
+            } finally {
+                _isUploadingMedia.value = false
+            }
+        }
+    }
+
+    fun toggleReaction(messageId: Int, emoji: String, workspaceId: Int, receiverId: Int) {
+        val userId = currentUserId ?: return
+        viewModelScope.launch {
+            val myCurrentReactions = try {
+                repo.getUserReactionsForMessage(messageId, userId)
+            } catch (_: Exception) { emptyList() }
+
+            val alreadyReacted = emoji in myCurrentReactions
+            if (alreadyReacted) {
+                repo.deleteReactionLocally(messageId, userId, emoji)
+                repo.sendReaction(messageId, emoji, workspaceId, receiverId, isAdd = false)
+                // Optimistic local state update
+                val current = _reactions.value.toMutableMap()
+                val msgReactions = current[messageId]?.toMutableMap() ?: mutableMapOf()
+                val newCount = (msgReactions[emoji] ?: 1) - 1
+                if (newCount <= 0) msgReactions.remove(emoji) else msgReactions[emoji] = newCount
+                current[messageId] = msgReactions
+                _reactions.value = current
+            } else {
+                repo.upsertReactionLocally(messageId, userId, emoji)
+                repo.sendReaction(messageId, emoji, workspaceId, receiverId, isAdd = true)
+                // Optimistic local state update
+                val current = _reactions.value.toMutableMap()
+                val msgReactions = current[messageId]?.toMutableMap() ?: mutableMapOf()
+                msgReactions[emoji] = (msgReactions[emoji] ?: 0) + 1
+                current[messageId] = msgReactions
+                _reactions.value = current
             }
         }
     }

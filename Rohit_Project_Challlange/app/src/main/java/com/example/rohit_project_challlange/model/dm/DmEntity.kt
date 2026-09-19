@@ -18,5 +18,7 @@ data class DmEntity(
     val senderId: Int,
     val receiverId: Int,
     val dm_content: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val mediaUrl: String? = null,
+    val isRead: Boolean = false
 )
