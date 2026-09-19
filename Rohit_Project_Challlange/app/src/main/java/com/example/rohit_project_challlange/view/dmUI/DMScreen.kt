@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +61,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.rohit_project_challlange.model.UserEntity
 import com.example.rohit_project_challlange.model.dm.DmEntity
 import com.example.rohit_project_challlange.ui.theme.*
@@ -372,7 +376,9 @@ fun DMScreen(
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        // Partner Avatar
+                        // Partner Avatar — real photo when available, initials fallback
+                        val context = LocalContext.current
+                        val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -388,12 +394,32 @@ fun DMScreen(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            val initial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
-                            Text(
-                                text = initial,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                            if (!partner.avatarUrl.isNullOrEmpty()) {
+                                SubcomposeAsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(partner.avatarUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = partner.userName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape),
+                                    error = {
+                                        Text(
+                                            text = partnerInitial,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White
+                                        )
+                                    }
+                                )
+                            } else {
+                                Text(
+                                    text = partnerInitial,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(10.dp))
@@ -889,17 +915,56 @@ fun SkeuoMemberRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Member Initial in debossed squircle well
+                // Member avatar — real photo when available, initials in debossed squircle well
+                val context = LocalContext.current
                 val initial = member.userName.trim().take(1).uppercase().ifEmpty { "U" }
-                SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
-                    Text(
-                        text = initial,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
-                        color = Color(0xFF2C221E)
-                    )
+                if (!member.avatarUrl.isNullOrEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .drawBehind {
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(CoralLight, CoralStart)
+                                    )
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(member.avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = member.userName,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape),
+                            error = {
+                                Text(
+                                    text = initial,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                        )
+                    }
+                } else {
+                    SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
+                        Text(
+                            text = initial,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            ),
+                            color = Color(0xFF2C221E)
+                        )
+                    }
                 }
 
                 Column(modifier = Modifier.weight(1f)) {

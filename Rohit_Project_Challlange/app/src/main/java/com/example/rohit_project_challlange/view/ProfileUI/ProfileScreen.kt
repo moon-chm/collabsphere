@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +74,7 @@ fun ProfileRoute(
     initialUserName: String,
     onBack: () -> Unit,
     onProfileUpdated: (String) -> Unit,
+    onAvatarUpdated: (String) -> Unit = {},
     onLogoutComplete: () -> Unit
 ) {
     val updatedName by viewModel.updatedUserName.collectAsState()
@@ -117,6 +119,11 @@ fun ProfileRoute(
             }
             viewModel.clearProfileStatus()
         }
+    }
+
+    // Notify parent whenever the avatarUrl changes (upload or remove)
+    LaunchedEffect(avatarUrl) {
+        onAvatarUpdated(avatarUrl)
     }
 
     ProfileScreen(
@@ -412,6 +419,7 @@ fun ProfileScreen(
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = "Profile picture",
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(84.dp)
                                     .clip(CircleShape),

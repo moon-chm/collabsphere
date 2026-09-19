@@ -858,7 +858,14 @@ fun Application.configureRouting() {
                                     workspaceId = workspaceIdParam,
                                     userId = targetUserId,
                                     userName = targetUserName,
-                                    email = targetUserEmail
+                                    email = targetUserEmail,
+                                    avatarUrl = dbQuery {
+                                        UsersTable
+                                            .selectAll()
+                                            .where { UsersTable.id eq targetUserId }
+                                            .firstOrNull()
+                                            ?.get(UsersTable.avatarUrl)
+                                    }
                                 )
                             }
                         }
@@ -918,7 +925,8 @@ fun Application.configureRouting() {
                                         workspaceId = workspaceIdParam,
                                         userId = it[UsersTable.id],
                                         userName = it[UsersTable.username],
-                                        email = it[UsersTable.email]
+                                        email = it[UsersTable.email],
+                                        avatarUrl = it[UsersTable.avatarUrl]
                                     )
                                 }
                         }

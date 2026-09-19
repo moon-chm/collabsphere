@@ -36,6 +36,9 @@ class LoginViewModel(
     private val _loggedInUserEmail = MutableStateFlow<String>("")
     val loggedInUserEmail: StateFlow<String> = _loggedInUserEmail.asStateFlow()
 
+    private val _loggedInAvatarUrl = MutableStateFlow<String>("")
+    val loggedInAvatarUrl: StateFlow<String> = _loggedInAvatarUrl.asStateFlow()
+
     init {
         viewModelScope.launch {
             val savedId = userPreferences.userIdFlow.first()
@@ -51,6 +54,7 @@ class LoginViewModel(
                 if (localUser != null) {
                     if (savedName.isEmpty()) _loggedInUserName.value = localUser.userName
                     if (savedEmail.isEmpty()) _loggedInUserEmail.value = localUser.email
+                    if (localUser.avatarUrl != null) _loggedInAvatarUrl.value = localUser.avatarUrl
                 }
             }
         }
@@ -155,6 +159,10 @@ class LoginViewModel(
         viewModelScope.launch {
             userPreferences.updateUserName(newName)
         }
+    }
+
+    fun updateLoggedInAvatarUrl(newAvatarUrl: String) {
+        _loggedInAvatarUrl.value = newAvatarUrl
     }
 
     fun clearLoginStatus() {

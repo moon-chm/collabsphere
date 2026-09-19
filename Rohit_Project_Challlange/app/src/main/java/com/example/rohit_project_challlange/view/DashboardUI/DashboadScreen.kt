@@ -34,12 +34,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.rohit_project_challlange.model.workspace.WorkspaceEntity
 import com.example.rohit_project_challlange.ui.theme.*
 import com.example.rohit_project_challlange.viewmodel.DashboardViewModel
@@ -50,6 +54,8 @@ private val workspaceAccents = listOf(CoralStart, IndigoStart, MintGreen, AmberW
 @Composable
 fun DashboardScreen(
     viewModel             : DashboardViewModel,
+    currentUserName       : String = "",
+    avatarUrl             : String = "",
     onNavigateToWorkspace : () -> Unit,
     onWorkspaceClick      : (WorkspaceEntity) -> Unit,
     onDeleteWorkspaceClick: (WorkspaceEntity) -> Unit,
@@ -102,33 +108,30 @@ fun DashboardScreen(
                     label = "profileScale"
                 )
 
+                val context = LocalContext.current
+
                 Box(
                     modifier = Modifier
                         .size(46.dp)
                         .graphicsLayer { scaleX = profileScale; scaleY = profileScale }
                         .drawBehind {
                             val r = size.minDimension / 2f
-                            // 1. Ambient diffuse shadow
                             drawCircle(
                                 color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.03f else 0.06f),
                                 radius = r,
                                 center = Offset(center.x, center.y + if (isProfilePressed) 2.dp.toPx() else 5.dp.toPx())
                             )
-                            // 2. Tight contact shadow (2.5x alpha)
                             drawCircle(
                                 color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.10f else 0.16f),
                                 radius = r,
                                 center = Offset(center.x, center.y + if (isProfilePressed) 1.dp.toPx() else 1.8.dp.toPx())
                             )
-                            // 3. Specular top halo
                             drawCircle(
                                 color = Color.White.copy(alpha = 0.90f),
                                 radius = r,
                                 center = Offset(center.x, center.y - 1.dp.toPx())
                             )
-                            // 4. Elevated button body
                             drawCircle(color = Surface)
-                            // 5. 1px hairline border
                             drawCircle(
                                 color = Color(0xFF2C2A28).copy(alpha = 0.06f),
                                 radius = r - 0.5.dp.toPx(),
@@ -143,12 +146,73 @@ fun DashboardScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector        = Icons.Outlined.AccountCircle,
-                        contentDescription = "Profile",
-                        tint               = CoralStart,
-                        modifier           = Modifier.size(26.dp)
-                    )
+                    if (avatarUrl.isNotEmpty()) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Profile picture",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(CircleShape),
+                            loading = {
+                                val initial = currentUserName.trim().take(1).uppercase().ifEmpty { "U" }
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(CoralLight, CoralStart)
+                                            ),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = initial,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                            },
+                            error = {
+                                Icon(
+                                    imageVector        = Icons.Outlined.AccountCircle,
+                                    contentDescription = "Profile",
+                                    tint               = CoralStart,
+                                    modifier           = Modifier.size(26.dp)
+                                )
+                            }
+                        )
+                    } else if (currentUserName.isNotEmpty()) {
+                        val initial = currentUserName.trim().take(1).uppercase()
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(CoralLight, CoralStart)
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = initial,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector        = Icons.Outlined.AccountCircle,
+                            contentDescription = "Profile",
+                            tint               = CoralStart,
+                            modifier           = Modifier.size(26.dp)
+                        )
+                    }
                 }
             }
 

@@ -122,7 +122,8 @@ class WorkspaceRepo(
                         id = member.userId,
                         email = member.email,
                         password = "",
-                        userName = name
+                        userName = name,
+                        avatarUrl = member.avatarUrl
                     )
                 )
 
@@ -188,7 +189,13 @@ class WorkspaceRepo(
             } else remote.userName
 
             workspaceDao.upsertUser(
-                UserEntity(id = remote.userId, email = remote.email, password = "", userName = name)
+                UserEntity(
+                    id = remote.userId,
+                    email = remote.email,
+                    password = "",
+                    userName = name,
+                    avatarUrl = remote.avatarUrl
+                )
             )
 
             workspaceDao.upsertMember(

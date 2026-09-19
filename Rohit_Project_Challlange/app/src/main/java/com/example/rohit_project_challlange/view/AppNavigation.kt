@@ -82,6 +82,7 @@ fun AppNavigation(
         val loggedInUserId by loginViewModel.loggedInUserId.collectAsStateWithLifecycle()
         val loggedInUsername by loginViewModel.loggedInUserName.collectAsStateWithLifecycle()
         val loggedInUserEmail by loginViewModel.loggedInUserEmail.collectAsStateWithLifecycle()
+        val loggedInAvatarUrl by loginViewModel.loggedInAvatarUrl.collectAsStateWithLifecycle()
         val context = LocalContext.current
 
         LaunchedEffect(isLoggedIn) {
@@ -203,6 +204,8 @@ fun AppNavigation(
             ) {
                 DashboardScreen(
                     viewModel = dashboardViewModel,
+                    currentUserName = loggedInUsername,
+                    avatarUrl = loggedInAvatarUrl,
                     onNavigateToWorkspace = {
                         if (navController.currentDestination?.route == "dashboard") {
                             navController.navigate("workspace_create")
@@ -266,6 +269,9 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onProfileUpdated = { newName ->
                         loginViewModel.updateLoggedInUserName(newName)
+                    },
+                    onAvatarUpdated = { newAvatarUrl ->
+                        loginViewModel.updateLoggedInAvatarUrl(newAvatarUrl)
                     },
                     onLogoutComplete = {
                         dashboardViewModel.logout()

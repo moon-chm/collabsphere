@@ -28,7 +28,8 @@ data class MemberResponse(
     val workspaceId: Int,
     val userId: Int,
     val userName: String,
-    val email: String
+    val email: String,
+    val avatarUrl: String? = null
 )
 
 @Serializable
