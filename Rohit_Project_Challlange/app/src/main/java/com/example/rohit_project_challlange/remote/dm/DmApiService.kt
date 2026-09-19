@@ -4,7 +4,9 @@ import android.util.Log
 import com.example.rohit_project_challlange.AuthTokenHolder
 import com.example.rohit_project_challlange.dto.dm.DmDto
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocketSession
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.url
 import io.ktor.http.HttpHeaders
@@ -90,6 +92,29 @@ class DmApiService(
                 throw e
             }
         }
+    }
+
+    suspend fun getOnlineUsers(baseUrl: String, workspaceId: Int): List<Int> {
+        return try {
+            val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
+            client.get("$cleanBaseUrl/api/presence/$workspaceId").body()
+        } catch (e: Exception) {
+            Log.w("DmApiService", "Failed fetching presence for workspace $workspaceId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun sendTypingStatus(workspaceId: Int, senderId: Int, receiverId: Int, isTyping: Boolean) {
+        val action = if (isTyping) "TYPING_START" else "TYPING_STOP"
+        val payload = DmDto(
+            action = action,
+            workspaceId = workspaceId,
+            senderId = senderId,
+            receiverId = receiverId
+        )
+        try {
+            sendDm(payload)
+        } catch (_: Exception) {}
     }
 
     suspend fun disconnect() = sessionMutex.withLock {

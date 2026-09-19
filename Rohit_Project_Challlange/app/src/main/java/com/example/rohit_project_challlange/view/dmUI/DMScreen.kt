@@ -3,8 +3,13 @@ package com.example.rohit_project_challlange.view.dmUI
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -80,6 +85,8 @@ fun DMScreen(
 ) {
     val workspaceMembers by viewModel.workspaceMembers.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val onlineUserIds by viewModel.onlineUserIds.collectAsStateWithLifecycle()
+    val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
     var typedText by remember { mutableStateOf("") }
@@ -91,6 +98,9 @@ fun DMScreen(
 
     val currentPartnerId = activeChatPartner?.id
     val currentMembersList = workspaceMembers
+
+    val isPartnerTyping = activeChatPartner?.let { it.id in typingPartnerIds } ?: false
+    val isPartnerOnline = activeChatPartner?.let { it.id in onlineUserIds } ?: false
 
     LaunchedEffect(initialPartnerId, currentMembersList) {
         if (initialPartnerId != null && activeChatPartner == null) {
@@ -112,14 +122,15 @@ fun DMScreen(
     }
 
     DisposableEffect(workspaceId, currentUserId, baseUrl) {
-        viewModel.loadWorkspaceMembers(workspaceId)
+        viewModel.loadWorkspaceMembers(workspaceId, baseUrl)
         viewModel.initWebSocketConnection(baseUrl, currentUserId)
         onDispose {}
     }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            lazyListState.animateScrollToItem(messages.size - 1)
+    LaunchedEffect(messages.size, isPartnerTyping) {
+        val totalCount = messages.size + if (isPartnerTyping) 1 else 0
+        if (totalCount > 0) {
+            lazyListState.animateScrollToItem(totalCount - 1)
         }
     }
 
@@ -295,8 +306,12 @@ fun DMScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(otherMembers, key = { it.id }) { member ->
+                            val isOnline = member.id in onlineUserIds
+                            val isTyping = member.id in typingPartnerIds
                             SkeuoMemberRow(
                                 member = member,
+                                isOnline = isOnline,
+                                isTyping = isTyping,
                                 modifier = Modifier.animateItem(),
                                 onClick = {
                                     activeChatPartner = member
@@ -434,19 +449,58 @@ fun DMScreen(
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(Mint)
-                                )
-                                Text(
-                                    text = "Active session",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    color = Muted
-                                )
+                                if (isPartnerTyping) {
+                                    val infiniteTransition = rememberInfiniteTransition(label = "headerTyping")
+                                    val pulseAlpha by infiniteTransition.animateFloat(
+                                        initialValue = 0.35f,
+                                        targetValue = 1f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(600, easing = LinearEasing),
+                                            repeatMode = RepeatMode.Reverse
+                                        ),
+                                        label = "pulseAlpha"
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(CoralStart.copy(alpha = pulseAlpha))
+                                    )
+                                    Text(
+                                        text = "typing...",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                        color = CoralStart
+                                    )
+                                } else if (isPartnerOnline) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(Mint)
+                                    )
+                                    Text(
+                                        text = "Online",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Mint
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(Muted.copy(alpha = 0.5f))
+                                    )
+                                    Text(
+                                        text = "Offline",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        color = Muted
+                                    )
+                                }
                             }
                         }
                     }
@@ -614,6 +668,15 @@ fun DMScreen(
                             }
                         }
                     }
+
+                    if (isPartnerTyping) {
+                        item(key = "typing_bubble") {
+                            SkeuoTypingBubble(
+                                partnerName = partner.userName,
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+                    }
                 }
 
                 // Skeuomorphic Message Input Bar
@@ -730,7 +793,14 @@ fun DMScreen(
                             ) {
                                 BasicTextField(
                                     value = typedText,
-                                    onValueChange = { typedText = it },
+                                    onValueChange = { newText ->
+                                        typedText = newText
+                                        if (newText.isNotBlank()) {
+                                            viewModel.onUserTyping(workspaceId, partner.id)
+                                        } else {
+                                            viewModel.onUserStoppedTyping(workspaceId, partner.id)
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
                                     cursorBrush = SolidColor(CoralStart),
@@ -878,6 +948,8 @@ fun DMScreen(
 @Composable
 fun SkeuoMemberRow(
     member: UserEntity,
+    isOnline: Boolean = false,
+    isTyping: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -915,54 +987,80 @@ fun SkeuoMemberRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Member avatar — real photo when available, initials in debossed squircle well
+                // Member avatar with active/typing badge
                 val context = LocalContext.current
                 val initial = member.userName.trim().take(1).uppercase().ifEmpty { "U" }
-                if (!member.avatarUrl.isNullOrEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .drawBehind {
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(CoralLight, CoralStart)
-                                    )
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        SubcomposeAsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(member.avatarUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = member.userName,
-                            contentScale = ContentScale.Crop,
+
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    if (!member.avatarUrl.isNullOrEmpty()) {
+                        Box(
                             modifier = Modifier
                                 .size(46.dp)
-                                .clip(CircleShape),
-                            error = {
-                                Text(
-                                    text = initial,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 20.sp
-                                    ),
-                                    color = Color.White
-                                )
-                            }
-                        )
+                                .clip(CircleShape)
+                                .drawBehind {
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(CoralLight, CoralStart)
+                                        )
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            SubcomposeAsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(member.avatarUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = member.userName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape),
+                                error = {
+                                    Text(
+                                        text = initial,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 20.sp
+                                        ),
+                                        color = Color.White
+                                    )
+                                }
+                            )
+                        }
+                    } else {
+                        SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
+                            Text(
+                                text = initial,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp
+                                ),
+                                color = Color(0xFF2C221E)
+                            )
+                        }
                     }
-                } else {
-                    SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
-                        Text(
-                            text = initial,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            ),
-                            color = Color(0xFF2C221E)
+
+                    // Presence / Typing Dot Badge
+                    if (isTyping) {
+                        Box(
+                            modifier = Modifier
+                                .size(13.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .padding(1.5.dp)
+                                .clip(CircleShape)
+                                .background(CoralStart)
+                        )
+                    } else if (isOnline) {
+                        Box(
+                            modifier = Modifier
+                                .size(13.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .padding(1.5.dp)
+                                .clip(CircleShape)
+                                .background(Mint)
                         )
                     }
                 }
@@ -974,26 +1072,160 @@ fun SkeuoMemberRow(
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.5.sp
                         ),
-                        color = Color(0xFF1F1A17),
+                        color = Ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Tap to open conversation",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp),
-                        color = Color(0xFF6E635C),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (isTyping) {
+                        Text(
+                            text = "typing...",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            ),
+                            color = CoralStart
+                        )
+                    } else if (isOnline) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Mint)
+                            )
+                            Text(
+                                text = "Online",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = Mint
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = member.statusMessage?.takeIf { it.isNotBlank() } ?: "Tap to message",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = Muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Color(0xFFA89E97),
+                tint = Muted.copy(alpha = 0.6f),
                 modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** Skeuomorphic animated typing bubble with bouncing dots */
+@Composable
+fun SkeuoTypingBubble(
+    partnerName: String,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "bouncingDots")
+
+    val dot1Offset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -4.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(380, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot1"
+    )
+    val dot2Offset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -4.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(380, delayMillis = 130, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot2"
+    )
+    val dot3Offset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -4.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(380, delayMillis = 260, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot3"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier
+                .drawBehind {
+                    drawRoundRect(
+                        color = ShadowDark.copy(alpha = 0.12f),
+                        topLeft = Offset(1.dp.toPx(), 2.dp.toPx()),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(14.dp.toPx())
+                    )
+                    drawRoundRect(
+                        color = ShadowLight.copy(alpha = 0.85f),
+                        topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(14.dp.toPx())
+                    )
+                    drawRoundRect(
+                        color = SurfaceRaised,
+                        cornerRadius = CornerRadius(14.dp.toPx())
+                    )
+                }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 3 Bouncing Dots
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(y = dot1Offset.dp)
+                        .size(5.5.dp)
+                        .clip(CircleShape)
+                        .background(CoralStart)
+                )
+                Box(
+                    modifier = Modifier
+                        .offset(y = dot2Offset.dp)
+                        .size(5.5.dp)
+                        .clip(CircleShape)
+                        .background(CoralStart)
+                )
+                Box(
+                    modifier = Modifier
+                        .offset(y = dot3Offset.dp)
+                        .size(5.5.dp)
+                        .clip(CircleShape)
+                        .background(CoralStart)
+                )
+            }
+
+            Text(
+                text = "$partnerName is typing...",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = Ink.copy(alpha = 0.75f)
             )
         }
     }

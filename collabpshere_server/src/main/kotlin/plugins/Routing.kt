@@ -375,6 +375,32 @@ fun Application.configureRouting() {
                 }
             }
 
+            // ── GET workspace active/online users ────────────────────────────
+            get("/api/presence/{workspaceId}") {
+                try {
+                    val actingUserId = call.authenticatedUserId()
+                    val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
+
+                    val onlineMemberIds = dbQuery {
+                        val memberIds = WorkspaceMembersTable
+                            .select(WorkspaceMembersTable.userId)
+                            .where { WorkspaceMembersTable.workspaceId eq workspaceIdParam }
+                            .map { it[WorkspaceMembersTable.userId] }
+                            .toSet()
+
+                        memberIds.filter { uid ->
+                            val sessions = activeDmSessions[uid.toLong()]
+                            sessions != null && sessions.isNotEmpty()
+                        }
+                    }
+
+                    call.respond(HttpStatusCode.OK, onlineMemberIds)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, emptyList<Int>())
+                }
+            }
+
             // ── CHANGE email ───────────────────────────────────────────────────
             put("/api/user/email") {
                 try {
@@ -2272,6 +2298,29 @@ fun Application.configureRouting() {
                         }
                     }
 
+                    // Teammate IDs across all shared workspaces for presence broadcast
+                    val teammateIds = runCatching {
+                        dbQuery {
+                            val userWorkspaces = WorkspaceMembersTable
+                                .select(WorkspaceMembersTable.workspaceId)
+                                .where { WorkspaceMembersTable.userId eq userIdParam.toInt() }
+                                .map { it[WorkspaceMembersTable.workspaceId] }
+
+                            WorkspaceMembersTable
+                                .select(WorkspaceMembersTable.userId)
+                                .where { (WorkspaceMembersTable.workspaceId inList userWorkspaces) and (WorkspaceMembersTable.userId neq userIdParam.toInt()) }
+                                .map { it[WorkspaceMembersTable.userId] }
+                                .toSet()
+                        }
+                    }.getOrDefault(emptySet())
+
+                    // Broadcast USER_ONLINE to teammates currently connected
+                    try {
+                        val onlineDto = DmDto(action = "USER_ONLINE", senderId = userIdParam.toInt())
+                        val onlineJson = Json.encodeToString(DmDto.serializer(), onlineDto)
+                        teammateIds.forEach { sendToUser(it.toLong(), onlineJson) }
+                    } catch (_: Exception) {}
+
                     try {
                         val initialHistoryPayloads = dbQuery {
                             DirectMessagesTable.selectAll().where {
@@ -2412,6 +2461,11 @@ fun Application.configureRouting() {
                                                 this.send(Frame.Text(deleteJson))
                                             }
                                         }
+                                    } else if (dmDto.action == "TYPING_START" || dmDto.action == "TYPING_STOP") {
+                                        // Forward typing status in real time to the intended chat partner
+                                        val typingPayload = dmDto.copy(senderId = userIdParam.toInt())
+                                        val typingJson = Json.encodeToString(DmDto.serializer(), typingPayload)
+                                        sendToUser(dmDto.receiverId.toLong(), typingJson)
                                     }
                                 } catch (_: Exception) {
                                 }
@@ -2420,6 +2474,17 @@ fun Application.configureRouting() {
                     } catch (_: Exception) {
                     } finally {
                         removeDmSession(userIdParam, this)
+
+                        // If no other live sessions remain for this user, broadcast USER_OFFLINE to teammates
+                        val remainingSessions = activeDmSessions[userIdParam]
+                        if (remainingSessions == null || remainingSessions.isEmpty()) {
+                            try {
+                                val offlineDto = DmDto(action = "USER_OFFLINE", senderId = userIdParam.toInt())
+                                val offlineJson = Json.encodeToString(DmDto.serializer(), offlineDto)
+                                teammateIds.forEach { sendToUser(it.toLong(), offlineJson) }
+                            } catch (_: Exception) {}
+                        }
+
                         // Mark last seen on WS disconnect
                         dbQuery {
                             UsersTable.update({ UsersTable.id eq userIdParam.toInt() }) {

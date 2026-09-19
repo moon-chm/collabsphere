@@ -6,6 +6,10 @@ import com.example.rohit_project_challlange.dto.dm.DmDto
 import com.example.rohit_project_challlange.model.TempId
 import com.example.rohit_project_challlange.remote.dm.DmApiService
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.TimeUnit
 
 class DmRepo(
@@ -13,6 +17,9 @@ class DmRepo(
     private val apiService: DmApiService,
     private val workManager: WorkManager
 ) {
+
+    private val _incomingEvents = MutableSharedFlow<DmDto>(extraBufferCapacity = 64)
+    val incomingEvents: SharedFlow<DmDto> = _incomingEvents.asSharedFlow()
 
     fun getDmHistory(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Flow<List<DmEntity>> {
         return dmDao.getDmHistory(workspaceId, currentUserId, chatPartnerId)
@@ -67,10 +74,23 @@ class DmRepo(
     }
 
     fun listenForIncomingDms(): Flow<DmDto> {
-        return apiService.observeIncomingDms()
+        return apiService.observeIncomingDms().onEach { dto ->
+            _incomingEvents.emit(dto)
+        }
     }
 
+    suspend fun fetchOnlineUsers(baseUrl: String, workspaceId: Int): List<Int> =
+        apiService.getOnlineUsers(baseUrl, workspaceId)
+
+    suspend fun sendTypingStatus(workspaceId: Int, senderId: Int, receiverId: Int, isTyping: Boolean) =
+        apiService.sendTypingStatus(workspaceId, senderId, receiverId, isTyping)
+
     suspend fun saveIncomingDm(message: DmDto, currentUserId: Int) {
+        if (message.action in listOf("TYPING_START", "TYPING_STOP", "USER_ONLINE", "USER_OFFLINE")) {
+            // Ephemeral real-time presence/typing events — not persistent chat rows
+            return
+        }
+
         if (message.action == "DELETE_MESSAGE") {
             val id = message.id
             if (id != null && id != 0) {
