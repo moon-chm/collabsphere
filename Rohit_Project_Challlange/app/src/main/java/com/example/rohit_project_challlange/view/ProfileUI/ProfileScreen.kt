@@ -1,5 +1,7 @@
 package com.example.rohit_project_challlange.view.ProfileUI
 
+import android.content.Intent
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -60,12 +62,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.rohit_project_challlange.AppConfig
 import com.example.rohit_project_challlange.ui.theme.*
 import com.example.rohit_project_challlange.viewmodel.profile.ProfileViewModel
+import com.yalantis.ucrop.UCrop
 import java.io.File
 
 @Composable
@@ -235,22 +239,71 @@ fun ProfileScreen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
+    // ── uCrop result launcher — receives the cropped image URI ──────────────
+    val cropLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val resultUri = UCrop.getOutput(result.data ?: return@rememberLauncherForActivityResult)
+        if (result.resultCode == android.app.Activity.RESULT_OK && resultUri != null) {
+            try {
+                val croppedFile = File(context.cacheDir, "avatar_cropped_${System.currentTimeMillis()}.jpg")
+                context.contentResolver.openInputStream(resultUri)?.use { inputStream ->
+                    croppedFile.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                if (croppedFile.exists()) {
+                    onAvatarPicked(croppedFile)
+                }
+            } catch (_: Exception) { /* ignored — user can retry */ }
+        }
+    }
+
+    // ── Image picker — on pick success, launch uCrop for circle cropping ────
     val avatarPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                val tempFile = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    tempFile.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                }
-                if (tempFile.exists()) {
-                    onAvatarPicked(tempFile)
-                }
+                // Destination file for the cropped result
+                val destFile = File(context.cacheDir, "avatar_crop_dest_${System.currentTimeMillis()}.jpg")
+                val destUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    destFile
+                )
+
+                // Coral accent colors matching the app's skeuomorphic theme
+                val toolbarColor = AndroidColor.parseColor("#E8784A")   // CoralStart
+                val statusBarColor = AndroidColor.parseColor("#C95E30") // CoralEnd
+                val activeCtrlColor = AndroidColor.parseColor("#E8784A")
+
+                val cropIntent = UCrop.of(uri, destUri)
+                    .withAspectRatio(1f, 1f)        // Force 1:1 for perfect circle
+                    .withMaxResultSize(512, 512)    // Reasonable upload size
+                    .withOptions(
+                        UCrop.Options().apply {
+                            setCircleDimmedLayer(true)          // Circle overlay
+                            setShowCropGrid(false)              // Clean look, no grid
+                            setShowCropFrame(false)             // Circle speaks for itself
+                            setToolbarColor(toolbarColor)
+                            setStatusBarColor(statusBarColor)
+                            setActiveControlsWidgetColor(activeCtrlColor)
+                            setToolbarTitle("Adjust your photo")
+                            setCompressionQuality(90)
+                            setHideBottomControls(false)        // Keep rotate/flip available
+                        }
+                    )
+                    .getIntent(context)
+
+                cropLauncher.launch(cropIntent)
             } catch (_: Exception) {
-                // Silently ignored — a failed local copy simply means the user can retry the picker.
+                // uCrop launch failed — fall back to direct copy without crop
+                try {
+                    val tempFile = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { i -> tempFile.outputStream().use { o -> i.copyTo(o) } }
+                    if (tempFile.exists()) onAvatarPicked(tempFile)
+                } catch (_: Exception) { }
             }
         }
     }

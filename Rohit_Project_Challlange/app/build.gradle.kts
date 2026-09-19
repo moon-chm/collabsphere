@@ -92,6 +92,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-svg:2.7.0")
 
+    // ── uCrop (in-app circular photo cropper before avatar upload) ──
+    implementation("com.github.yalantis:ucrop:2.2.8-native")
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
