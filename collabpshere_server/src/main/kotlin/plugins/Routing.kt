@@ -54,8 +54,26 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.Int
 
-suspend fun <T> dbQuery(block: suspend () -> T): T =
-    newSuspendedTransaction(Dispatchers.IO) { block() }
+/** Postgres SQLSTATE codes for transient conflicts worth retrying instead of surfacing as a 500. */
+private val RETRYABLE_SQLSTATES = setOf("40001", "40P01") // serialization_failure, deadlock_detected
+
+suspend fun <T> dbQuery(block: suspend () -> T): T {
+    var attempt = 0
+    while (true) {
+        try {
+            return newSuspendedTransaction(Dispatchers.IO) { block() }
+        } catch (e: Exception) {
+            val sqlState = (e as? java.sql.SQLException)?.sqlState
+                ?: (e.cause as? java.sql.SQLException)?.sqlState
+            attempt++
+            if (sqlState !in RETRYABLE_SQLSTATES || attempt >= 3) throw e
+        }
+    }
+}
+
+/** Escapes LIKE wildcards in a literal so it can be safely embedded in a pattern (Postgres's default LIKE escape char is `\`). */
+private fun escapeLikeLiteral(value: String): String =
+    value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 // A user can have more than one live connection (multiple devices, or a second app instance) — keyed
 // by a set of sessions per user instead of a single session, so one doesn't silently evict another.
@@ -77,7 +95,11 @@ private suspend fun sendToUser(userId: Long, text: String) {
         if (session.isActive) {
             try {
                 session.send(Frame.Text(text))
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                // A dead session left registered would silently eat every future push to this user —
+                // drop it so the next reconnect re-registers a working one instead.
+                println("[sendToUser] Failed sending to userId=$userId, dropping dead session: ${e.message}")
+                removeDmSession(userId, session)
             }
         }
     }
@@ -1216,6 +1238,24 @@ fun Application.configureRouting() {
                             if (!isMember(actingUserId, request.workspaceId)) {
                                 return@dbQuery null
                             }
+
+                            // A WorkManager retry after a successful-but-lost create response re-sends
+                            // the same idempotencyKey — return the existing row instead of inserting again.
+                            val existing = request.idempotencyKey?.let { key ->
+                                TasksTable.selectAll().where { TasksTable.idempotencyKey eq key }.singleOrNull()
+                            }
+                            if (existing != null) {
+                                return@dbQuery TaskResponse(
+                                    id = existing[TasksTable.id],
+                                    createdByUserId = existing[TasksTable.createdByUserId],
+                                    assignedToUserId = existing[TasksTable.assignedToUserId],
+                                    workspaceId = existing[TasksTable.workspaceId],
+                                    taskName = existing[TasksTable.taskName],
+                                    taskDescription = existing[TasksTable.taskDescription],
+                                    status = existing[TasksTable.status]
+                                )
+                            }
+
                             val insertedId = TasksTable.insert {
                                 it[createdByUserId] = actingUserId
                                 it[assignedToUserId] = request.assignedToUserId
@@ -1225,6 +1265,7 @@ fun Application.configureRouting() {
                                 it[status] = request.status
                                 it[isDeleted] = false
                                 it[updatedAt] = System.currentTimeMillis()
+                                it[idempotencyKey] = request.idempotencyKey
                             }[TasksTable.id]
 
                             TaskResponse(
@@ -1547,6 +1588,22 @@ fun Application.configureRouting() {
                             if (!isMember(actingUserId, request.workspaceId)) {
                                 return@dbQuery null
                             }
+
+                            // A WorkManager retry after a successful-but-lost create response re-sends
+                            // the same idempotencyKey — return the existing row instead of inserting again.
+                            val existing = request.idempotencyKey?.let { key ->
+                                NotesTable.selectAll().where { NotesTable.idempotencyKey eq key }.singleOrNull()
+                            }
+                            if (existing != null) {
+                                return@dbQuery NotesResponse(
+                                    id = existing[NotesTable.id],
+                                    userId = existing[NotesTable.userIdNotes],
+                                    notesName = existing[NotesTable.notesName],
+                                    workspaceId = existing[NotesTable.workspaceId],
+                                    description = existing[NotesTable.notesDescription]
+                                )
+                            }
+
                             val insertedId = NotesTable.insert {
                                 it[NotesTable.userIdNotes] = actingUserId
                                 it[NotesTable.workspaceId] = request.workspaceId
@@ -1554,6 +1611,7 @@ fun Application.configureRouting() {
                                 it[NotesTable.notesDescription] = request.description
                                 it[NotesTable.isDeleted] = false
                                 it[NotesTable.updatedAt] = System.currentTimeMillis()
+                                it[NotesTable.idempotencyKey] = request.idempotencyKey
                             }[NotesTable.id]
 
                             NotesResponse(
@@ -1887,6 +1945,9 @@ fun Application.configureRouting() {
                             if (existing[MessageTable.userId] != actingUserId) {
                                 return@dbQuery -2
                             }
+                            if (!isMember(actingUserId, existing[MessageTable.workspaceId])) {
+                                return@dbQuery -2
+                            }
                             MessageTable.update({ MessageTable.id eq messageIdParam }) {
                                 it[MessageTable.content] = request.content
                                 it[MessageTable.status] = request.status
@@ -2010,40 +2071,61 @@ fun Application.configureRouting() {
                         var fileName: String? = null
                         var contentType: String? = null
 
+                        // The client always sends workspaceId before the file part (see FileApiService.uploadFile's
+                        // formData order) — checked as soon as it arrives so a non-member's file bytes are never
+                        // buffered at all, instead of paying that cost before finding out the request is rejected.
+                        var isForbidden = false
+
                         multipart.forEachPart { part ->
                             when (part) {
                                 is PartData.FormItem -> {
                                     when (part.name) {
-                                        "workspaceId" -> workspaceId = part.value.toIntOrNull()
+                                        "workspaceId" -> {
+                                            workspaceId = part.value.toIntOrNull()
+                                            workspaceId?.let { wsId ->
+                                                if (!dbQuery { isMember(actingUserId, wsId) }) {
+                                                    isForbidden = true
+                                                }
+                                            }
+                                        }
                                         "userName" -> userName = part.value
                                         "localpath" -> localpath = part.value
                                     }
                                     part.dispose()
                                 }
                                 is PartData.FileItem -> {
-                                    // File(...).name strips any directory components (e.g. "../../etc/passwd" -> "passwd"),
-                                    // so a malicious client-supplied filename can't escape uploadDir below.
-                                    fileName = part.originalFileName?.let { File(it).name }?.ifBlank { null }
-                                    contentType = part.contentType?.toString()
-                                    // Bounded read regardless of what Content-Length claims (chunked transfer has none) —
-                                    // caps memory use instead of buffering an arbitrarily large upload wholesale.
-                                    fileBytes = part.streamProvider().use { input ->
-                                        val buffer = java.io.ByteArrayOutputStream()
-                                        val chunk = ByteArray(8192)
-                                        var total = 0L
-                                        while (true) {
-                                            val read = input.read(chunk)
-                                            if (read == -1) break
-                                            total += read
-                                            if (total > MAX_UPLOAD_BYTES) throw UploadTooLargeException()
-                                            buffer.write(chunk, 0, read)
+                                    if (isForbidden) {
+                                        part.dispose()
+                                    } else {
+                                        // File(...).name strips any directory components (e.g. "../../etc/passwd" -> "passwd"),
+                                        // so a malicious client-supplied filename can't escape uploadDir below.
+                                        fileName = part.originalFileName?.let { File(it).name }?.ifBlank { null }
+                                        contentType = part.contentType?.toString()
+                                        // Bounded read regardless of what Content-Length claims (chunked transfer has none) —
+                                        // caps memory use instead of buffering an arbitrarily large upload wholesale.
+                                        fileBytes = part.streamProvider().use { input ->
+                                            val buffer = java.io.ByteArrayOutputStream()
+                                            val chunk = ByteArray(8192)
+                                            var total = 0L
+                                            while (true) {
+                                                val read = input.read(chunk)
+                                                if (read == -1) break
+                                                total += read
+                                                if (total > MAX_UPLOAD_BYTES) throw UploadTooLargeException()
+                                                buffer.write(chunk, 0, read)
+                                            }
+                                            buffer.toByteArray()
                                         }
-                                        buffer.toByteArray()
+                                        part.dispose()
                                     }
-                                    part.dispose()
                                 }
                                 else -> part.dispose()
                             }
+                        }
+
+                        if (isForbidden) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                            return@post
                         }
 
                         if (workspaceId == null || userName == null || fileBytes == null || fileName == null) {
@@ -2054,11 +2136,6 @@ fun Application.configureRouting() {
                             if (fileName == null) missingFields.add("fileName")
 
                             call.respond(HttpStatusCode.BadRequest, "Missing multipart assets: ${missingFields.joinToString(", ")}")
-                            return@post
-                        }
-
-                        if (!dbQuery { isMember(actingUserId, workspaceId!!) }) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                             return@post
                         }
 
@@ -2104,8 +2181,7 @@ fun Application.configureRouting() {
                             mimeType = finalMimeType,
                             localpath = localpath,
                             fileName = fileName!!,
-                            sizebytes = fileSize,
-                            fileLocation = generatedFileLocation
+                            sizebytes = fileSize
                         )
 
                         call.respond(HttpStatusCode.Created, response)
@@ -2142,8 +2218,7 @@ fun Application.configureRouting() {
                                     mimeType = it[LocalFilesTable.mimeType],
                                     localpath = it[LocalFilesTable.localPath],
                                     fileName = it[LocalFilesTable.fileName],
-                                    sizebytes = it[LocalFilesTable.sizeBytes],
-                                    fileLocation = it[LocalFilesTable.fileLocation]
+                                    sizebytes = it[LocalFilesTable.sizeBytes]
                                 )
                             }
                         }
@@ -2186,7 +2261,6 @@ fun Application.configureRouting() {
                                     localpath = it[LocalFilesTable.localPath],
                                     fileName = it[LocalFilesTable.fileName],
                                     sizebytes = it[LocalFilesTable.sizeBytes],
-                                    fileLocation = it[LocalFilesTable.fileLocation],
                                     isDeleted = it[LocalFilesTable.isDeleted],
                                     updatedAt = it[LocalFilesTable.updatedAt]
                                 )
@@ -2216,7 +2290,7 @@ fun Application.configureRouting() {
                         val fileRow = dbQuery {
                             LocalFilesTable.selectAll()
                                 .where {
-                                    (LocalFilesTable.url like "%/$fileNameParam") and (LocalFilesTable.isDeleted eq false)
+                                    (LocalFilesTable.url like "%/${escapeLikeLiteral(fileNameParam)}") and (LocalFilesTable.isDeleted eq false)
                                 }
                                 .singleOrNull()
                         }

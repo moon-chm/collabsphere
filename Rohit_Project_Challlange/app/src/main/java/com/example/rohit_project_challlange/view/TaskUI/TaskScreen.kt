@@ -1116,7 +1116,7 @@ fun AssignMemberDialog(
                         }
                     }
 
-                    items(members) { member ->
+                    items(members, key = { it.id }) { member ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

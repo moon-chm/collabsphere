@@ -7,7 +7,8 @@ data class NotesRequest(
     val userId: Int,
     val workspaceId: Int,
     val notesName: String,
-    val description: String
+    val description: String,
+    val idempotencyKey: String? = null
 )
 
 @Serializable

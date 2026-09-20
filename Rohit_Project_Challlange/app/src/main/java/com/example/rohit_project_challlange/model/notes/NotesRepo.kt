@@ -27,6 +27,11 @@ class NotesRepo(
     private fun getSyncKey(workspaceId: Int) =
         longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
 
+    // NotesRepo is a Koin singleton shared by every NotesViewModel instance — without this guard,
+    // navigating to the same workspace's notes screen more than once (without popping the earlier
+    // backstack entry) starts a second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     fun getallnotestoscreen(workspaceId: Int): Flow<List<NotesEntity>> {
         return flow {
             emitAll(notesDao.getallnotedbyuser(workspaceId))
@@ -58,6 +63,8 @@ class NotesRepo(
     // app-lifetime singleton scope, so it's actually cancelled when the caller's scope is — e.g. when
     // the owning ViewModel clears — instead of running for the rest of the process's life.
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
+        if (!activeSyncLoops.add(workspaceId)) return@withContext
+        try {
         while (isActive) {
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -92,15 +99,23 @@ class NotesRepo(
             }
             delay(3000)
         }
+        } finally {
+            activeSyncLoops.remove(workspaceId)
+        }
     }
 
     suspend fun addnotestoscreen(notes: NotesEntity): Result<Long> = withContext(Dispatchers.IO) {
+        // Generated once and reused on every retry of this same create (frozen into workDataOf
+        // below) so a WorkManager retry after a successful-but-lost response is recognized
+        // server-side as the same request instead of inserting a duplicate note.
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
             val request = NotesRequest(
                 userId = notes.userId,
                 notesName = notes.notesName,
                 description = notes.description,
-                workspaceId = notes.workspaceId
+                workspaceId = notes.workspaceId,
+                idempotencyKey = idempotencyKey
             )
 
             val remoteNote = apiService.createNotes(request)
@@ -116,7 +131,8 @@ class NotesRepo(
                 "USER_ID" to notes.userId,
                 "WORKSPACE_ID" to notes.workspaceId,
                 "NOTE_NAME" to notes.notesName,
-                "DESCRIPTION" to notes.description
+                "DESCRIPTION" to notes.description,
+                "IDEMPOTENCY_KEY" to idempotencyKey
             )
 
             enqueueSync(syncData)

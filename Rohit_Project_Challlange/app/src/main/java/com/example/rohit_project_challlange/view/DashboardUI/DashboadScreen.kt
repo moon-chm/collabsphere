@@ -21,6 +21,8 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +62,10 @@ fun DashboardScreen(
     onNavigateToWorkspace : () -> Unit,
     onWorkspaceClick      : (WorkspaceEntity) -> Unit,
     onDeleteWorkspaceClick: (WorkspaceEntity) -> Unit,
-    onProfileClick        : () -> Unit = {}
+    onProfileClick        : () -> Unit = {},
+    onSearchClick         : () -> Unit = {},
+    onNotificationsClick  : () -> Unit = {},
+    unreadNotificationCount: Int = 0
 ) {
     // ── All original state preserved ──
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
@@ -110,6 +116,69 @@ fun DashboardScreen(
 
                 val context = LocalContext.current
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val searchInteractionSource = remember { MutableInteractionSource() }
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .skeuoRaised(cornerRadius = 22.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = searchInteractionSource,
+                                indication = null,
+                                onClick = onSearchClick
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Find people",
+                            tint = CoralStart,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    val bellInteractionSource = remember { MutableInteractionSource() }
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .skeuoRaised(cornerRadius = 22.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = bellInteractionSource,
+                                indication = null,
+                                onClick = onNotificationsClick
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = CoralStart,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        if (unreadNotificationCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 2.dp, y = (-2).dp)
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Destructive),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (unreadNotificationCount > 9) "9+" else unreadNotificationCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
                 Box(
                     modifier = Modifier
                         .size(46.dp)
@@ -151,6 +220,9 @@ fun DashboardScreen(
                             model = ImageRequest.Builder(context)
                                 .data(avatarUrl)
                                 .crossfade(true)
+                                // Explicit decode-size cap — this is a 46dp circle, never needs a
+                                // full-resolution decode regardless of the source image's size.
+                                .size(with(LocalDensity.current) { 46.dp.roundToPx() })
                                 .build(),
                             contentDescription = "Profile picture",
                             contentScale = ContentScale.Crop,
@@ -213,6 +285,7 @@ fun DashboardScreen(
                             modifier           = Modifier.size(26.dp)
                         )
                     }
+                }
                 }
             }
 

@@ -36,6 +36,14 @@ import com.example.rohit_project_challlange.model.message.MessageRepo
 import com.example.rohit_project_challlange.model.dm.DmRepo
 import com.example.rohit_project_challlange.view.DashboardScreen
 import com.example.rohit_project_challlange.view.ProfileUI.ProfileRoute
+import com.example.rohit_project_challlange.view.ProfileUI.BlockedUsersScreen
+import com.example.rohit_project_challlange.view.UserUI.PublicProfileScreen
+import com.example.rohit_project_challlange.view.UserUI.UserSearchScreen
+import com.example.rohit_project_challlange.viewmodel.BlockedUsersViewModel
+import com.example.rohit_project_challlange.viewmodel.PublicProfileViewModel
+import com.example.rohit_project_challlange.viewmodel.UserSearchViewModel
+import com.example.rohit_project_challlange.viewmodel.NotificationsViewModel
+import com.example.rohit_project_challlange.view.NotificationUI.NotificationsScreen
 import com.example.rohit_project_challlange.view.WorkspaceUI.CreateWorkspaceScreen
 import com.example.rohit_project_challlange.view.WorkspaceUI.DeleteWorkspaceScreen
 import com.example.rohit_project_challlange.view.WorkspaceUI.WorkspaceDetailedScreen
@@ -62,16 +70,9 @@ import org.koin.compose.koinInject
 @Composable
 fun AppNavigation(
     loginViewModel: LoginViewModel,
-    userRepo: UserRepo,
-    workspaceRepo: WorkspaceRepo,
-    channelRepo: ChannelRepo,
-    taskRepo: TaskRepo,
-    notesRepo: NotesRepo,
-    messageRepo: MessageRepo,
-    fileRepo: FileRepo,
-    dmRepo: DmRepo,
     notificationHelper: NotificationHelper,
     dashboardViewModel: DashboardViewModel,
+    notificationsViewModel: NotificationsViewModel,
     startDestination: String = "login",
     notificationDeepLink: NotificationDeepLink? = null,
     onDeepLinkConsumed: () -> Unit = {}
@@ -83,6 +84,7 @@ fun AppNavigation(
         val loggedInUsername by loginViewModel.loggedInUserName.collectAsStateWithLifecycle()
         val loggedInUserEmail by loginViewModel.loggedInUserEmail.collectAsStateWithLifecycle()
         val loggedInAvatarUrl by loginViewModel.loggedInAvatarUrl.collectAsStateWithLifecycle()
+        val unreadNotificationCount by notificationsViewModel.unreadCount.collectAsStateWithLifecycle()
         val context = LocalContext.current
 
         LaunchedEffect(isLoggedIn) {
@@ -227,6 +229,37 @@ fun AppNavigation(
                         if (navController.currentDestination?.route == "dashboard") {
                             navController.navigate("profile")
                         }
+                    },
+                    onSearchClick = {
+                        if (navController.currentDestination?.route == "dashboard") {
+                            navController.navigate("user_search")
+                        }
+                    },
+                    onNotificationsClick = {
+                        if (navController.currentDestination?.route == "dashboard") {
+                            navController.navigate("notifications")
+                        }
+                    },
+                    unreadNotificationCount = unreadNotificationCount
+                )
+            }
+
+            composable("notifications") {
+                NotificationsScreen(
+                    viewModel = notificationsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onNotificationClick = { notification ->
+                        val workspaceId = notification.workspaceId
+                        if (workspaceId != null) {
+                            val wsName = dashboardViewModel.workspaces.value
+                                .find { it.id == workspaceId }?.workspaceName ?: "Workspace"
+                            val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
+                            // Best-effort per type — the notification payload doesn't carry a channelId,
+                            // so CHANNEL_MESSAGE/MENTION land on the workspace's Channels tab rather than
+                            // the exact channel; TASK_* land on the Tasks tab.
+                            val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED") 1 else 0
+                            navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=$tab")
+                        }
                     }
                 )
             }
@@ -247,6 +280,7 @@ fun AppNavigation(
             composable("profile") {
                 val userPreferences = koinInject<com.example.rohit_project_challlange.UserPreferences>()
                 val sessionManager = koinInject<com.example.rohit_project_challlange.SessionManager>()
+                val userRepo = koinInject<UserRepo>()
 
                 val profileViewModel: ProfileViewModel = viewModel(
                     factory = object : ViewModelProvider.Factory {
@@ -273,10 +307,69 @@ fun AppNavigation(
                     onAvatarUpdated = { newAvatarUrl ->
                         loginViewModel.updateLoggedInAvatarUrl(newAvatarUrl)
                     },
+                    onNavigateToBlockedUsers = {
+                        navController.navigate("blocked_users")
+                    },
                     onLogoutComplete = {
                         dashboardViewModel.logout()
                         loginViewModel.logout()
                     }
+                )
+            }
+
+            composable("user_search") {
+                val userRepo = koinInject<UserRepo>()
+                val searchViewModel: UserSearchViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return UserSearchViewModel(userRepo) as T
+                        }
+                    }
+                )
+                UserSearchScreen(
+                    viewModel = searchViewModel,
+                    onBack = { navController.popBackStack() },
+                    onUserClick = { userId ->
+                        navController.navigate("public_profile/$userId")
+                    }
+                )
+            }
+
+            composable("blocked_users") {
+                val userRepo = koinInject<UserRepo>()
+                val blockedUsersViewModel: BlockedUsersViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return BlockedUsersViewModel(userRepo) as T
+                        }
+                    }
+                )
+                BlockedUsersScreen(
+                    viewModel = blockedUsersViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = "public_profile/{userId}",
+                arguments = listOf(navArgument("userId") { type = NavType.IntType })
+            ) { backStackEntry ->
+                val targetUserId = backStackEntry.arguments?.getInt("userId") ?: 0
+                val userRepo = koinInject<UserRepo>()
+                val publicProfileViewModel: PublicProfileViewModel = viewModel(
+                    key = "public_profile_$targetUserId",
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return PublicProfileViewModel(targetUserId, userRepo) as T
+                        }
+                    }
+                )
+                PublicProfileScreen(
+                    viewModel = publicProfileViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -310,6 +403,13 @@ fun AppNavigation(
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 val workspaceStatus by workspaceViewModel.workspaceStatus.collectAsStateWithLifecycle()
                 val workspaceMembers by workspaceViewModel.workspaceMembers.collectAsStateWithLifecycle()
+
+                val workspaceRepo = koinInject<WorkspaceRepo>()
+                val channelRepo = koinInject<ChannelRepo>()
+                val notesRepo = koinInject<NotesRepo>()
+                val taskRepo = koinInject<TaskRepo>()
+                val fileRepo = koinInject<FileRepo>()
+                val dmRepo = koinInject<DmRepo>()
 
                 val channelViewModel: ChannelViewModel = viewModel(
                     viewModelStoreOwner = backStackEntry,
@@ -446,6 +546,7 @@ fun AppNavigation(
                     }
                 }
 
+                val messageRepo = koinInject<MessageRepo>()
                 val messageViewModel: MessageViewModel = viewModel(
                     viewModelStoreOwner = workspaceParentEntry,
                     key = "message_vm_ch_$channelId",

@@ -27,7 +27,7 @@ object UsersTable : Table("users") {
 
 object WorkspacesTable : Table("workspace") {
     val id = integer("id").autoIncrement()
-    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val workspaceName = varchar("workspace_name", 255)
     val workspaceOwner = varchar("workspace_owner", 255)
     val workspacePassword = varchar("workspace_password", 255)
@@ -95,6 +95,9 @@ object NotesTable : Table("notes") {
     val notesDescription = text("description")
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // Set by the client on an offline-created note so a WorkManager retry after a lost (but
+    // successful) create response returns the existing row instead of inserting a duplicate.
+    val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -109,6 +112,9 @@ object TasksTable : Table("task") {
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // Set by the client on an offline-created task so a WorkManager retry after a lost (but
+    // successful) create response returns the existing row instead of inserting a duplicate.
+    val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
 
     override val primaryKey = PrimaryKey(id)
 }

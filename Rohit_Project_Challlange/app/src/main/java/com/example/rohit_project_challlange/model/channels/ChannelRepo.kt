@@ -34,6 +34,11 @@ class ChannelRepo(
     private fun getSyncKey(workspaceId: Int) =
         longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
 
+    // ChannelRepo is a Koin singleton shared by every ChannelViewModel instance — without this
+    // guard, navigating to the same workspace more than once (without popping the earlier
+    // backstack entry) starts a second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     suspend fun addchanneltoscreen(
         workspaceId: Int,
         channelName: String,
@@ -112,6 +117,8 @@ class ChannelRepo(
     }
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
+        if (!activeSyncLoops.add(workspaceId)) return@withContext
+        try {
         while (isActive) {
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -147,6 +154,9 @@ class ChannelRepo(
                 Log.e("ChannelRepo", "Operation failed", e)
             }
             delay(3000)
+        }
+        } finally {
+            activeSyncLoops.remove(workspaceId)
         }
     }
 

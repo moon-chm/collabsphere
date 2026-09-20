@@ -12,6 +12,5 @@ data class FileResponse(
     val mimeType: String,
     val localpath: String?,
     val fileName: String,
-    val sizebytes: Long,
-    val fileLocation: String
+    val sizebytes: Long
 )

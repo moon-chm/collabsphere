@@ -89,7 +89,7 @@ fun WorkspaceDetailedScreen(
     dmViewModel: DmViewModel,
     workspaceMembers: List<UserEntity>
 ) {
-    var selectedTab by remember { mutableStateOf(initialTab) }
+    var selectedTab by remember(initialTab) { mutableStateOf(initialTab) }
     var isDmInConversation by remember { mutableStateOf(false) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var memberEmailInput by remember { mutableStateOf("") }

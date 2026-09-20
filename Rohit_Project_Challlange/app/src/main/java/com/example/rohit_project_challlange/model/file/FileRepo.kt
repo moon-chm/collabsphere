@@ -34,6 +34,11 @@ class FileRepo(
     private fun getSyncKey(workspaceId: Int) =
         longPreferencesKey("${LAST_FILE_SYNC_KEY_PREFIX}$workspaceId")
 
+    // FileRepo is a Koin singleton shared by every FileViewModel instance — without this guard,
+    // navigating to the same workspace's files screen more than once (without popping the earlier
+    // backstack entry) starts a second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     suspend fun uploadfilestoscreen(local_files: FileEntity): Long = withContext(Dispatchers.IO) {
         val path = local_files.localpath
         if (path.isNullOrEmpty()) {
@@ -145,6 +150,8 @@ class FileRepo(
     }
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
+        if (!activeSyncLoops.add(workspaceId)) return@withContext
+        try {
         while (isActive) {
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -183,6 +190,9 @@ class FileRepo(
                 Log.e("FileRepo", "Operation failed", e)
             }
             delay(3000)
+        }
+        } finally {
+            activeSyncLoops.remove(workspaceId)
         }
     }
 

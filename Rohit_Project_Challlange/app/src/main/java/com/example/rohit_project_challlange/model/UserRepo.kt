@@ -8,6 +8,9 @@ import com.example.rohit_project_challlange.dto.login.LoginResponse
 import com.example.rohit_project_challlange.dto.login.ChangeEmailRequest
 import com.example.rohit_project_challlange.dto.login.DeleteAccountRequest
 import com.example.rohit_project_challlange.dto.login.UserProfileResponse
+import com.example.rohit_project_challlange.dto.login.SearchUserResult
+import com.example.rohit_project_challlange.dto.login.PublicProfileResponse
+import com.example.rohit_project_challlange.dto.login.PrivacySettingsRequest
 import com.example.rohit_project_challlange.remote.login.LoginApiService
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -47,11 +50,20 @@ class UserRepo(
         return try {
             val responseDto = apiService.login(LoginRequest(email, pass))
             userPreferences.saveAuthToken(responseDto.token)
+            // Re-hashing costs a deliberate ~250ms (bcrypt) — skip it when the cached local hash
+            // already matches this exact password instead of paying that cost on every login.
+            val passwordHash = if (localUser != null && PasswordHasher.isHashed(localUser.password) &&
+                PasswordHasher.matches(pass, localUser.password)
+            ) {
+                localUser.password
+            } else {
+                PasswordHasher.hash(pass)
+            }
             val userEntity = UserEntity(
                 id = responseDto.id,
                 email = responseDto.email,
                 userName = responseDto.userName,
-                password = PasswordHasher.hash(pass),
+                password = passwordHash,
                 avatarUrl = responseDto.avatarUrl,
                 isEmailVerified = responseDto.isEmailVerified
             )
@@ -243,6 +255,75 @@ class UserRepo(
                 HttpStatusCode.Unauthorized -> Result.failure(Exception("Incorrect password"))
                 else -> Result.failure(Exception(response.bodyAsText().ifBlank { "Failed to delete account" }))
             }
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    // ── User directory: search, public profiles, block, privacy ────────────────
+    // Deliberately not Room-cached — this is other people's live server state, not this
+    // device's own offline-first data.
+
+    suspend fun searchUsers(query: String): Result<List<SearchUserResult>> {
+        return try {
+            Result.success(apiService.searchUsers(query))
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPublicProfile(userId: Int): Result<PublicProfileResponse> {
+        return try {
+            Result.success(apiService.getPublicProfile(userId))
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun blockUser(targetUserId: Int): Result<Unit> {
+        return try {
+            apiService.blockUser(targetUserId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun unblockUser(targetUserId: Int): Result<Unit> {
+        return try {
+            apiService.unblockUser(targetUserId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBlockedUsers(): Result<List<SearchUserResult>> {
+        return try {
+            Result.success(apiService.getBlockedUsers())
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Operation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updatePrivacySettings(
+        showEmail: Boolean,
+        showOnlineStatus: Boolean,
+        showLastSeen: Boolean,
+        profileVisibility: String
+    ): Result<Unit> {
+        return try {
+            val response = apiService.updatePrivacySettings(
+                PrivacySettingsRequest(showEmail, showOnlineStatus, showLastSeen, profileVisibility)
+            )
+            if (response.status.isSuccess()) Result.success(Unit)
+            else Result.failure(Exception(response.bodyAsText().ifBlank { "Failed to update privacy settings" }))
         } catch (e: Exception) {
             Log.e("UserRepo", "Operation failed", e)
             Result.failure(e)

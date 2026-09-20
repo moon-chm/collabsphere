@@ -15,6 +15,7 @@ data class NotesRequest(
     val workspaceId: Int,
     val notesName: String,
     val description: String,
+    val idempotencyKey: String? = null
 )
 
 @Serializable
@@ -47,7 +48,6 @@ data class FileSyncResponse(
     val localpath: String?,
     val fileName: String,
     val sizebytes: Long,
-    val fileLocation: String,
     val isDeleted: Boolean,
     val updatedAt: Long
 )

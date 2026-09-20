@@ -30,11 +30,18 @@ class WorkspaceRepo(
         private val LAST_SYNC_KEY = longPreferencesKey("workspaces_last_sync_time")
     }
 
+    // WorkspaceRepo is a Koin singleton shared by every WorkspaceViewModel instance — without this
+    // guard, repeated forward navigation (without popping the earlier backstack entry) starts a
+    // second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     fun getAllWorkspacesForUser(userId: Int): Flow<List<WorkspaceEntity>> {
         return workspaceDao.getAllWorkspacesForUser(userId)
     }
 
     suspend fun startDeltaSyncLoop(userId: Int) = withContext(Dispatchers.IO) {
+        if (!activeSyncLoops.add(userId)) return@withContext
+        try {
         while (isActive) {
             try {
                 val lastSyncTime = dataStore.data.map { it[LAST_SYNC_KEY] ?: 0L }.first()
@@ -66,6 +73,9 @@ class WorkspaceRepo(
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
             delay(3000)
+        }
+        } finally {
+            activeSyncLoops.remove(userId)
         }
     }
 

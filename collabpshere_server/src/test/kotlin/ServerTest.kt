@@ -14,14 +14,18 @@ class ServerTest {
             module()
         }
 
+        // A fixed email collides with itself on a second run against the same (real) dev DB this
+        // test relies on — unique per run so the test stays repeatable without needing a test DB.
+        val email = "test-${java.util.UUID.randomUUID()}@example.com"
+
         client.post("/api/register") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-            setBody("""{"email":"test@example.com","password":"password123","userName":"Rohit"}""")
+            setBody("""{"email":"$email","password":"password123","userName":"Rohit"}""")
         }
 
         client.post("/api/login") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-            setBody("""{"email":"test@example.com","password":"password123"}""")
+            setBody("""{"email":"$email","password":"password123"}""")
         }.apply {
             assertEquals(HttpStatusCode.OK, status)
             val response = Json { ignoreUnknownKeys = true }.decodeFromString<LoginResponse>(bodyAsText())

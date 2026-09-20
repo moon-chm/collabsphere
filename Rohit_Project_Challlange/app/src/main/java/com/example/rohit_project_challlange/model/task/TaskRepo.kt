@@ -36,6 +36,11 @@ class TaskRepo(
 
     private fun getSyncKey(workspaceId: Int) = longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
 
+    // TaskRepo is a Koin singleton shared by every TaskViewModel instance — without this guard,
+    // navigating to the same workspace's tasks screen more than once (without popping the earlier
+    // backstack entry) starts a second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     fun getTasks(workspaceId: Int): Flow<List<TaskEntity>> {
         return taskDao.getTasksForWorkspace(workspaceId)
     }
@@ -94,6 +99,8 @@ class TaskRepo(
     }
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
+        if (!activeSyncLoops.add(workspaceId)) return@withContext
+        try {
         syncWorkspaceMembers(workspaceId)
         while (isActive) {
             try {
@@ -128,16 +135,24 @@ class TaskRepo(
             }
             delay(3000)
         }
+        } finally {
+            activeSyncLoops.remove(workspaceId)
+        }
     }
 
     suspend fun addTask(task: TaskEntity): Result<Long> = withContext(Dispatchers.IO) {
+        // Generated once and reused on every retry of this same create (frozen into workDataOf
+        // below) so a WorkManager retry after a successful-but-lost response is recognized
+        // server-side as the same request instead of inserting a duplicate task.
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
             val request = TaskRequest(
                 taskName = task.taskName,
                 taskDescription = task.taskDescription,
                 assignedToUserId = task.assignedToUserId,
                 workspaceId = task.workspaceId,
-                status = task.status.name
+                status = task.status.name,
+                idempotencyKey = idempotencyKey
             )
             val remoteTask = apiService.createTask(task.createdByUserId, request)
             val savedId = taskDao.insertTask(task.copy(id = remoteTask.id))
@@ -156,7 +171,8 @@ class TaskRepo(
                 "WORKSPACE_ID" to task.workspaceId,
                 "TASK_NAME" to task.taskName,
                 "TASK_DESCRIPTION" to task.taskDescription,
-                "STATUS" to task.status.name
+                "STATUS" to task.status.name,
+                "IDEMPOTENCY_KEY" to idempotencyKey
             )
             enqueueSync(syncData)
             Result.success(fallbackId)

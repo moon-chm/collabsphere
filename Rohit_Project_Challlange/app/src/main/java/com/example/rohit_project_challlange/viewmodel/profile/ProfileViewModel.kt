@@ -82,6 +82,22 @@ class ProfileViewModel(
     private val _isDeletingAccount = MutableStateFlow(false)
     val isDeletingAccount: StateFlow<Boolean> = _isDeletingAccount.asStateFlow()
 
+    // ── Privacy settings ─────────────────────────────────────────────────────────
+    private val _showEmail = MutableStateFlow(true)
+    val showEmail: StateFlow<Boolean> = _showEmail.asStateFlow()
+
+    private val _showOnlineStatus = MutableStateFlow(true)
+    val showOnlineStatus: StateFlow<Boolean> = _showOnlineStatus.asStateFlow()
+
+    private val _showLastSeen = MutableStateFlow(true)
+    val showLastSeen: StateFlow<Boolean> = _showLastSeen.asStateFlow()
+
+    private val _profileVisibility = MutableStateFlow("public")
+    val profileVisibility: StateFlow<String> = _profileVisibility.asStateFlow()
+
+    private val _isSavingPrivacy = MutableStateFlow(false)
+    val isSavingPrivacy: StateFlow<Boolean> = _isSavingPrivacy.asStateFlow()
+
     fun onUserNameChanged(name: String) {
         _updatedUserName.value = name
     }
@@ -118,6 +134,10 @@ class ProfileViewModel(
                     _email.value = profile.email
                     _isEmailVerified.value = profile.isEmailVerified
                     _lastSeen.value = profile.lastSeen
+                    _showEmail.value = profile.showEmail
+                    _showOnlineStatus.value = profile.showOnlineStatus
+                    _showLastSeen.value = profile.showLastSeen
+                    _profileVisibility.value = profile.profileVisibility
                     if (_updatedUserName.value.isEmpty()) {
                         _updatedUserName.value = profile.username
                     }
@@ -325,6 +345,37 @@ class ProfileViewModel(
                     _profileStatus.value = it.message ?: "Failed to delete account"
                 }
             _isDeletingAccount.value = false
+        }
+    }
+
+    fun onShowEmailChanged(value: Boolean) {
+        _showEmail.value = value
+    }
+
+    fun onShowOnlineStatusChanged(value: Boolean) {
+        _showOnlineStatus.value = value
+    }
+
+    fun onShowLastSeenChanged(value: Boolean) {
+        _showLastSeen.value = value
+    }
+
+    fun onProfileVisibilityChanged(value: String) {
+        _profileVisibility.value = value
+    }
+
+    fun onSavePrivacySettings() {
+        viewModelScope.launch {
+            _isSavingPrivacy.value = true
+            repo.updatePrivacySettings(
+                showEmail = _showEmail.value,
+                showOnlineStatus = _showOnlineStatus.value,
+                showLastSeen = _showLastSeen.value,
+                profileVisibility = _profileVisibility.value
+            )
+                .onSuccess { _profileStatus.value = "Privacy settings updated" }
+                .onFailure { _profileStatus.value = it.message ?: "Failed to update privacy settings" }
+            _isSavingPrivacy.value = false
         }
     }
 

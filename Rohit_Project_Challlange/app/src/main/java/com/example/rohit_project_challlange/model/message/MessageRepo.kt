@@ -34,6 +34,11 @@ class MessageRepo(
     private fun getSyncKey(workspaceId: Int, channelId: Int) =
         longPreferencesKey("${LAST_SYNC_KEY_PREFIX}${workspaceId}_$channelId")
 
+    // MessageRepo is a Koin singleton shared by every MessageViewModel instance — without this
+    // guard, re-entering the same channel (without popping the earlier backstack entry) starts a
+    // second independent 3s poller against the same endpoint.
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<Int, Int>>()
+
     suspend fun sendMessageToUser(message: MessageEntity): Long = withContext(Dispatchers.IO) {
         return@withContext try {
             val request = MessageRequest(
@@ -141,6 +146,9 @@ class MessageRepo(
     }
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
+        val loopKey = workspaceId to channelId
+        if (!activeSyncLoops.add(loopKey)) return@withContext
+        try {
         while (isActive) {
             try {
                 val syncKey = getSyncKey(workspaceId, channelId)
@@ -179,6 +187,9 @@ class MessageRepo(
                 Log.e("MessageRepo", "Operation failed", e)
             }
             delay(3000)
+        }
+        } finally {
+            activeSyncLoops.remove(loopKey)
         }
     }
 

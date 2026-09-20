@@ -17,14 +17,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.rohit_project_challlange.model.UserRepo
-import com.example.rohit_project_challlange.model.workspace.WorkspaceRepo
-import com.example.rohit_project_challlange.model.channels.ChannelRepo
-import com.example.rohit_project_challlange.model.file.FileRepo
-import com.example.rohit_project_challlange.model.notes.NotesRepo
-import com.example.rohit_project_challlange.model.task.TaskRepo
-import com.example.rohit_project_challlange.model.message.MessageRepo
-import com.example.rohit_project_challlange.model.dm.DmRepo
 import com.example.rohit_project_challlange.view.AppNavigation
 import com.example.rohit_project_challlange.viewmodel.LoginViewModel
 import com.example.rohit_project_challlange.viewmodel.DashboardViewModel
@@ -48,17 +40,9 @@ class MainActivity : ComponentActivity() {
     private val userPreferences: UserPreferences by inject()
     private val notificationHelper: NotificationHelper by inject()
 
-    private val userRepo: UserRepo by inject()
-    private val workspaceRepo: WorkspaceRepo by inject()
-    private val channelRepo: ChannelRepo by inject()
-    private val taskRepo: TaskRepo by inject()
-    private val notesRepo: NotesRepo by inject()
-    private val messageRepo: MessageRepo by inject()
-    private val fileRepo: FileRepo by inject()
-    private val dmRepo: DmRepo by inject()
-
     private val loginViewModel: LoginViewModel by viewModel()
     private val dmViewModel: DmViewModel by viewModel()
+    private val notificationsViewModel: com.example.rohit_project_challlange.viewmodel.NotificationsViewModel by viewModel()
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -117,11 +101,9 @@ class MainActivity : ComponentActivity() {
                         parametersOf(currentUserId)
                     }
 
-                    val fromNotification = intent?.getBooleanExtra("from_notification", false) ?: false
                     val widgetDestination = intent?.getStringExtra("widget_destination")
 
                     val startDestination = when {
-                        fromNotification && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
                         // Widget deep-link overrides — map to the workspace detail route
                         // (user must already be logged in for widgets to send these)
                         widgetDestination == "tasks"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
@@ -149,15 +131,8 @@ class MainActivity : ComponentActivity() {
 
                     AppNavigation(
                         loginViewModel = loginViewModel,
-                        userRepo = userRepo,
-                        workspaceRepo = workspaceRepo,
-                        channelRepo = channelRepo,
-                        taskRepo = taskRepo,
-                        notesRepo = notesRepo,
-                        messageRepo = messageRepo,
-                        fileRepo = fileRepo,
-                        dmRepo = dmRepo,
                         dashboardViewModel = dashboardViewModel,
+                        notificationsViewModel = notificationsViewModel,
                         notificationHelper = notificationHelper,
                         startDestination = startDestination,
                         notificationDeepLink = notificationDeepLink,

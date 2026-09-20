@@ -2,7 +2,9 @@ package com.example.rohit_project_challlange.remote.dm
 
 import android.util.Log
 import com.example.rohit_project_challlange.AuthTokenHolder
+import com.example.rohit_project_challlange.NotificationCenter
 import com.example.rohit_project_challlange.dto.dm.DmDto
+import com.example.rohit_project_challlange.dto.notification.NotificationPushFrame
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -76,6 +78,8 @@ class DmApiService(
         currentSession.send(Frame.Text(jsonText))
     }
 
+    private val lenientJson = Json { ignoreUnknownKeys = true }
+
     fun observeIncomingDms(): Flow<DmDto> = flow {
         while (true) {
             val currentSession = sessionMutex.withLock { session }
@@ -88,7 +92,28 @@ class DmApiService(
                 for (frame in currentSession.incoming) {
                     if (frame is Frame.Text) {
                         val textPayload = frame.readText()
-                        val dto = Json.decodeFromString(DmDto.serializer(), textPayload)
+
+                        // Notification push frames (MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED)
+                        // share this socket with DM frames but have a different shape — peek at the
+                        // action before committing to a DmDto decode, which would otherwise throw on
+                        // the unrecognized "notification" key and kill this connection.
+                        val actionField = try {
+                            lenientJson.parseToJsonElement(textPayload).jsonObject["action"]?.jsonPrimitive?.content
+                        } catch (_: Exception) {
+                            null
+                        }
+
+                        if (actionField == "NOTIFICATION") {
+                            try {
+                                val pushFrame = lenientJson.decodeFromString(NotificationPushFrame.serializer(), textPayload)
+                                NotificationCenter.push(pushFrame.notification)
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode notification push frame", e)
+                            }
+                            continue
+                        }
+
+                        val dto = lenientJson.decodeFromString(DmDto.serializer(), textPayload)
                         emit(dto)
                     }
                 }
@@ -156,7 +181,7 @@ class DmApiService(
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
                 val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
-                val element = Json { ignoreUnknownKeys = true }.parseToJsonElement(responseBody)
+                val element = lenientJson.parseToJsonElement(responseBody)
                 element.jsonObject["url"]?.jsonPrimitive?.content
                     ?: error("Server response missing url field: $responseBody")
             } else {

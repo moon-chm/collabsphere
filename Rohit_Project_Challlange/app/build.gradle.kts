@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("androidx.room") version "2.7.2"
     id("com.google.devtools.ksp") version "2.0.0-1.0.22"
-    kotlin("plugin.serialization") version "2.0.21"
+    kotlin("plugin.serialization") version "2.2.10"
 }
 
 android {

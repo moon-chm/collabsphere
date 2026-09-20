@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.rohit_project_challlange.dto.notes.NotesRequest
@@ -27,9 +28,20 @@ class NotesSyncWorker(
         val userId = inputData.getInt("USER_ID", -1)
         val workspaceIdParam = inputData.getInt("WORKSPACE_ID", -1)
         val noteName = inputData.getString("NOTE_NAME") ?: ""
-        val noteId = inputData.getInt("NOTE_ID", -1)
+        val rawNoteId = inputData.getInt("NOTE_ID", -1)
 
         if (userId == -1 || workspaceIdParam == -1) return@withContext Result.failure()
+
+        // An UPDATE/DELETE enqueued before this note's own CREATE resolved still carries the
+        // frozen temp id in its inputData — resolve it via the same temp-id mapping the CREATE
+        // branch below writes. If it hasn't resolved yet, retry later rather than 404ing forever.
+        val noteId = if (rawNoteId < 0 && actionType != "CREATE") {
+            val mappingKey = intPreferencesKey("temp_note_$rawNoteId")
+            val resolved = dataStore.data.map { it[mappingKey] }.first()
+            resolved ?: return@withContext Result.retry()
+        } else {
+            rawNoteId
+        }
 
         val workspaceId = if (workspaceIdParam < 0) {
             val mappingKey = intPreferencesKey("temp_ws_$workspaceIdParam")
@@ -50,7 +62,8 @@ class NotesSyncWorker(
                 userId = userId,
                 workspaceId = workspaceId,
                 notesName = noteName,
-                description = description
+                description = description,
+                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
             )
 
             if (actionType == "UPDATE") {
@@ -61,6 +74,7 @@ class NotesSyncWorker(
                 val tempNoteId = inputData.getInt("TEMPORARY_NOTE_ID", -1)
                 if (tempNoteId != -1 && tempNoteId != remoteResponse.id) {
                     notesDao.updateNotesId(tempNoteId, remoteResponse.id)
+                    dataStore.edit { it[intPreferencesKey("temp_note_$tempNoteId")] = remoteResponse.id }
                 }
             }
             return@withContext Result.success()

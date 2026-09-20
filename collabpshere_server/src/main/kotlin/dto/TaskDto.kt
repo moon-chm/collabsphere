@@ -8,7 +8,8 @@ data class TaskRequest(
     val taskDescription: String,
     val assignedToUserId: Int?,
     val workspaceId: Int,
-    val status: String
+    val status: String,
+    val idempotencyKey: String? = null
 )
 
 @Serializable

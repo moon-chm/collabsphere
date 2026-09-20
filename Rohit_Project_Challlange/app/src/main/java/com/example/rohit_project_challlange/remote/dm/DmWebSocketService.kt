@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.rohit_project_challlange.MyApplication
+import com.example.rohit_project_challlange.NotificationCenter
 import com.example.rohit_project_challlange.NotificationHelper
 import com.example.rohit_project_challlange.model.dm.DmRepo
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +70,15 @@ class DmWebSocketService : Service() {
             )
         } else {
             startForeground(NOTIFICATION_ID, silentNotification)
+        }
+
+        // MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED pushes arrive over the same DM socket
+        // but are routed here via NotificationCenter (see DmApiService.observeIncomingDms) instead
+        // of the DmDto flow above, since they aren't chat messages.
+        serviceScope.launch {
+            NotificationCenter.incoming.collect { notification ->
+                notificationHelper.showGenericNotification(notification)
+            }
         }
     }
 

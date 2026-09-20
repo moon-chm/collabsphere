@@ -18,14 +18,21 @@ import com.example.rohit_project_challlange.dataStore
 
 object WidgetDataProvider {
 
+    // Room instances are thread-safe and meant to be long-lived — building a fresh one on every
+    // widget refresh (and never closing it) leaked a SQLite connection on every tick.
+    @Volatile
+    private var db: AppDatabase? = null
+
     private fun getDatabase(context: Context): AppDatabase =
-        Room.databaseBuilder(
-            context.applicationContext,
-            AppDatabase::class.java,
-            "app_database"
-        )
-            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .build()
+        db ?: synchronized(this) {
+            db ?: Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                "app_database"
+            )
+                .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
+                .build().also { db = it }
+        }
 
     /**
      * Returns the saved user ID from DataStore, or -1 if not signed in.

@@ -42,6 +42,9 @@ import com.example.rohit_project_challlange.model.notes.NotesSyncWorker
 import com.example.rohit_project_challlange.model.task.TaskSyncWorker
 import com.example.rohit_project_challlange.model.workspace.WorkspaceSyncWorker
 import com.example.rohit_project_challlange.remote.file.FileApiService
+import com.example.rohit_project_challlange.remote.notification.NotificationApiService
+import com.example.rohit_project_challlange.model.NotificationRepo
+import com.example.rohit_project_challlange.viewmodel.NotificationsViewModel
 import com.example.rohit_project_challlange.AuthTokenHolder
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
@@ -134,6 +137,7 @@ val networkModule = module {
     single { MessageApiService(get(named("RegularHttpClient"))) }
     single { DmApiService(get(named("WebSocketHttpClient"))) }
     single { FileApiService(get(named("RegularHttpClient"))) }
+    single { NotificationApiService(get(named("RegularHttpClient"))) }
 }
 
 val repositoryModule = module {
@@ -145,6 +149,7 @@ val repositoryModule = module {
     single { MessageRepo(get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
     single { DmRepo(get(), get(), get(), get()) }
+    single { NotificationRepo(get()) }
 }
 
 val appModule = module {
@@ -235,6 +240,8 @@ val viewModelModule = module {
             loggedUserName = loggedUserName
         )
     }
+
+    viewModel { NotificationsViewModel(get()) }
 
     viewModel { (loggedInUserId: Int, userEmail: String) ->
         ProfileViewModel(

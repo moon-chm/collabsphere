@@ -20,6 +20,7 @@ import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
 import com.example.rohit_project_challlange.dto.dm.DmDto
+import com.example.rohit_project_challlange.dto.notification.NotificationResponse
 import com.example.rohit_project_challlange.model.UserDao
 import com.example.rohit_project_challlange.remote.dm.DmNotificationReplyReceiver
 import java.util.concurrent.ConcurrentHashMap
@@ -32,6 +33,8 @@ class NotificationHelper(
 
     private val channelId = "collabsphere_dm_channel_v3"
     private val channelName = "CollabSphere Messages"
+    private val genericChannelId = "collabsphere_activity_channel_v1"
+    private val genericChannelName = "CollabSphere Activity"
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     // In-memory conversation history cache: PartnerId -> List of Messages
@@ -43,6 +46,7 @@ class NotificationHelper(
 
     init {
         createNotificationChannel()
+        createGenericChannel()
     }
 
     private fun createNotificationChannel() {
@@ -67,6 +71,41 @@ class NotificationHelper(
                 setShowBadge(true)
             }
             notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createGenericChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(genericChannelId, genericChannelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Mentions, channel messages, and task activity"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Posts a plain system-tray notification for MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED
+     * events — distinct from [showDmNotification]'s MessagingStyle thread since these aren't 1:1 chats.
+     */
+    fun showGenericNotification(notification: NotificationResponse) {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+
+        val builder = NotificationCompat.Builder(context, genericChannelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(notification.title)
+            .setContentText(notification.body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(notification.body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setColor(0xFFF0633D.toInt()) // CollabSphere coral
+
+        try {
+            notificationManager.notify(2_000_000 + notification.id, builder.build())
+        } catch (e: Exception) {
+            Log.e("NotificationHelper", "Failed posting generic notification", e)
         }
     }
 

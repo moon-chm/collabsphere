@@ -9,6 +9,10 @@ import com.example.rohit_project_challlange.dto.login.ChangeEmailRequest
 import com.example.rohit_project_challlange.dto.login.DeleteAccountRequest
 import com.example.rohit_project_challlange.dto.login.EmailVerifyConfirmRequest
 import com.example.rohit_project_challlange.dto.login.UserProfileResponse
+import com.example.rohit_project_challlange.dto.login.SearchUserResult
+import com.example.rohit_project_challlange.dto.login.PublicProfileResponse
+import com.example.rohit_project_challlange.dto.login.BlockUserResponse
+import com.example.rohit_project_challlange.dto.login.PrivacySettingsRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -119,6 +123,45 @@ class LoginApiService(private val client: HttpClient) {
         client.post("${AppConfig.BASE_URL}/api/user/verify-email/confirm") {
             contentType(ContentType.Application.Json)
             setBody(EmailVerifyConfirmRequest(token))
+        }
+    }
+
+    suspend fun searchUsers(query: String): List<SearchUserResult> = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.get("${AppConfig.BASE_URL}/api/user/search") {
+            parameter("q", query)
+        }
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            throw Exception(response.bodyAsText().ifBlank { "Search failed (${response.status})" })
+        }
+    }
+
+    suspend fun getPublicProfile(userId: Int): PublicProfileResponse = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.get("${AppConfig.BASE_URL}/api/user/$userId")
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            throw Exception(response.bodyAsText().ifBlank { "Failed to load profile (${response.status})" })
+        }
+    }
+
+    suspend fun blockUser(targetUserId: Int): BlockUserResponse = withContext(Dispatchers.IO) {
+        client.post("${AppConfig.BASE_URL}/api/user/block/$targetUserId").body()
+    }
+
+    suspend fun unblockUser(targetUserId: Int): BlockUserResponse = withContext(Dispatchers.IO) {
+        client.delete("${AppConfig.BASE_URL}/api/user/block/$targetUserId").body()
+    }
+
+    suspend fun getBlockedUsers(): List<SearchUserResult> = withContext(Dispatchers.IO) {
+        client.get("${AppConfig.BASE_URL}/api/user/blocks").body()
+    }
+
+    suspend fun updatePrivacySettings(request: PrivacySettingsRequest): HttpResponse = withContext(Dispatchers.IO) {
+        client.put("${AppConfig.BASE_URL}/api/user/privacy") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
         }
     }
 }

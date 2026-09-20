@@ -1,12 +1,15 @@
 package com.example.rohit_project_challlange
  
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.rohit_project_challlange.di.appModules
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.koin.android.ext.koin.androidContext
@@ -46,8 +49,15 @@ class MyApplication : Application() {
         }
 
         val userPreferences: UserPreferences = get()
+        // A bare Dispatchers.IO scope has no SupervisorJob — an unhandled exception here would
+        // crash the whole process instead of just this sync staying stuck.
+        val authTokenSyncScope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+                Log.e("MyApplication", "Auth token sync failed", e)
+            }
+        )
         userPreferences.authTokenFlow
             .onEach { AuthTokenHolder.token = it }
-            .launchIn(CoroutineScope(Dispatchers.IO))
+            .launchIn(authTokenSyncScope)
     }
 }

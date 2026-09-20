@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -267,7 +268,15 @@ fun DMScreen(
 
     LaunchedEffect(messages.size, isPartnerTyping) {
         val totalCount = messages.size + if (isPartnerTyping) 1 else 0
-        if (totalCount > 0) {
+        if (totalCount <= 0) return@LaunchedEffect
+
+        val lastVisibleIndex = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+        val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= totalCount - 2
+        val isOwnMessage = messages.lastOrNull()?.senderId == currentUserId.toInt()
+
+        // Only yank the view to the newest message if the user was already reading near the
+        // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
+        if (wasNearBottom || isOwnMessage) {
             lazyListState.animateScrollToItem(totalCount - 1)
         }
     }
@@ -395,7 +404,8 @@ fun DMScreen(
                     ) {
                         if (!partner.avatarUrl.isNullOrEmpty()) {
                             SubcomposeAsyncImage(
-                                model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
+                                    .size(with(LocalDensity.current) { 84.dp.roundToPx() }).build(),
                                 contentDescription = partner.userName,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.size(84.dp).clip(CircleShape),
@@ -881,7 +891,8 @@ fun DMScreen(
                                 ) {
                                     if (!partner.avatarUrl.isNullOrEmpty()) {
                                         SubcomposeAsyncImage(
-                                            model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                            model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
+                                                .size(with(LocalDensity.current) { 38.dp.roundToPx() }).build(),
                                             contentDescription = partner.userName,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.size(38.dp).clip(CircleShape),
@@ -1343,7 +1354,8 @@ fun DMScreen(
                                             ) {
                                                 if (!partner.avatarUrl.isNullOrEmpty()) {
                                                     SubcomposeAsyncImage(
-                                                        model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true).build(),
+                                                        model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
+                                                            .size(with(LocalDensity.current) { 28.dp.roundToPx() }).build(),
                                                         contentDescription = partner.userName,
                                                         contentScale = ContentScale.Crop,
                                                         modifier = Modifier.size(28.dp).clip(CircleShape),
@@ -1823,7 +1835,8 @@ fun SkeuoMemberRow(
                             contentAlignment = Alignment.Center
                         ) {
                             SubcomposeAsyncImage(
-                                model = ImageRequest.Builder(context).data(member.avatarUrl).crossfade(true).build(),
+                                model = ImageRequest.Builder(context).data(member.avatarUrl).crossfade(true)
+                                    .size(with(LocalDensity.current) { 46.dp.roundToPx() }).build(),
                                 contentDescription = member.userName,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.size(46.dp).clip(CircleShape),

@@ -68,7 +68,15 @@ fun MessageScreen(
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.isEmpty()) return@LaunchedEffect
+
+        val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+        val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= messages.size - 2
+        val isOwnMessage = messages.last().userId == currentUserId
+
+        // Only yank the view to the newest message if the user was already reading near the
+        // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
+        if (wasNearBottom || isOwnMessage) {
             listState.animateScrollToItem(messages.lastIndex)
         }
     }

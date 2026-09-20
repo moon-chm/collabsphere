@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -79,6 +80,7 @@ fun ProfileRoute(
     onBack: () -> Unit,
     onProfileUpdated: (String) -> Unit,
     onAvatarUpdated: (String) -> Unit = {},
+    onNavigateToBlockedUsers: () -> Unit = {},
     onLogoutComplete: () -> Unit
 ) {
     val updatedName by viewModel.updatedUserName.collectAsState()
@@ -100,6 +102,11 @@ fun ProfileRoute(
     val showDeleteDialog by viewModel.showDeleteDialog.collectAsState()
     val deleteAccountPassword by viewModel.deleteAccountPassword.collectAsState()
     val isDeletingAccount by viewModel.isDeletingAccount.collectAsState()
+    val showEmail by viewModel.showEmail.collectAsState()
+    val showOnlineStatus by viewModel.showOnlineStatus.collectAsState()
+    val showLastSeen by viewModel.showLastSeen.collectAsState()
+    val profileVisibility by viewModel.profileVisibility.collectAsState()
+    val isSavingPrivacy by viewModel.isSavingPrivacy.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var changePasswordChecked by remember { mutableStateOf(false) }
@@ -151,6 +158,11 @@ fun ProfileRoute(
         showDeleteDialog = showDeleteDialog,
         deleteAccountPassword = deleteAccountPassword,
         isDeletingAccount = isDeletingAccount,
+        showEmailToggle = showEmail,
+        showOnlineStatus = showOnlineStatus,
+        showLastSeenToggle = showLastSeen,
+        profileVisibility = profileVisibility,
+        isSavingPrivacy = isSavingPrivacy,
         snackbarHostState = snackbarHostState,
         onNameChange = viewModel::onUserNameChanged,
         onCurrentPasswordChange = viewModel::onCurrentPasswordChanged,
@@ -180,7 +192,13 @@ fun ProfileRoute(
         onOpenDeleteDialog = { viewModel.onOpenDeleteDialog() },
         onDismissDeleteDialog = { viewModel.onDismissDeleteDialog() },
         onDeleteAccountPasswordChange = viewModel::onDeleteAccountPasswordChanged,
-        onConfirmDeleteAccount = { viewModel.onConfirmDeleteAccount(onLogoutComplete) }
+        onConfirmDeleteAccount = { viewModel.onConfirmDeleteAccount(onLogoutComplete) },
+        onShowEmailToggleChange = viewModel::onShowEmailChanged,
+        onShowOnlineStatusChange = viewModel::onShowOnlineStatusChanged,
+        onShowLastSeenToggleChange = viewModel::onShowLastSeenChanged,
+        onProfileVisibilityChange = viewModel::onProfileVisibilityChanged,
+        onSavePrivacySettings = { viewModel.onSavePrivacySettings() },
+        onNavigateToBlockedUsers = onNavigateToBlockedUsers
     )
 }
 
@@ -207,6 +225,11 @@ fun ProfileScreen(
     showDeleteDialog: Boolean,
     deleteAccountPassword: String,
     isDeletingAccount: Boolean,
+    showEmailToggle: Boolean,
+    showOnlineStatus: Boolean,
+    showLastSeenToggle: Boolean,
+    profileVisibility: String,
+    isSavingPrivacy: Boolean,
     snackbarHostState: SnackbarHostState,
     onNameChange: (String) -> Unit,
     onCurrentPasswordChange: (String) -> Unit,
@@ -230,7 +253,13 @@ fun ProfileScreen(
     onOpenDeleteDialog: () -> Unit,
     onDismissDeleteDialog: () -> Unit,
     onDeleteAccountPasswordChange: (String) -> Unit,
-    onConfirmDeleteAccount: () -> Unit
+    onConfirmDeleteAccount: () -> Unit,
+    onShowEmailToggleChange: (Boolean) -> Unit,
+    onShowOnlineStatusChange: (Boolean) -> Unit,
+    onShowLastSeenToggleChange: (Boolean) -> Unit,
+    onProfileVisibilityChange: (String) -> Unit,
+    onSavePrivacySettings: () -> Unit,
+    onNavigateToBlockedUsers: () -> Unit
 ) {
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
@@ -503,6 +532,7 @@ fun ProfileScreen(
                                 model = ImageRequest.Builder(context)
                                     .data(fullAvatarUrl)
                                     .crossfade(true)
+                                    .size(with(LocalDensity.current) { 84.dp.roundToPx() })
                                     .build(),
                                 contentDescription = "Profile picture",
                                 contentScale = ContentScale.Crop,
@@ -1154,6 +1184,119 @@ fun ProfileScreen(
                     }
                 }
 
+                // ── Privacy card ────────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            drawRoundRect(
+                                color = ShadowDark.copy(alpha = 0.24f),
+                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(
+                                color = ShadowLight.copy(alpha = 0.85f),
+                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                        }
+                        .padding(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Privacy",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Ink
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        PrivacyToggleRow(
+                            label = "Show my email to others",
+                            checked = showEmailToggle,
+                            onCheckedChange = onShowEmailToggleChange
+                        )
+                        PrivacyToggleRow(
+                            label = "Show my online status",
+                            checked = showOnlineStatus,
+                            onCheckedChange = onShowOnlineStatusChange
+                        )
+                        PrivacyToggleRow(
+                            label = "Show my last seen",
+                            checked = showLastSeenToggle,
+                            onCheckedChange = onShowLastSeenToggleChange
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Who can view my profile",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Muted,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            listOf("public" to "Everyone", "members_only" to "Workspace members").forEach { (value, label) ->
+                                val selected = profileVisibility == value
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onProfileVisibilityChange(value) }
+                                ) {
+                                    RadioButton(
+                                        selected = selected,
+                                        onClick = { onProfileVisibilityChange(value) },
+                                        colors = RadioButtonDefaults.colors(selectedColor = CoralStart)
+                                    )
+                                    Text(label, style = MaterialTheme.typography.bodyMedium, color = Ink)
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = if (isSavingPrivacy) "Saving..." else "Save privacy settings",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = CoralStart,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = !isSavingPrivacy
+                            ) { onSavePrivacySettings() }
+                        )
+
+                        Spacer(Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onNavigateToBlockedUsers() },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Blocked users",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Ink
+                            )
+                            Text("Manage ›", style = MaterialTheme.typography.labelMedium, color = Muted)
+                        }
+                    }
+                }
+
                 // ── Danger zone ──────────────────────────────────────────────────
                 Box(
                     modifier = Modifier
@@ -1500,6 +1643,31 @@ fun ProfileScreen(
                     Text("Cancel", color = Muted)
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun PrivacyToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Ink)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = CoralStart,
+                uncheckedThumbColor = Muted,
+                uncheckedTrackColor = Surface
+            )
         )
     }
 }
