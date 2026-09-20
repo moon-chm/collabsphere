@@ -48,6 +48,7 @@ object DatabaseFactory {
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
             connectionTimeout = 30000
+            schema = "public"
             validate()
         }
 
