@@ -23,4 +23,5 @@ test_download.docx
 .vscode/
 **/local_files_upload/*
 !**/local_files_upload/.gitkeep
+*.sql
 
