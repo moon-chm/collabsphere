@@ -25,10 +25,20 @@ object DatabaseFactory {
                     val userInfo = uri.userInfo?.split(":")
                     val dbUser = userInfo?.getOrNull(0) ?: "postgres"
                     val dbPass = userInfo?.getOrNull(1) ?: ""
-                    val host = uri.host ?: "localhost"
+                    // Neon pooler (-pooler) causes session search_path to be empty; strip to use direct endpoint with HikariCP
+                    val host = (uri.host ?: "localhost").replace("-pooler", "")
                     val port = if (uri.port != -1) uri.port else 5432
                     val dbName = uri.path?.removePrefix("/") ?: "Collabsphere"
-                    val query = if (!uri.query.isNullOrBlank()) "?${uri.query}" else "?sslmode=require"
+
+                    val queryParams = (uri.query ?: "")
+                        .split("&")
+                        .filter { it.isNotBlank() && !it.startsWith("currentSchema=") }
+                        .toMutableList()
+                    if (queryParams.none { it.startsWith("sslmode=") }) {
+                        queryParams.add("sslmode=require")
+                    }
+                    queryParams.add("currentSchema=public")
+                    val query = "?" + queryParams.joinToString("&")
 
                     jdbcUrl = "jdbc:postgresql://$host:$port/$dbName$query"
                     username = dbUser
@@ -49,6 +59,7 @@ object DatabaseFactory {
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
             connectionTimeout = 30000
             schema = "public"
+            connectionInitSql = "SET search_path TO public;"
             validate()
         }
 
