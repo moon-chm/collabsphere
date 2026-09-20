@@ -29,7 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -95,7 +95,8 @@ fun DeleteWorkspaceScreen(
                         modifier = Modifier
                             .padding(start = 12.dp)
                             .size(42.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.25f),
                                     radius = size.minDimension / 2f,
@@ -110,6 +111,7 @@ fun DeleteWorkspaceScreen(
                                     color = SurfaceRaised,
                                     radius = size.minDimension / 2f
                                 )
+                                }
                             }
                     ) {
                         Icon(
@@ -145,7 +147,8 @@ fun DeleteWorkspaceScreen(
                 Box(
                     modifier = Modifier
                         .size(84.dp)
-                        .drawBehind {
+                        .drawWithCache {
+                            onDrawBehind {
                             drawCircle(
                                 color = ShadowDark.copy(alpha = 0.30f),
                                 radius = size.minDimension / 2f,
@@ -156,6 +159,7 @@ fun DeleteWorkspaceScreen(
                                 radius = size.minDimension / 2f,
                                 center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
                             )
+                            }
                         }
                         .clip(CircleShape)
                         .background(
@@ -171,7 +175,8 @@ fun DeleteWorkspaceScreen(
                         modifier = Modifier
                             .size(54.dp)
                             .clip(CircleShape)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(DestructiveLight, Destructive),
@@ -184,6 +189,7 @@ fun DeleteWorkspaceScreen(
                                     radius = 8.dp.toPx(),
                                     center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
                                 )
+                                }
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -291,8 +297,9 @@ fun DeleteWorkspaceScreen(
                                 .fillMaxWidth()
                                 .height(54.dp)
                                 .graphicsLayer { scaleX = btnScale; scaleY = btnScale }
-                                .drawBehind {
+                                .drawWithCache {
                                     val cr = CornerRadius(16.dp.toPx())
+                                    onDrawBehind {
                                     drawRoundRect(
                                         color = DestructiveStart.copy(alpha = shadowAlpha),
                                         topLeft = Offset(0f, shadowOffset.toPx()),
@@ -333,6 +340,7 @@ fun DeleteWorkspaceScreen(
                                         cornerRadius = cr,
                                         style = Stroke(width = 1.dp.toPx())
                                     )
+                                    }
                                 }
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(

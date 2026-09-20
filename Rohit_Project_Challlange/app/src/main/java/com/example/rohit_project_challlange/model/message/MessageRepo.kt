@@ -150,6 +150,7 @@ class MessageRepo(
         if (!activeSyncLoops.add(loopKey)) return@withContext
         try {
         while (isActive) {
+            com.example.rohit_project_challlange.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId, channelId)
                 val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
@@ -186,7 +187,7 @@ class MessageRepo(
             } catch (e: Exception) {
                 Log.e("MessageRepo", "Operation failed", e)
             }
-            delay(3000)
+            delay(1000)
         }
         } finally {
             activeSyncLoops.remove(loopKey)

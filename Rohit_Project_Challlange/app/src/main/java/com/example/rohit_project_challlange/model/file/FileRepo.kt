@@ -153,6 +153,7 @@ class FileRepo(
         if (!activeSyncLoops.add(workspaceId)) return@withContext
         try {
         while (isActive) {
+            com.example.rohit_project_challlange.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
@@ -189,7 +190,7 @@ class FileRepo(
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)
             }
-            delay(3000)
+            delay(1000)
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

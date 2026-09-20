@@ -10,6 +10,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.koin.android.ext.koin.androidContext
@@ -21,8 +24,15 @@ import org.koin.core.context.startKoin
 class MyApplication : Application() {
 
     companion object {
-        var isAppForeground: Boolean = false
-            private set
+        private val _isAppForegroundFlow = MutableStateFlow(false)
+        // Reactive: sync loops suspend on this via `.first { it }` while backgrounded — a true
+        // park (no polling/wakeups at all) that resumes the instant the app comes back, instead
+        // of a cheap-but-still-periodic flag check.
+        val isAppForegroundFlow: StateFlow<Boolean> = _isAppForegroundFlow.asStateFlow()
+
+        var isAppForeground: Boolean
+            get() = _isAppForegroundFlow.value
+            private set(value) { _isAppForegroundFlow.value = value }
     }
 
     override fun onCreate() {

@@ -14,7 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -47,9 +47,11 @@ fun UserSearchScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         drawRect(color = SurfaceRaised)
                         drawRect(color = Color.White.copy(alpha = 0.85f), topLeft = Offset(0f, 0f), size = Size(size.width, 1.dp.toPx()))
+                        }
                     }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart

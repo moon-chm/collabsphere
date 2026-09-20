@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -152,7 +153,8 @@ fun FileScreen(
                 // Files count pill
                 Box(
                     modifier = Modifier
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.12f),
                                 topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
@@ -164,6 +166,7 @@ fun FileScreen(
                                 cornerRadius = CornerRadius(12.dp.toPx())
                             )
                         }
+}
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -186,7 +189,8 @@ fun FileScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawRoundRect(
                                     color = ShadowDark.copy(alpha = 0.20f),
                                     topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
@@ -204,6 +208,7 @@ fun FileScreen(
                                     cornerRadius = CornerRadius(24.dp.toPx())
                                 )
                             }
+}
                             .padding(28.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -284,12 +289,14 @@ fun FileScreen(
                 Box(
                     modifier = Modifier
                         .size(80.dp)
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = SurfaceRaised,
                                 cornerRadius = CornerRadius(20.dp.toPx())
                             )
-                        },
+                        }
+},
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = CoralStart, strokeWidth = 3.dp)
@@ -311,7 +318,8 @@ fun FileScreen(
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
                 .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                .drawBehind {
+                .drawWithCache {
+onDrawBehind {
                     val shadowOffset = if (isFabPressed) 2.dp else 5.dp
                     val shadowAlpha = if (isFabPressed) 0.15f else 0.35f
 
@@ -352,6 +360,7 @@ fun FileScreen(
                         style = Stroke(width = 1.dp.toPx())
                     )
                 }
+}
                 .clip(RoundedCornerShape(20.dp))
                 .clickable(
                     interactionSource = fabInteractionSource,
@@ -543,7 +552,8 @@ fun UploadFileDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawBehind {
+                .drawWithCache {
+onDrawBehind {
                     drawRoundRect(
                         color = ShadowDark.copy(alpha = 0.35f),
                         topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
@@ -577,6 +587,7 @@ fun UploadFileDialog(
                         style = Stroke(width = 1.dp.toPx())
                     )
                 }
+}
                 .padding(24.dp)
         ) {
             Column(
@@ -610,7 +621,8 @@ fun UploadFileDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.15f),
                                 topLeft = Offset(0f, 2.dp.toPx()),
@@ -622,6 +634,7 @@ fun UploadFileDialog(
                                 cornerRadius = CornerRadius(14.dp.toPx())
                             )
                         }
+}
                         .clip(RoundedCornerShape(14.dp))
                         .clickable { filePickerLauncher.launch(arrayOf("*/*")) },
                     contentAlignment = Alignment.Center
@@ -648,12 +661,14 @@ fun UploadFileDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawRoundRect(
                                     color = Background,
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                             }
+}
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Text(
@@ -688,7 +703,8 @@ fun UploadFileDialog(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawRoundRect(
                                     color = CoralStart.copy(alpha = 0.25f * uploadAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
@@ -707,6 +723,7 @@ fun UploadFileDialog(
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                             }
+}
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = canUpload) {
                                 val finalFile = selectedFileObject
@@ -741,7 +758,8 @@ fun DeleteFileConfirmationDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawBehind {
+                .drawWithCache {
+onDrawBehind {
                     drawRoundRect(
                         color = ShadowDark.copy(alpha = 0.35f),
                         topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
@@ -759,6 +777,7 @@ fun DeleteFileConfirmationDialog(
                         cornerRadius = CornerRadius(24.dp.toPx())
                     )
                 }
+}
                 .padding(24.dp)
         ) {
             Column(
@@ -814,7 +833,8 @@ fun DeleteFileConfirmationDialog(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawRoundRect(
                                     color = Destructive.copy(alpha = 0.3f),
                                     topLeft = Offset(0f, 2.dp.toPx()),
@@ -830,6 +850,7 @@ fun DeleteFileConfirmationDialog(
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                             }
+}
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onConfirm),
                         contentAlignment = Alignment.Center

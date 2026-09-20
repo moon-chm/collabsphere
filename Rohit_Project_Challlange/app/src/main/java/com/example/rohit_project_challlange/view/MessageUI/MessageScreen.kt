@@ -31,7 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -90,7 +90,8 @@ fun MessageScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         // Ambient shadow beneath header
                         drawRect(
                             color = ShadowDark.copy(alpha = 0.14f),
@@ -104,6 +105,7 @@ fun MessageScreen(
                             topLeft = Offset(0f, 0f),
                             size = Size(size.width, 1.dp.toPx())
                         )
+                                            }
                     }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center
@@ -118,7 +120,8 @@ fun MessageScreen(
                         onClick = onBack,
                         modifier = Modifier
                             .size(40.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.22f),
                                     radius = size.minDimension / 2f,
@@ -133,6 +136,7 @@ fun MessageScreen(
                                     color = Surface,
                                     radius = size.minDimension / 2f
                                 )
+                                                            }
                             }
                     ) {
                         Icon(
@@ -183,7 +187,8 @@ fun MessageScreen(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .imePadding()
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         // Dual shadow on top of bottom bar
                         drawRect(
                             color = ShadowDark.copy(alpha = 0.16f),
@@ -196,6 +201,7 @@ fun MessageScreen(
                             size = Size(size.width, 1.dp.toPx())
                         )
                         drawRect(color = SurfaceRaised)
+                                            }
                     }
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
@@ -304,7 +310,8 @@ fun MessageScreen(
                         modifier = Modifier
                             .size(48.dp)
                             .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 val shadowOffset = if (isSendPressed) 1.5.dp else 4.dp
                                 val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
 
@@ -334,6 +341,7 @@ fun MessageScreen(
                                     radius = 7.dp.toPx(),
                                     center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx())
                                 )
+                                                            }
                             }
                             .clip(CircleShape)
                             .clickable(
@@ -385,7 +393,8 @@ fun MessageScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRoundRect(
                                     color = ShadowDark.copy(alpha = 0.20f),
                                     topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
@@ -402,6 +411,7 @@ fun MessageScreen(
                                     color = SurfaceRaised,
                                     cornerRadius = CornerRadius(24.dp.toPx())
                                 )
+                                                            }
                             }
                             .padding(28.dp),
                         contentAlignment = Alignment.Center
@@ -474,7 +484,8 @@ fun MessageScreen(
                                 // Tactile Chat Bubble
                                 Box(
                                     modifier = Modifier
-                                        .drawBehind {
+                                        .drawWithCache {
+                                            onDrawBehind {
                                             if (isOwnMessage) {
                                                 // Own message: Coral tactile raised bubble
                                                 drawRoundRect(
@@ -542,6 +553,7 @@ fun MessageScreen(
                                                     style = Stroke(width = 1.dp.toPx())
                                                 )
                                             }
+                                                                                    }
                                         }
                                         .clip(RoundedCornerShape(16.dp))
                                         .combinedClickable(

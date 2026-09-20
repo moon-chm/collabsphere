@@ -16,7 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -60,7 +60,8 @@ fun WorkspaceAction(
                 Box(
                     modifier = Modifier
                         .size(92.dp)
-                        .drawBehind {
+                        .drawWithCache {
+                            onDrawBehind {
                             // Dark shadow below badge
                             drawCircle(
                                 color = ShadowDark.copy(alpha = 0.35f),
@@ -73,6 +74,7 @@ fun WorkspaceAction(
                                 radius = size.minDimension / 2f,
                                 center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
                             )
+                            }
                         }
                         .clip(CircleShape)
                         .background(
@@ -88,7 +90,8 @@ fun WorkspaceAction(
                         modifier = Modifier
                             .size(62.dp)
                             .clip(CircleShape)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     brush = Brush.radialGradient(
                                         colors = listOf(CoralLight, CoralStart),
@@ -102,6 +105,7 @@ fun WorkspaceAction(
                                     radius = 10.dp.toPx(),
                                     center = Offset(center.x - 12.dp.toPx(), center.y - 12.dp.toPx())
                                 )
+                                }
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -154,9 +158,10 @@ fun WorkspaceAction(
                         .fillMaxWidth()
                         .height(56.dp)
                         .graphicsLayer { scaleX = scale; scaleY = scale }
-                        .drawBehind {
+                        .drawWithCache {
                             val shadowOffset = if (pressed) 2.dp else 6.dp
                             val shadowAlpha = if (pressed) 0.15f else 0.35f
+                            onDrawBehind {
 
                             // Dynamic shadow using CoralStart
                             drawRoundRect(
@@ -197,6 +202,7 @@ fun WorkspaceAction(
                                 cornerRadius = CornerRadius(16.dp.toPx()),
                                 style = Stroke(width = 1.dp.toPx())
                             )
+                            }
                         }
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(

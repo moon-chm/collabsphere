@@ -28,7 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -120,6 +120,7 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // ── Search icon button ──
                     val searchInteractionSource = remember { MutableInteractionSource() }
                     Box(
                         modifier = Modifier
@@ -135,31 +136,39 @@ fun DashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Find people",
+                            contentDescription = "Search",
                             tint = CoralStart,
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
+                    // ── Bell icon button — outer Box allows badge to overflow the circle clip ──
                     val bellInteractionSource = remember { MutableInteractionSource() }
                     Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .skeuoRaised(cornerRadius = 22.dp)
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = bellInteractionSource,
-                                indication = null,
-                                onClick = onNotificationsClick
-                            ),
+                        modifier = Modifier.size(44.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notifications",
-                            tint = CoralStart,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        // Raised skeuomorphic circle (clipped)
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .skeuoRaised(cornerRadius = 22.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = bellInteractionSource,
+                                    indication = null,
+                                    onClick = onNotificationsClick
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = CoralStart,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        // Badge sits on top, outside the clip, anchored to top-end of the 44dp outer box
                         if (unreadNotificationCount > 0) {
                             Box(
                                 modifier = Modifier
@@ -179,115 +188,118 @@ fun DashboardScreen(
                         }
                     }
 
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .graphicsLayer { scaleX = profileScale; scaleY = profileScale }
-                        .drawBehind {
-                            val r = size.minDimension / 2f
-                            drawCircle(
-                                color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.03f else 0.06f),
-                                radius = r,
-                                center = Offset(center.x, center.y + if (isProfilePressed) 2.dp.toPx() else 5.dp.toPx())
-                            )
-                            drawCircle(
-                                color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.10f else 0.16f),
-                                radius = r,
-                                center = Offset(center.x, center.y + if (isProfilePressed) 1.dp.toPx() else 1.8.dp.toPx())
-                            )
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.90f),
-                                radius = r,
-                                center = Offset(center.x, center.y - 1.dp.toPx())
-                            )
-                            drawCircle(color = Surface)
-                            drawCircle(
-                                color = Color(0xFF2C2A28).copy(alpha = 0.06f),
-                                radius = r - 0.5.dp.toPx(),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                        }
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = profileInteractionSource,
-                            indication        = null,
-                            onClick           = onProfileClick
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (avatarUrl.isNotEmpty()) {
-                        SubcomposeAsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(avatarUrl)
-                                .crossfade(true)
-                                // Explicit decode-size cap — this is a 46dp circle, never needs a
-                                // full-resolution decode regardless of the source image's size.
-                                .size(with(LocalDensity.current) { 46.dp.roundToPx() })
-                                .build(),
-                            contentDescription = "Profile picture",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape),
-                            loading = {
-                                val initial = currentUserName.trim().take(1).uppercase().ifEmpty { "U" }
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .background(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(CoralLight, CoralStart)
-                                            ),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = initial,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
+                    // ── Profile avatar button ──
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .graphicsLayer { scaleX = profileScale; scaleY = profileScale }
+                            .drawWithCache {
+                                val r = size.minDimension / 2f
+                                onDrawBehind {
+                                    drawCircle(
+                                        color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.03f else 0.06f),
+                                        radius = r,
+                                        center = Offset(center.x, center.y + if (isProfilePressed) 2.dp.toPx() else 5.dp.toPx())
+                                    )
+                                    drawCircle(
+                                        color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.10f else 0.16f),
+                                        radius = r,
+                                        center = Offset(center.x, center.y + if (isProfilePressed) 1.dp.toPx() else 1.8.dp.toPx())
+                                    )
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = 0.90f),
+                                        radius = r,
+                                        center = Offset(center.x, center.y - 1.dp.toPx())
+                                    )
+                                    drawCircle(color = Surface)
+                                    drawCircle(
+                                        color = Color(0xFF2C2A28).copy(alpha = 0.06f),
+                                        radius = r - 0.5.dp.toPx(),
+                                        style = Stroke(width = 1.dp.toPx())
                                     )
                                 }
-                            },
-                            error = {
-                                Icon(
-                                    imageVector        = Icons.Outlined.AccountCircle,
-                                    contentDescription = "Profile",
-                                    tint               = CoralStart,
-                                    modifier           = Modifier.size(26.dp)
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = profileInteractionSource,
+                                indication        = null,
+                                onClick           = onProfileClick
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (avatarUrl.isNotEmpty()) {
+                            SubcomposeAsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(avatarUrl)
+                                    .crossfade(true)
+                                    // Explicit decode-size cap — this is a 46dp circle, never needs a
+                                    // full-resolution decode regardless of the source image's size.
+                                    .size(with(LocalDensity.current) { 46.dp.roundToPx() })
+                                    .build(),
+                                contentDescription = "Profile picture",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape),
+                                loading = {
+                                    val initial = currentUserName.trim().take(1).uppercase().ifEmpty { "U" }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(CoralLight, CoralStart)
+                                                ),
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = initial,
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White
+                                        )
+                                    }
+                                },
+                                error = {
+                                    Icon(
+                                        imageVector        = Icons.Outlined.AccountCircle,
+                                        contentDescription = "Profile",
+                                        tint               = CoralStart,
+                                        modifier           = Modifier.size(26.dp)
+                                    )
+                                }
+                            )
+                        } else if (currentUserName.isNotEmpty()) {
+                            val initial = currentUserName.trim().take(1).uppercase()
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(CoralLight, CoralStart)
+                                        ),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = initial,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
                                 )
                             }
-                        )
-                    } else if (currentUserName.isNotEmpty()) {
-                        val initial = currentUserName.trim().take(1).uppercase()
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(CoralLight, CoralStart)
-                                    ),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = initial,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
+                        } else {
+                            Icon(
+                                imageVector        = Icons.Outlined.AccountCircle,
+                                contentDescription = "Profile",
+                                tint               = CoralStart,
+                                modifier           = Modifier.size(26.dp)
                             )
                         }
-                    } else {
-                        Icon(
-                            imageVector        = Icons.Outlined.AccountCircle,
-                            contentDescription = "Profile",
-                            tint               = CoralStart,
-                            modifier           = Modifier.size(26.dp)
-                        )
-                    }
-                }
-                }
-            }
+                    } // end profile Box
+                } // end icons Row
+            } // end top bar Row
 
             Spacer(Modifier.height(20.dp))
 
@@ -366,8 +378,9 @@ private fun DashboardSummaryBanner(count: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .height(84.dp)
-            .drawBehind {
+            .drawWithCache {
                 val cr = CornerRadius(20.dp.toPx())
+                onDrawBehind {
                 // 1. Ambient soft diffuse shadow
                 drawRoundRect(
                     color        = CoralStart.copy(alpha = 0.14f),
@@ -413,6 +426,7 @@ private fun DashboardSummaryBanner(count: Int) {
                     cornerRadius = cr,
                     style = Stroke(width = 1.dp.toPx())
                 )
+                }
             }
     ) {
         Row(
@@ -439,8 +453,9 @@ private fun DashboardSummaryBanner(count: Int) {
             Box(
                 modifier = Modifier
                     .size(52.dp)
-                    .drawBehind {
+                    .drawWithCache {
                         val r = size.minDimension / 2f
+                        onDrawBehind {
                         // Inset socket dark inner shadow top-left
                         drawCircle(
                             color  = Color(0xFF5A1D0B).copy(alpha = 0.25f),
@@ -458,6 +473,7 @@ private fun DashboardSummaryBanner(count: Int) {
                             radius = r - 0.5.dp.toPx(),
                             style  = Stroke(width = 1.dp.toPx())
                         )
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -609,8 +625,9 @@ private fun DashboardEmptyState() {
             Box(
                 modifier = Modifier
                     .size(88.dp)
-                    .drawBehind {
+                    .drawWithCache {
                         val r = size.minDimension / 2f
+                        onDrawBehind {
                         // Ambient shadow
                         drawCircle(
                             color  = Color(0xFF2C201A).copy(alpha = 0.05f),
@@ -637,6 +654,7 @@ private fun DashboardEmptyState() {
                             radius = r - 0.5.dp.toPx(),
                             style  = Stroke(width = 1.dp.toPx())
                         )
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -685,8 +703,9 @@ private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
         modifier = modifier
             .height(52.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .drawBehind {
+            .drawWithCache {
                 val r = CornerRadius(16.dp.toPx())
+                onDrawBehind {
                 // 1. Ambient diffuse shadow
                 drawRoundRect(
                     color        = CoralStart.copy(alpha = if (pressed) 0.08f else 0.16f),
@@ -732,6 +751,7 @@ private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
                     cornerRadius = r,
                     style = Stroke(width = 1.dp.toPx())
                 )
+                }
             }
             .clip(RoundedCornerShape(16.dp))
             .clickable(

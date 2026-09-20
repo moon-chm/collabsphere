@@ -43,6 +43,9 @@ class WorkspaceRepo(
         if (!activeSyncLoops.add(userId)) return@withContext
         try {
         while (isActive) {
+            // Suspends here entirely (no polling/wakeups) while backgrounded, resumes instantly
+            // the moment the app returns to foreground — then goes straight to a fetch below.
+            com.example.rohit_project_challlange.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val lastSyncTime = dataStore.data.map { it[LAST_SYNC_KEY] ?: 0L }.first()
                 val updates = workspaceApiService.getWorkspaceUpdates(userId, lastSyncTime)
@@ -72,7 +75,7 @@ class WorkspaceRepo(
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
-            delay(3000)
+            delay(1000)
         }
         } finally {
             activeSyncLoops.remove(userId)

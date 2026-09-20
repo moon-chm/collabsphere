@@ -55,7 +55,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -324,7 +324,8 @@ fun DMScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         // Outer drop shadow
                         drawRoundRect(
                             color = ShadowDark.copy(alpha = 0.28f),
@@ -353,6 +354,7 @@ fun DMScreen(
                             cornerRadius = CornerRadius(27.dp.toPx()),
                             style = Stroke(width = 1.dp.toPx())
                         )
+                        }
                     }
                     .padding(horizontal = 24.dp, vertical = 28.dp),
                 contentAlignment = Alignment.TopCenter
@@ -367,9 +369,11 @@ fun DMScreen(
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
                                     drawCircle(color = SurfaceRaised, radius = size.minDimension / 2f)
+                                    }
                                 }
                                 .clip(CircleShape)
                                 .clickable { showPartnerProfileDialog = false },
@@ -388,7 +392,8 @@ fun DMScreen(
                     Box(
                         modifier = Modifier
                             .size(84.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 2.dp.toPx(), center.y + 3.dp.toPx()))
                                 drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 2.dp.toPx(), center.y - 2.dp.toPx()))
                                 drawCircle(
@@ -398,6 +403,7 @@ fun DMScreen(
                                         radius = size.minDimension / 2f
                                     )
                                 )
+                                }
                             }
                             .clip(CircleShape),
                         contentAlignment = Alignment.Center
@@ -429,11 +435,13 @@ fun DMScreen(
                     // Online status pill
                     Box(
                         modifier = Modifier
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRoundRect(
                                     color = if (isOnlineDialog) Mint.copy(alpha = 0.18f) else Muted.copy(alpha = 0.12f),
                                     cornerRadius = CornerRadius(20.dp.toPx())
                                 )
+                                }
                             }
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
@@ -480,9 +488,11 @@ fun DMScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRect(color = ShadowDark.copy(alpha = 0.10f), topLeft = Offset(0f, 0f))
                                 drawRect(color = Color.White.copy(alpha = 0.60f), topLeft = Offset(0f, 0.5.dp.toPx()))
+                                }
                             }
                     )
 
@@ -509,7 +519,8 @@ fun DMScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawRoundRect(
                                         color = ShadowDark.copy(alpha = 0.10f),
                                         topLeft = Offset(1.dp.toPx(), 2.dp.toPx()),
@@ -517,6 +528,7 @@ fun DMScreen(
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
                                     drawRoundRect(color = Surface, cornerRadius = CornerRadius(12.dp.toPx()))
+                                    }
                                 }
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
@@ -536,7 +548,8 @@ fun DMScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRoundRect(
                                     color = ShadowDark.copy(alpha = 0.22f),
                                     topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
@@ -557,6 +570,7 @@ fun DMScreen(
                                     size = Size(size.width - 1.dp.toPx(), size.height / 2),
                                     cornerRadius = CornerRadius(13.dp.toPx())
                                 )
+                                }
                             }
                             .clip(RoundedCornerShape(14.dp))
                             .clickable { showPartnerProfileDialog = false }
@@ -581,7 +595,8 @@ fun DMScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         drawRoundRect(
                             color = ShadowDark.copy(alpha = 0.22f),
                             topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
@@ -595,6 +610,7 @@ fun DMScreen(
                             cornerRadius = CornerRadius(24.dp.toPx())
                         )
                         drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                        }
                     }
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
@@ -616,7 +632,8 @@ fun DMScreen(
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .drawBehind {
+                                    .drawWithCache {
+                                        onDrawBehind {
                                         if (isReacted) {
                                             drawCircle(
                                                 color = CoralStart.copy(alpha = 0.25f),
@@ -632,6 +649,7 @@ fun DMScreen(
                                             color = if (isReacted) CoralStart.copy(alpha = 0.15f) else SurfaceRaised,
                                             radius = size.minDimension / 2f
                                         )
+                                        }
                                     }
                                     .clip(CircleShape)
                                     .clickable {
@@ -711,7 +729,8 @@ fun DMScreen(
                         val otherMembersCount = workspaceMembers.filter { it.id != currentUserId.toInt() }.size
                         Box(
                             modifier = Modifier
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawRoundRect(
                                         color = ShadowDark.copy(alpha = 0.12f),
                                         topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
@@ -719,6 +738,7 @@ fun DMScreen(
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
                                     drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(12.dp.toPx()))
+                                    }
                                 }
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
@@ -740,7 +760,8 @@ fun DMScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .drawBehind {
+                                    .drawWithCache {
+                                        onDrawBehind {
                                         drawRoundRect(
                                             color = ShadowDark.copy(alpha = 0.20f),
                                             topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
@@ -754,6 +775,7 @@ fun DMScreen(
                                             cornerRadius = CornerRadius(24.dp.toPx())
                                         )
                                         drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                                        }
                                     }
                                     .padding(28.dp),
                                 contentAlignment = Alignment.Center
@@ -823,7 +845,8 @@ fun DMScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRect(
                                     color = ShadowDark.copy(alpha = 0.14f),
                                     topLeft = Offset(0f, size.height),
@@ -835,6 +858,7 @@ fun DMScreen(
                                     topLeft = Offset(0f, 0f),
                                     size = Size(size.width, 1.dp.toPx())
                                 )
+                                }
                             }
                             .statusBarsPadding()
                             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -853,10 +877,12 @@ fun DMScreen(
                                 },
                                 modifier = Modifier
                                     .size(38.dp)
-                                    .drawBehind {
+                                    .drawWithCache {
+                                        onDrawBehind {
                                         drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
                                         drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                         drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                        }
                                     }
                             ) {
                                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(20.dp))
@@ -878,7 +904,8 @@ fun DMScreen(
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .drawBehind {
+                                        .drawWithCache {
+                                            onDrawBehind {
                                             drawCircle(
                                                 brush = Brush.radialGradient(
                                                     colors = listOf(IndigoStart, IndigoEnd),
@@ -886,6 +913,7 @@ fun DMScreen(
                                                     radius = size.minDimension / 2f
                                                 )
                                             )
+                                            }
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -937,10 +965,12 @@ fun DMScreen(
                                 onClick = { showPartnerProfileDialog = true },
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .drawBehind {
+                                    .drawWithCache {
+                                        onDrawBehind {
                                         drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
                                         drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                         drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                        }
                                     }
                             ) {
                                 Icon(imageVector = Icons.Default.Info, contentDescription = "Profile info", tint = CoralStart, modifier = Modifier.size(18.dp))
@@ -954,9 +984,11 @@ fun DMScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawRect(color = chatBgColor)
                                 drawWhatsAppTexture(Ink)
+                                }
                             }
                     ) {
                         if (messages.isEmpty()) {
@@ -971,7 +1003,8 @@ fun DMScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .drawBehind {
+                                        .drawWithCache {
+                                            onDrawBehind {
                                             drawRoundRect(
                                                 color = ShadowDark.copy(alpha = 0.18f),
                                                 topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
@@ -985,6 +1018,7 @@ fun DMScreen(
                                                 cornerRadius = CornerRadius(24.dp.toPx())
                                             )
                                             drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                                            }
                                         }
                                         .padding(24.dp),
                                     contentAlignment = Alignment.Center
@@ -997,8 +1031,10 @@ fun DMScreen(
                                             modifier = Modifier
                                                 .size(60.dp)
                                                 .clip(CircleShape)
-                                                .drawBehind {
+                                                .drawWithCache {
+                                                    onDrawBehind {
                                                     drawCircle(brush = Brush.radialGradient(listOf(IndigoStart, IndigoEnd)), radius = size.minDimension / 2f)
+                                                    }
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -1020,11 +1056,13 @@ fun DMScreen(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .drawBehind {
+                                                .drawWithCache {
+                                                    onDrawBehind {
                                                     drawRoundRect(
                                                         brush = Brush.linearGradient(listOf(CoralLight, CoralStart)),
                                                         cornerRadius = CornerRadius(12.dp.toPx())
                                                     )
+                                                    }
                                                 }
                                                 .clickable {
                                                     viewModel.sendMessage(
@@ -1066,7 +1104,8 @@ fun DMScreen(
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .drawBehind {
+                                                    .drawWithCache {
+                                                        onDrawBehind {
                                                         drawRoundRect(
                                                             color = ShadowDark.copy(alpha = 0.12f),
                                                             topLeft = Offset(0f, 1.5.dp.toPx()),
@@ -1082,6 +1121,7 @@ fun DMScreen(
                                                             cornerRadius = CornerRadius(12.dp.toPx()),
                                                             style = Stroke(width = 1.dp.toPx())
                                                         )
+                                                        }
                                                     }
                                                     .padding(horizontal = 14.dp, vertical = 4.dp)
                                             ) {
@@ -1114,7 +1154,8 @@ fun DMScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .widthIn(min = 52.dp, max = 280.dp)
-                                                        .drawBehind {
+                                                        .drawWithCache {
+                                                            onDrawBehind {
                                                             drawRoundRect(
                                                                 color = CoralStart.copy(alpha = 0.25f),
                                                                 topLeft = Offset(0f, 2.5.dp.toPx()),
@@ -1144,6 +1185,7 @@ fun DMScreen(
                                                                 cornerRadius = CornerRadius(16.dp.toPx()),
                                                                 style = Stroke(width = 1.dp.toPx())
                                                             )
+                                                            }
                                                         }
                                                         .clip(RoundedCornerShape(16.dp))
                                                         .combinedClickable(
@@ -1277,7 +1319,8 @@ fun DMScreen(
                                                         msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .drawBehind {
+                                                                    .drawWithCache {
+                                                                        onDrawBehind {
                                                                         drawRoundRect(
                                                                             color = ShadowDark.copy(alpha = 0.18f),
                                                                             topLeft = Offset(0f, 1.5.dp.toPx()),
@@ -1293,6 +1336,7 @@ fun DMScreen(
                                                                             cornerRadius = CornerRadius(14.dp.toPx()),
                                                                             style = Stroke(width = 1.dp.toPx())
                                                                         )
+                                                                        }
                                                                     }
                                                                     .clip(RoundedCornerShape(14.dp))
                                                                     .clickable {
@@ -1343,12 +1387,14 @@ fun DMScreen(
                                                 modifier = Modifier
                                                     .size(28.dp)
                                                     .clip(CircleShape)
-                                                    .drawBehind {
+                                                    .drawWithCache {
+                                                        onDrawBehind {
                                                         drawCircle(
                                                             color = ShadowDark.copy(alpha = 0.14f),
                                                             radius = size.minDimension / 2f,
                                                             center = Offset(center.x, center.y + 1.dp.toPx())
                                                         )
+                                                        }
                                                     },
                                                 contentAlignment = Alignment.Center
                                             ) {
@@ -1388,7 +1434,8 @@ fun DMScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .widthIn(min = 52.dp, max = 280.dp)
-                                                        .drawBehind {
+                                                        .drawWithCache {
+                                                            onDrawBehind {
                                                             drawRoundRect(
                                                                 color = ShadowDark.copy(alpha = 0.18f),
                                                                 topLeft = Offset(2.dp.toPx(), 3.dp.toPx()),
@@ -1417,6 +1464,7 @@ fun DMScreen(
                                                                 cornerRadius = CornerRadius(16.dp.toPx()),
                                                                 style = Stroke(width = 1.dp.toPx())
                                                             )
+                                                            }
                                                         }
                                                         .clip(RoundedCornerShape(16.dp))
                                                         .combinedClickable(
@@ -1497,7 +1545,8 @@ fun DMScreen(
                                                         msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .drawBehind {
+                                                                    .drawWithCache {
+                                                                        onDrawBehind {
                                                                         drawRoundRect(
                                                                             color = ShadowDark.copy(alpha = 0.18f),
                                                                             topLeft = Offset(0f, 1.5.dp.toPx()),
@@ -1513,6 +1562,7 @@ fun DMScreen(
                                                                             cornerRadius = CornerRadius(14.dp.toPx()),
                                                                             style = Stroke(width = 1.dp.toPx())
                                                                         )
+                                                                        }
                                                                     }
                                                                     .clip(RoundedCornerShape(14.dp))
                                                                     .clickable {
@@ -1575,7 +1625,8 @@ fun DMScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .drawBehind {
+                                    .drawWithCache {
+                                        onDrawBehind {
                                         drawRoundRect(
                                             color = ShadowDark.copy(alpha = 0.10f),
                                             topLeft = Offset(0f, 2.dp.toPx()),
@@ -1589,6 +1640,7 @@ fun DMScreen(
                                             size = Size(4.dp.toPx(), size.height),
                                             cornerRadius = CornerRadius(4.dp.toPx())
                                         )
+                                        }
                                     }
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1631,10 +1683,12 @@ fun DMScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawRect(color = ShadowDark.copy(alpha = 0.16f), topLeft = Offset(0f, -3.dp.toPx()), size = Size(size.width, 3.dp.toPx()))
                                     drawRect(color = ShadowLight.copy(alpha = 0.85f), topLeft = Offset(0f, 0f), size = Size(size.width, 1.dp.toPx()))
                                     drawRect(color = SurfaceRaised)
+                                    }
                                 }
                                 .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
@@ -1649,10 +1703,12 @@ fun DMScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
-                                        .drawBehind {
+                                        .drawWithCache {
+                                            onDrawBehind {
                                             drawCircle(color = ShadowDark.copy(alpha = if (isAttachPressed) 0.10f else 0.20f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 2.dp.toPx()))
                                             drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                             drawCircle(color = SurfaceRaised, radius = size.minDimension / 2f)
+                                            }
                                         }
                                         .clip(CircleShape)
                                         .clickable(
@@ -1741,13 +1797,15 @@ fun DMScreen(
                                     modifier = Modifier
                                         .size(48.dp)
                                         .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                                        .drawBehind {
+                                        .drawWithCache {
+                                            onDrawBehind {
                                             val shadowOffset = if (isSendPressed) 1.5.dp else 4.dp
                                             val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
                                             drawCircle(color = CoralStart.copy(alpha = shadowAlpha * sendAlpha), radius = size.minDimension / 2f, center = Offset(center.x, center.y + shadowOffset.toPx()))
                                             drawCircle(color = Color.White.copy(alpha = 0.30f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                             drawCircle(brush = Brush.radialGradient(colors = listOf(CoralStart.copy(alpha = sendAlpha), CoralEnd.copy(alpha = sendAlpha)), center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()), radius = size.minDimension / 2f))
                                             drawCircle(color = Color.White.copy(alpha = 0.35f), radius = 7.dp.toPx(), center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx()))
+                                            }
                                         }
                                         .clip(CircleShape)
                                         .clickable(
@@ -1829,8 +1887,10 @@ fun SkeuoMemberRow(
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(CircleShape)
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawCircle(brush = Brush.radialGradient(colors = listOf(CoralLight, CoralStart)))
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -1907,10 +1967,12 @@ fun SkeuoTypingBubble(
     ) {
         Row(
             modifier = Modifier
-                .drawBehind {
+                .drawWithCache {
+                    onDrawBehind {
                     drawRoundRect(color = ShadowDark.copy(alpha = 0.12f), topLeft = Offset(1.dp.toPx(), 2.dp.toPx()), size = Size(size.width, size.height), cornerRadius = CornerRadius(14.dp.toPx()))
                     drawRoundRect(color = ShadowLight.copy(alpha = 0.85f), topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()), size = Size(size.width, size.height), cornerRadius = CornerRadius(14.dp.toPx()))
                     drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(14.dp.toPx()))
+                    }
                 }
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,

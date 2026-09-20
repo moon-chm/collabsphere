@@ -41,7 +41,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -103,7 +103,8 @@ fun WorkspaceDetailedScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         drawRoundRect(
                             color = ShadowDark.copy(alpha = 0.35f),
                             topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
@@ -135,6 +136,7 @@ fun WorkspaceDetailedScreen(
                             cornerRadius = CornerRadius(24.dp.toPx()),
                             style = Stroke(width = 1.dp.toPx())
                         )
+                                            }
                     }
                     .padding(24.dp)
             ) {
@@ -146,7 +148,8 @@ fun WorkspaceDetailedScreen(
                     Box(
                         modifier = Modifier
                             .size(54.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.25f),
                                     radius = size.minDimension / 2f,
@@ -161,6 +164,7 @@ fun WorkspaceDetailedScreen(
                                     color = Surface,
                                     radius = size.minDimension / 2f
                                 )
+                                                            }
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -252,7 +256,8 @@ fun WorkspaceDetailedScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(46.dp)
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawRoundRect(
                                         color = ShadowDark.copy(alpha = 0.15f),
                                         topLeft = Offset(0f, 2.dp.toPx()),
@@ -263,6 +268,7 @@ fun WorkspaceDetailedScreen(
                                         color = Surface,
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
+                                                                    }
                                 }
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
@@ -285,7 +291,8 @@ fun WorkspaceDetailedScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(46.dp)
-                                .drawBehind {
+                                .drawWithCache {
+                                    onDrawBehind {
                                     drawRoundRect(
                                         color = CoralStart.copy(alpha = 0.25f * addAlpha),
                                         topLeft = Offset(0f, 2.dp.toPx()),
@@ -303,6 +310,7 @@ fun WorkspaceDetailedScreen(
                                         ),
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
+                                                                    }
                                 }
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
@@ -338,7 +346,8 @@ fun WorkspaceDetailedScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         // Bottom rim shadow
                         drawRect(
                             color = ShadowDark.copy(alpha = 0.12f),
@@ -353,6 +362,7 @@ fun WorkspaceDetailedScreen(
                             topLeft = Offset(0f, 0f),
                             size = Size(size.width, 1.dp.toPx())
                         )
+                                            }
                     }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center
@@ -367,7 +377,8 @@ fun WorkspaceDetailedScreen(
                         onClick = onBack,
                         modifier = Modifier
                             .size(40.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.22f),
                                     radius = size.minDimension / 2f,
@@ -382,6 +393,7 @@ fun WorkspaceDetailedScreen(
                                     color = Surface,
                                     radius = size.minDimension / 2f
                                 )
+                                                            }
                             }
                     ) {
                         Icon(
@@ -409,7 +421,8 @@ fun WorkspaceDetailedScreen(
                         onClick = { showAddMemberDialog = true },
                         modifier = Modifier
                             .size(40.dp)
-                            .drawBehind {
+                            .drawWithCache {
+                                onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.22f),
                                     radius = size.minDimension / 2f,
@@ -424,6 +437,7 @@ fun WorkspaceDetailedScreen(
                                     color = Surface,
                                     radius = size.minDimension / 2f
                                 )
+                                                            }
                             }
                     ) {
                         Icon(
@@ -445,7 +459,8 @@ fun WorkspaceDetailedScreen(
                         .fillMaxWidth()
                         .navigationBarsPadding()
                         .height(82.dp)
-                        .drawBehind {
+                        .drawWithCache {
+                            onDrawBehind {
                             // 1. Upward ambient diffuse shadow
                             drawRect(
                                 color = Color(0xFF2C201A).copy(alpha = 0.07f),
@@ -472,6 +487,7 @@ fun WorkspaceDetailedScreen(
                                 topLeft = Offset(0f, 1.dp.toPx()),
                                 size = Size(size.width, 1.dp.toPx())
                             )
+                                                    }
                         }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
@@ -628,7 +644,8 @@ private fun SkeuoTabItem(
                 scaleX = scale
                 scaleY = scale
             }
-            .drawBehind {
+            .drawWithCache {
+                onDrawBehind {
                 val cr = 18.dp.toPx()
                 if (selected) {
                     // ── SUNKEN / INSET / DEBOSSED BUTTON (Exact match to "Spaces" in screenshot) ──
@@ -704,6 +721,7 @@ private fun SkeuoTabItem(
                         style = Stroke(width = 1.dp.toPx())
                     )
                 }
+                            }
             }
             .clip(RoundedCornerShape(18.dp))
             .clickable(

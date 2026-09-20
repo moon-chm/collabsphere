@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -380,7 +381,8 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawBehind {
+                    .drawWithCache {
+onDrawBehind {
                         drawRect(
                             color = ShadowDark.copy(alpha = 0.12f),
                             topLeft = Offset(0f, size.height),
@@ -393,6 +395,7 @@ fun ProfileScreen(
                             size = Size(size.width, 1.dp.toPx())
                         )
                     }
+}
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -404,7 +407,8 @@ fun ProfileScreen(
                         onClick = onBack,
                         modifier = Modifier
                             .size(40.dp)
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.22f),
                                     radius = size.minDimension / 2f,
@@ -420,6 +424,7 @@ fun ProfileScreen(
                                     radius = size.minDimension / 2f
                                 )
                             }
+}
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -459,7 +464,8 @@ fun ProfileScreen(
                     Box(
                         modifier = Modifier
                             .size(100.dp)
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.35f),
                                     radius = size.minDimension / 2f,
@@ -471,6 +477,7 @@ fun ProfileScreen(
                                     center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
                                 )
                             }
+}
                             .clip(CircleShape)
                             .background(
                                 brush = Brush.linearGradient(
@@ -495,7 +502,8 @@ fun ProfileScreen(
                                 modifier = Modifier
                                     .size(72.dp)
                                     .clip(CircleShape)
-                                    .drawBehind {
+                                    .drawWithCache {
+onDrawBehind {
                                         drawCircle(
                                             brush = Brush.radialGradient(
                                                 colors = listOf(CoralLight, CoralStart),
@@ -508,7 +516,8 @@ fun ProfileScreen(
                                             radius = 12.dp.toPx(),
                                             center = Offset(center.x - 14.dp.toPx(), center.y - 14.dp.toPx())
                                         )
-                                    },
+                                    }
+},
                                 contentAlignment = Alignment.Center
                             ) {
                                 val initial = userName.trim().take(1).uppercase().ifEmpty { "U" }
@@ -565,7 +574,8 @@ fun ProfileScreen(
                     Box(
                         modifier = Modifier
                             .size(30.dp)
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawCircle(
                                     color = ShadowDark.copy(alpha = 0.30f),
                                     radius = size.minDimension / 2f,
@@ -578,6 +588,7 @@ fun ProfileScreen(
                                 )
                                 drawCircle(color = CoralStart)
                             }
+}
                             .clip(CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -629,7 +640,8 @@ fun ProfileScreen(
                     // Debossed user id pill
                     Box(
                         modifier = Modifier
-                            .drawBehind {
+                            .drawWithCache {
+onDrawBehind {
                                 drawRoundRect(
                                     color = ShadowDark.copy(alpha = 0.15f),
                                     topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
@@ -647,6 +659,7 @@ fun ProfileScreen(
                                     cornerRadius = CornerRadius(12.dp.toPx())
                                 )
                             }
+}
                             .padding(horizontal = 14.dp, vertical = 5.dp)
                     ) {
                         Text(
@@ -695,7 +708,8 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.24f),
                                 topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
@@ -729,6 +743,7 @@ fun ProfileScreen(
                                 style = Stroke(width = 1.dp.toPx())
                             )
                         }
+}
                         .padding(20.dp)
                 ) {
                     Column(
@@ -880,12 +895,14 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .drawBehind {
+                                .drawWithCache {
+onDrawBehind {
                                     drawRoundRect(
                                         color = Surface,
                                         cornerRadius = CornerRadius(14.dp.toPx())
                                     )
                                 }
+}
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -1051,7 +1068,8 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.24f),
                                 topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
@@ -1066,6 +1084,7 @@ fun ProfileScreen(
                             )
                             drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
                         }
+}
                         .padding(20.dp)
                 ) {
                     Column(
@@ -1188,7 +1207,8 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.24f),
                                 topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
@@ -1203,6 +1223,7 @@ fun ProfileScreen(
                             )
                             drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
                         }
+}
                         .padding(20.dp)
                 ) {
                     Column(
@@ -1301,7 +1322,8 @@ fun ProfileScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.24f),
                                 topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
@@ -1316,6 +1338,7 @@ fun ProfileScreen(
                             )
                             drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
                         }
+}
                         .padding(20.dp)
                 ) {
                     Column(
@@ -1373,7 +1396,8 @@ fun ProfileScreen(
                         .fillMaxWidth()
                         .height(54.dp)
                         .graphicsLayer { scaleX = updateScale; scaleY = updateScale }
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             val shadowOffset = if (updatePressed) 2.dp else 5.dp
                             val shadowAlpha = if (updatePressed) 0.12f else 0.32f
 
@@ -1417,6 +1441,7 @@ fun ProfileScreen(
                                 style = Stroke(width = 1.dp.toPx())
                             )
                         }
+}
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -1464,7 +1489,8 @@ fun ProfileScreen(
                         .fillMaxWidth()
                         .height(52.dp)
                         .graphicsLayer { scaleX = logoutScale; scaleY = logoutScale }
-                        .drawBehind {
+                        .drawWithCache {
+onDrawBehind {
                             val shadowOffset = if (logoutPressed) 1.dp else 3.dp
                             drawRoundRect(
                                 color = ShadowDark.copy(alpha = 0.18f),
@@ -1489,6 +1515,7 @@ fun ProfileScreen(
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2.dp.toPx())
                             )
                         }
+}
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },

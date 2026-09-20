@@ -33,7 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -252,8 +252,9 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
     Box(
         modifier = Modifier
             .size(84.dp)
-            .drawBehind {
+            .drawWithCache {
                 val r = size.minDimension / 2f
+                onDrawBehind {
                 // 1. Soft deep ambient drop shadow underneath
                 drawCircle(
                     color  = Color(0xFF2C201A).copy(alpha = 0.12f),
@@ -291,6 +292,7 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
                     radius = r - 0.5.dp.toPx(),
                     style = Stroke(width = 1.dp.toPx())
                 )
+                }
             }
             .clip(CircleShape),
         contentAlignment = Alignment.Center
@@ -299,8 +301,9 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
         Box(
             modifier = Modifier
                 .size(52.dp)
-                .drawBehind {
+                .drawWithCache {
                     val r = size.minDimension / 2f
+                    onDrawBehind {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(accentColor, accentColor.copy(alpha = 0.75f)),
@@ -314,6 +317,7 @@ internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
                         radius = 8.dp.toPx(),
                         center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
                     )
+                    }
                 }
                 .clip(CircleShape),
             contentAlignment = Alignment.Center
@@ -486,8 +490,9 @@ internal fun SkeuoPrimaryButton(
             .fillMaxWidth()
             .height(56.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .drawBehind {
+            .drawWithCache {
                 val cr = CornerRadius(16.dp.toPx())
+                onDrawBehind {
                 // 1. Colored ambient drop shadow underneath button
                 drawRoundRect(
                     color        = shadowColor.copy(alpha = shadowAlpha),
@@ -534,6 +539,7 @@ internal fun SkeuoPrimaryButton(
                     cornerRadius = cr,
                     style = Stroke(width = 1.dp.toPx())
                 )
+                }
             }
             .clip(RoundedCornerShape(16.dp))
             .clickable(

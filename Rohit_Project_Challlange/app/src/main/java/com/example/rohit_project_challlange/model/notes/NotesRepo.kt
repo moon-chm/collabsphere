@@ -66,6 +66,7 @@ class NotesRepo(
         if (!activeSyncLoops.add(workspaceId)) return@withContext
         try {
         while (isActive) {
+            com.example.rohit_project_challlange.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
@@ -97,7 +98,7 @@ class NotesRepo(
             } catch (e: Exception) {
                 Log.e("NotesRepo", "Delta sync iteration error", e)
             }
-            delay(3000)
+            delay(1000)
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

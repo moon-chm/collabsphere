@@ -18,7 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
@@ -244,26 +244,30 @@ private fun SimulatorStage(
                     .weight(1f)
                     .clip(RoundedCornerShape(22.dp))
                     .background(OnboardCard)
-                    .drawBehind {
+                    .drawWithCache {
+                        onDrawBehind {
                         // top highlight rim
                         drawRoundRect(
                             color        = Color.White.copy(alpha = 0.8f),
                             size         = Size(size.width, 1.dp.toPx()),
                             cornerRadius = CornerRadius(22.dp.toPx())
                         )
+                        }
                     }
             ) {
                 // Shadow via outer wrapper is done via elevation; here we use a subtle border
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .drawBehind {
+                        .drawWithCache {
+                            onDrawBehind {
                             drawRoundRect(
                                 color        = BorderLight,
                                 size         = Size(size.width, size.height),
                                 cornerRadius = CornerRadius(22.dp.toPx()),
                                 style        = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
                             )
+                            }
                         }
                 )
 
@@ -1146,8 +1150,9 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                     .fillMaxWidth()
                     .height(68.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .drawBehind {
+                    .drawWithCache {
                         val dashColor = Color(0xFF292825).copy(alpha = 0.18f)
+                        onDrawBehind {
                         drawRoundRect(color = dashColor,
                             cornerRadius = CornerRadius(12.dp.toPx()),
                             style = androidx.compose.ui.graphics.drawscope.Stroke(
@@ -1155,6 +1160,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                                 pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
                                     floatArrayOf(6f, 6f), 0f)
                             ))
+                        }
                     },
                     contentAlignment = Alignment.Center
                 ) {
@@ -1369,13 +1375,15 @@ private fun BottomCard(
             .wrapContentHeight()
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(OnboardCard)
-            .drawBehind {
+            .drawWithCache {
+                onDrawBehind {
                 // Top highlight rim (white border)
                 drawRoundRect(
                     color        = Color.White.copy(alpha = 0.8f),
                     size         = Size(size.width, 1.dp.toPx()),
                     cornerRadius = CornerRadius(28.dp.toPx())
                 )
+                }
             }
             .padding(horizontal = 24.dp)
             .padding(top = 20.dp, bottom = 24.dp)
