@@ -24,34 +24,7 @@ object FcmService {
         }
 
         try {
-            // Check for service account file from environment or well-known local paths
-            val envPath = System.getenv("FIREBASE_CONFIG_PATH")
-            val candidatePaths = listOfNotNull(
-                envPath,
-                "service-account.json",
-                "firebase-service-account.json",
-                "collabsphere-firebase-adminsdk.json"
-            )
-
-            var credentialsStream: FileInputStream? = null
-            for (path in candidatePaths) {
-                val f = File(path)
-                if (f.exists() && f.isFile) {
-                    credentialsStream = FileInputStream(f)
-                    logger.info("Found Firebase service account file at: ${f.absolutePath}")
-                    break
-                }
-            }
-
-            val credentials = if (credentialsStream != null) {
-                GoogleCredentials.fromStream(credentialsStream)
-            } else {
-                try {
-                    GoogleCredentials.getApplicationDefault()
-                } catch (e: Exception) {
-                    null
-                }
-            }
+            val credentials = resolveCredentials()
 
             if (credentials != null) {
                 val options = FirebaseOptions.builder()
@@ -61,10 +34,59 @@ object FcmService {
                 isInitialized = true
                 logger.info("Firebase Admin SDK initialized successfully.")
             } else {
-                logger.warn("Firebase Admin SDK credentials not found. FCM background pushes will be skipped until a service account JSON is supplied.")
+                logger.warn(
+                    "Firebase Admin SDK credentials not found. " +
+                    "Set FIREBASE_SERVICE_ACCOUNT_JSON (raw JSON) or " +
+                    "FIREBASE_CONFIG_PATH (file path) env var to enable FCM pushes."
+                )
             }
         } catch (e: Exception) {
             logger.error("Failed to initialize Firebase Admin SDK", e)
+        }
+    }
+
+    /**
+     * Resolves Firebase credentials from (in priority order):
+     * 1. FIREBASE_SERVICE_ACCOUNT_JSON env var — raw JSON string (best for Render/cloud)
+     * 2. FIREBASE_CONFIG_PATH env var — path to a local JSON file
+     * 3. Well-known local file names (for local dev)
+     * 4. Application Default Credentials (GCP-hosted environments)
+     */
+    private fun resolveCredentials(): GoogleCredentials? {
+        // 1. Raw JSON string from environment variable (Render secret env var)
+        val rawJson = System.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if (!rawJson.isNullOrBlank()) {
+            logger.info("Loading Firebase credentials from FIREBASE_SERVICE_ACCOUNT_JSON env var.")
+            return GoogleCredentials.fromStream(rawJson.byteInputStream())
+        }
+
+        // 2. File path from environment variable
+        val envPath = System.getenv("FIREBASE_CONFIG_PATH")
+
+        // 3. Well-known local file names (for local development)
+        val candidatePaths = listOfNotNull(
+            envPath,
+            "service-account.json",
+            "firebase-service-account.json",
+            "collabsphere-firebase-adminsdk.json",
+            "collabsphere-66131-firebase-adminsdk-fbsvc-b0298c1ffa.json"
+        )
+
+        for (path in candidatePaths) {
+            val f = File(path)
+            if (f.exists() && f.isFile) {
+                logger.info("Loading Firebase credentials from file: ${f.absolutePath}")
+                return GoogleCredentials.fromStream(FileInputStream(f))
+            }
+        }
+
+        // 4. Application Default Credentials (Google Cloud environments)
+        return try {
+            GoogleCredentials.getApplicationDefault().also {
+                logger.info("Using Application Default Credentials for Firebase.")
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 
