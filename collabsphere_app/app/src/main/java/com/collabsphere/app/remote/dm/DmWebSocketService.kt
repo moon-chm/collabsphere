@@ -44,6 +44,14 @@ class DmWebSocketService : Service() {
         private const val CHANNEL_ID = "dm_service_channel_silent"
         private const val CHANNEL_NAME = "Sync Service"
         var activeChatPartnerId: Int? = null
+
+        /**
+         * True while the WebSocket is actively connected and delivering messages.
+         * FCM checks this before showing a notification — if WebSocket is live,
+         * the real-time stream already handles it and the FCM push is dropped.
+         */
+        @Volatile
+        var isWebSocketConnected: Boolean = false
     }
 
     override fun onCreate() {
@@ -106,6 +114,7 @@ class DmWebSocketService : Service() {
                 try {
                     Log.d("DM_SERVICE", "Connecting WebSocket to $baseUrl for user $userId...")
                     repo.connectToChat(baseUrl, userId)
+                    isWebSocketConnected = true
                     Log.d("DM_SERVICE", "WebSocket connected successfully! Listening for DMs...")
                     backoffMs = 2000L
 
@@ -132,6 +141,7 @@ class DmWebSocketService : Service() {
                         }
                     }
                 } catch (e: Exception) {
+                    isWebSocketConnected = false
                     if (!isActive) break
                     Log.w("DM_SERVICE", "WebSocket disconnected: ${e.message}. Retrying in ${backoffMs}ms...")
                 }
@@ -146,6 +156,7 @@ class DmWebSocketService : Service() {
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun onDestroy() {
+        isWebSocketConnected = false
         connectionJob?.cancel()
         // Deliberately outlives serviceScope (cancelled right after) so the disconnect handshake can
         // still finish even though the service itself is being torn down right now.

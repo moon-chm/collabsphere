@@ -68,7 +68,12 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
                         val isViewingChat = MyApplication.isAppForeground &&
                                 (com.collabsphere.app.remote.dm.DmWebSocketService.activeChatPartnerId == senderId)
 
-                        if (senderId != currentUserId && !isViewingChat) {
+                        // Suppress if WebSocket is live — it already delivered the message and
+                        // triggered the notification via DmWebSocketService. FCM is only the
+                        // fallback for when the app is in the background / process is killed.
+                        val isWebSocketAlive = com.collabsphere.app.remote.dm.DmWebSocketService.isWebSocketConnected
+
+                        if (senderId != currentUserId && !isViewingChat && !isWebSocketAlive) {
                             val dmDto = DmDto(
                                 id = id,
                                 workspaceId = workspaceId,
@@ -79,6 +84,8 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
                                 action = "RECEIVE_MESSAGE"
                             )
                             notificationHelper.showDmNotification(dmDto)
+                        } else {
+                            Log.d(TAG, "FCM DM suppressed — WebSocket alive=$isWebSocketAlive, viewing=$isViewingChat")
                         }
                     }
 
