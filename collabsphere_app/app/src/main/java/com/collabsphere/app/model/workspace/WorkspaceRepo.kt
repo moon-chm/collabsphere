@@ -75,7 +75,7 @@ class WorkspaceRepo(
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
-            delay(1000)
+            delay(30_000)
         }
         } finally {
             activeSyncLoops.remove(userId)

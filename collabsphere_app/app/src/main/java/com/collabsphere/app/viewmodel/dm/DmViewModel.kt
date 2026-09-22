@@ -124,12 +124,15 @@ class DmViewModel(
                         // The sender of READ_RECEIPT is the one who read our messages
                         // Mark all messages sent by us to that person as read in local state
                         val readerId = dto.senderId
-                        val updated = _messages.value.map { msg ->
-                            if (msg.senderId == currentUserId && msg.receiverId == readerId) {
-                                msg.copy(isRead = true)
-                            } else msg
+                        val current = _messages.value
+                        val hasUnread = current.any { it.senderId == currentUserId && it.receiverId == readerId && !it.isRead }
+                        if (hasUnread) {
+                            _messages.value = current.map { msg ->
+                                if (msg.senderId == currentUserId && msg.receiverId == readerId && !msg.isRead) {
+                                    msg.copy(isRead = true)
+                                } else msg
+                            }
                         }
-                        _messages.value = updated
                     }
                 }
             }

@@ -35,7 +35,7 @@ import com.collabsphere.app.model.message.MessageEntity
         DmEntity::class,
         DmReactionEntity::class
     ],
-    version = 36,
+    version = 37,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -69,6 +69,25 @@ abstract class AppDatabase : RoomDatabase() {
                         PRIMARY KEY(messageId, userId, emoji)
                     )
                 """.trimIndent())
+            }
+        }
+
+        /**
+         * Migration 36 → 37:
+         * Replaces the three single-column DM indexes with two composite covering indexes
+         * that match the getDmHistory() query predicate exactly, eliminating full table scans.
+         * Also adds a (timestamp, senderId) index for deleteDmByContentAndTimestamp.
+         */
+        val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Drop old single-column indexes (may not exist on fresh installs — IF EXISTS guard)
+                database.execSQL("DROP INDEX IF EXISTS `index_DM_senderId`")
+                database.execSQL("DROP INDEX IF EXISTS `index_DM_receiverId`")
+                database.execSQL("DROP INDEX IF EXISTS `index_DM_workspaceId`")
+                // Create composite covering indexes
+                database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_ws_sender_receiver` ON `DM` (`workspaceId`, `senderId`, `receiverId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_ws_receiver_sender` ON `DM` (`workspaceId`, `receiverId`, `senderId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_timestamp_sender` ON `DM` (`timestamp`, `senderId`)")
             }
         }
     }
