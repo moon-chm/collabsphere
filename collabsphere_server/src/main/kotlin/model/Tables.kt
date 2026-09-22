@@ -21,6 +21,7 @@ object UsersTable : Table("users") {
     val showOnlineStatus = bool("show_online_status").default(true)
     val showLastSeen = bool("show_last_seen").default(true)
     val profileVisibility = varchar("profile_visibility", 20).default("public") // "public" | "members_only"
+    val fcmToken = varchar("fcm_token", 500).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

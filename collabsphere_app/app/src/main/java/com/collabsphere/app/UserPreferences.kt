@@ -33,6 +33,27 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         val USER_NAME = stringPreferencesKey("saved_user_name")
         val USER_EMAIL = stringPreferencesKey("saved_user_email")
         val AUTH_TOKEN = stringPreferencesKey("saved_auth_token")
+        val FCM_TOKEN = stringPreferencesKey("saved_fcm_token")
+    }
+
+    val fcmTokenFlow: Flow<String?> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[FCM_TOKEN] }
+
+    suspend fun saveFcmToken(token: String?) {
+        dataStore.edit { preferences ->
+            if (token.isNullOrBlank()) {
+                preferences.remove(FCM_TOKEN)
+            } else {
+                preferences[FCM_TOKEN] = token
+            }
+        }
     }
 
     val authTokenFlow: Flow<String?> = dataStore.data

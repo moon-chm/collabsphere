@@ -130,6 +130,7 @@ class MainActivity : ComponentActivity() {
                         if (savedUserId != -1) {
                             dashboardViewModel.updateUserId(savedUserId)
                             dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, savedUserId.toLong())
+                            com.collabsphere.app.remote.fcm.FcmTokenRegistrar.syncCurrentToken(savedUserId)
                         }
                     }
 
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
                             userPreferences.saveUserId(loggedInUserId.toInt())
                             dashboardViewModel.updateUserId(loggedInUserId.toInt())
                             dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, loggedInUserId)
+                            com.collabsphere.app.remote.fcm.FcmTokenRegistrar.syncCurrentToken(loggedInUserId.toInt())
                         }
                     }
 

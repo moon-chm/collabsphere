@@ -4,6 +4,7 @@ plugins {
     id("androidx.room") version "2.7.2"
     id("com.google.devtools.ksp") version "2.0.0-1.0.22"
     kotlin("plugin.serialization") version "2.2.10"
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -110,6 +111,9 @@ dependencies {
     implementation("io.insert-koin:koin-android:3.5.6")
     implementation("io.insert-koin:koin-androidx-compose:3.5.6")
     implementation("io.insert-koin:koin-androidx-workmanager:3.5.6")
+
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

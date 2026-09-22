@@ -164,4 +164,17 @@ class LoginApiService(private val client: HttpClient) {
             setBody(request)
         }
     }
-}
+
+    suspend fun updateFcmToken(userId: Int, fcmToken: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/user/fcm-token") {
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("userId" to userId.toString(), "fcmToken" to fcmToken))
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            android.util.Log.e("LoginApiService", "Failed updating FCM token", e)
+            false
+        }
+    }
+}

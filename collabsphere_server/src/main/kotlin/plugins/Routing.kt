@@ -166,6 +166,30 @@ private suspend fun createAndPushNotification(
     val frame = NotificationPushFrame(notification = notification)
     val json = Json.encodeToString(frame)
     sendToUser(recipientId.toLong(), json)
+
+    // Send high-priority background push via Firebase Cloud Messaging
+    if (type == "DM") {
+        com.collabsphere.util.FcmService.sendDmPush(
+            recipientUserId = recipientId,
+            senderId = actorId ?: 0,
+            senderUsername = notification.actorUsername ?: "Someone",
+            workspaceId = workspaceId ?: 0,
+            messageId = referenceId ?: 0,
+            content = body,
+            timestamp = notification.createdAt
+        )
+    } else {
+        com.collabsphere.util.FcmService.sendGenericPush(
+            recipientUserId = recipientId,
+            notificationId = notification.id,
+            type = notification.type,
+            title = notification.title,
+            body = notification.body,
+            workspaceId = notification.workspaceId,
+            actorUsername = notification.actorUsername,
+            actorAvatarUrl = notification.actorAvatarUrl
+        )
+    }
 }
 
 fun Application.configureRouting() {
@@ -272,6 +296,27 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.Created, userResponse)
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, "Server Error")
+            }
+        }
+
+        post("/api/user/fcm-token") {
+            try {
+                val params = call.receive<Map<String, String>>()
+                val userId = params["userId"]?.toIntOrNull()
+                val fcmToken = params["fcmToken"]
+
+                if (userId != null && !fcmToken.isNullOrBlank()) {
+                    dbQuery {
+                        UsersTable.update({ UsersTable.id eq userId }) {
+                            it[UsersTable.fcmToken] = fcmToken
+                        }
+                    }
+                    call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
+                } else {
+                    call.respond(HttpStatusCode.BadRequest, "Missing userId or fcmToken")
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, "Invalid request body")
             }
         }
 

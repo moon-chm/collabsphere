@@ -3,4 +3,5 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     id("com.google.devtools.ksp") version "2.0.0-1.0.22" apply false
     id("androidx.room") version "2.7.2" apply false
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }

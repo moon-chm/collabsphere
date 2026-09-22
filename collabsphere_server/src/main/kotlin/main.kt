@@ -30,6 +30,7 @@ fun Application.module() {
     // pure attack surface with no functional benefit. Add a scoped CORS config if a web client ever exists.
 
     DatabaseFactory.init()
+    com.collabsphere.util.FcmService.init()
 
     install(ContentNegotiation) {
         json()
