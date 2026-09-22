@@ -117,7 +117,7 @@ fun AppNavigation(
                     notificationsViewModel.onMarkRead(listOf(deepLink.notificationId))
                 }
                 val workspaces = dashboardViewModel.workspaces.value
-                val matchedWs = workspaces.find { it.id == deepLink.workspaceId }
+                val matchedWs = workspaces?.find { it.id == deepLink.workspaceId }
                 val wsName = matchedWs?.workspaceName ?: deepLink.senderName.ifEmpty { "Workspace" }
                 val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
 
@@ -259,7 +259,7 @@ fun AppNavigation(
                         val workspaceId = notification.workspaceId
                         if (workspaceId != null) {
                             val wsName = dashboardViewModel.workspaces.value
-                                .find { it.id == workspaceId }?.workspaceName ?: "Workspace"
+                                ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
                             val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
                             // Best-effort per type — the notification payload doesn't carry a channelId,
                             // so CHANNEL_MESSAGE/MENTION land on the workspace's Channels tab rather than

@@ -49,6 +49,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.collabsphere.app.model.workspace.WorkspaceEntity
 import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.view.components.WorkspaceSkeletonList
 import com.collabsphere.app.viewmodel.DashboardViewModel
 
 // Color palette for workspace initials (cycles through accent colors)
@@ -410,7 +411,7 @@ fun DashboardScreen(
             Spacer(Modifier.height(20.dp))
 
             // ── Summary banner ──
-            DashboardSummaryBanner(count = workspaces.size)
+            DashboardSummaryBanner(count = workspaces?.size ?: 0)
 
             Spacer(Modifier.height(20.dp))
 
@@ -425,9 +426,9 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = Ink
                 )
-                if (workspaces.isNotEmpty()) {
+                if (!workspaces.isNullOrEmpty()) {
                     Text(
-                        text  = "${workspaces.size} total",
+                        text  = "${workspaces?.size ?: 0} total",
                         style = MaterialTheme.typography.labelMedium,
                         color = Muted
                     )
@@ -436,29 +437,39 @@ fun DashboardScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── List or empty state ──
-            if (workspaces.isEmpty()) {
-                DashboardEmptyState()
-            } else {
-                LazyColumn(
-                    modifier            = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding      = PaddingValues(bottom = 100.dp)
-                ) {
-                    items(
-                        items = workspaces,
-                        key   = { ws -> "${ws.id}_${ws.workspaceName}" }
-                    ) { workspace ->
-                        val accentColor = workspaceAccents[workspace.id % workspaceAccents.size]
-                        WorkspaceItem(
-                            workspace     = workspace,
-                            modifier      = Modifier.animateItem(),
-                            accentColor   = accentColor,
-                            onItemClick   = { onWorkspaceClick(workspace) },
-                            onDeleteClick = { onDeleteWorkspaceClick(workspace) }
-                        )
+            // ── List, Skeleton, or Empty state ──
+            when {
+                workspaces == null -> {
+                    WorkspaceSkeletonList(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    )
+                }
+                workspaces!!.isEmpty() -> {
+                    DashboardEmptyState()
+                }
+                else -> {
+                    LazyColumn(
+                        modifier            = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding      = PaddingValues(bottom = 100.dp)
+                    ) {
+                        items(
+                            items = workspaces!!,
+                            key   = { ws -> "${ws.id}_${ws.workspaceName}" }
+                        ) { workspace ->
+                            val accentColor = workspaceAccents[workspace.id % workspaceAccents.size]
+                            WorkspaceItem(
+                                workspace     = workspace,
+                                modifier      = Modifier.animateItem(),
+                                accentColor   = accentColor,
+                                onItemClick   = { onWorkspaceClick(workspace) },
+                                onDeleteClick = { onDeleteWorkspaceClick(workspace) }
+                            )
+                        }
                     }
                 }
             }

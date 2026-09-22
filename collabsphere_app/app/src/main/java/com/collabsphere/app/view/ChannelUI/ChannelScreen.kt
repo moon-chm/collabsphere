@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.collabsphere.app.view.components.ChannelSkeletonList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,9 +121,7 @@ fun ChannelScreen(
 
             when {
                 channels == null -> {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    ChannelSkeletonList(modifier = Modifier.weight(1f))
                 }
                 channels!!.isEmpty() -> {
                 Box(

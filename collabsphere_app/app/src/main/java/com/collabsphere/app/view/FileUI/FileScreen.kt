@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.collabsphere.app.view.components.FileSkeletonList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -179,9 +180,7 @@ onDrawBehind {
 
             when {
                 localFiles == null -> {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    FileSkeletonList(modifier = Modifier.weight(1f))
                 }
                 localFiles!!.isEmpty() -> {
                 Box(

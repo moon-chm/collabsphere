@@ -44,7 +44,7 @@ class DashboardViewModel(
         }
     }
 
-    val workspaces: StateFlow<List<WorkspaceEntity>> = userIdState
+    val workspaces: StateFlow<List<WorkspaceEntity>?> = userIdState
         .flatMapLatest { userId ->
             if (userId != -1 && userId > 0) {
                 repository.getAllWorkspacesForUser(userId)
@@ -55,7 +55,7 @@ class DashboardViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
+            initialValue = null
         )
 
     fun updateUserId(newUserId: Int) {

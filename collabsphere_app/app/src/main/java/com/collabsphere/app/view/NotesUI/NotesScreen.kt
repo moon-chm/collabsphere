@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.collabsphere.app.view.components.NotesSkeletonList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,9 +121,7 @@ fun NotesScreen(
 
             when {
                 notes == null -> {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    NotesSkeletonList(modifier = Modifier.weight(1f))
                 }
                 notes!!.isEmpty() -> {
                 Box(

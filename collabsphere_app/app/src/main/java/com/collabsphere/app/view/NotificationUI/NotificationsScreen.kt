@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.dto.notification.NotificationResponse
 import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.view.components.NotificationSkeletonList
 import com.collabsphere.app.viewmodel.NotificationsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,7 +120,7 @@ fun NotificationsScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && notifications.isEmpty() -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = CoralStart)
+                    NotificationSkeletonList()
                 }
                 notifications.isEmpty() -> {
                     Column(

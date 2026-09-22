@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.collabsphere.app.view.components.MessageSkeletonList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -385,10 +386,7 @@ fun MessageScreen(
         ) {
             when {
                 messages == null -> {
-                    // Loading: Room hasn't emitted yet — show spinner instead of blank/empty flash
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = CoralStart)
-                    }
+                    MessageSkeletonList()
                 }
                 messages!!.isEmpty() -> {
                     Box(
