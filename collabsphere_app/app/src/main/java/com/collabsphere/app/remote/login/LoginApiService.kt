@@ -3,6 +3,12 @@ package com.collabsphere.app.remote.login
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.login.LoginRequest
 import com.collabsphere.app.dto.login.RegisterRequest
+import com.collabsphere.app.dto.login.RegisterResponse
+import com.collabsphere.app.dto.login.VerifyRegistrationRequest
+import com.collabsphere.app.dto.login.ResendVerificationRequest
+import com.collabsphere.app.dto.login.ForgotPasswordRequest
+import com.collabsphere.app.dto.login.ResetPasswordRequest
+import com.collabsphere.app.dto.login.AuthMessageResponse
 import com.collabsphere.app.dto.login.LoginResponse
 import com.collabsphere.app.dto.login.AvatarUploadResponse
 import com.collabsphere.app.dto.login.ChangeEmailRequest
@@ -40,7 +46,7 @@ class LoginApiService(private val client: HttpClient) {
         }
     }
 
-    suspend fun register(request: RegisterRequest): LoginResponse = withContext(Dispatchers.IO) {
+    suspend fun register(request: RegisterRequest): RegisterResponse = withContext(Dispatchers.IO) {
         val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/register") {
             contentType(ContentType.Application.Json)
             setBody(request)
@@ -51,6 +57,58 @@ class LoginApiService(private val client: HttpClient) {
         } else {
             val errorBody = response.bodyAsText()
             throw Exception(errorBody.ifBlank { "Registration failed (${response.status})" })
+        }
+    }
+
+    suspend fun verifyRegistration(email: String, otp: String): AuthMessageResponse = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/auth/verify-registration") {
+            contentType(ContentType.Application.Json)
+            setBody(VerifyRegistrationRequest(email, otp))
+        }
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Verification failed (${response.status})" })
+        }
+    }
+
+    suspend fun resendVerification(email: String): AuthMessageResponse = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/auth/resend-verification") {
+            contentType(ContentType.Application.Json)
+            setBody(ResendVerificationRequest(email))
+        }
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Failed to resend code (${response.status})" })
+        }
+    }
+
+    suspend fun forgotPassword(email: String): AuthMessageResponse = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/auth/forgot-password") {
+            contentType(ContentType.Application.Json)
+            setBody(ForgotPasswordRequest(email))
+        }
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Failed to request password reset (${response.status})" })
+        }
+    }
+
+    suspend fun resetPassword(email: String, otp: String, newPassword: String): AuthMessageResponse = withContext(Dispatchers.IO) {
+        val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/auth/reset-password") {
+            contentType(ContentType.Application.Json)
+            setBody(ResetPasswordRequest(email, otp, newPassword))
+        }
+        if (response.status.isSuccess()) {
+            response.body()
+        } else {
+            val errorBody = response.bodyAsText()
+            throw Exception(errorBody.ifBlank { "Failed to reset password (${response.status})" })
         }
     }
 

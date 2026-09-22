@@ -23,6 +23,9 @@ import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UserBlocksTable
 import com.collabsphere.model.UserVerificationTable
 import com.collabsphere.model.NotificationsTable
+import com.collabsphere.model.PasswordResetTable
+import com.collabsphere.model.WorkspaceInvitationsTable
+import com.collabsphere.util.EmailService
 import com.collabsphere.dto.NotificationResponse
 import com.collabsphere.dto.NotificationCountResponse
 import com.collabsphere.dto.MarkReadRequest
@@ -48,6 +51,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import java.io.File
 import java.util.UUID
@@ -230,34 +234,50 @@ fun Application.configureRouting() {
         post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
-                val user = dbQuery {
+                val trimmedEmail = request.email.trim().lowercase()
+
+                val userRow = dbQuery {
                     UsersTable.selectAll()
-                        .where { UsersTable.email eq request.email }
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
                         .singleOrNull()
-                        ?.takeIf { PasswordHasher.matches(request.password, it[UsersTable.password]) }
-                        ?.let { row ->
-                            if (!PasswordHasher.isHashed(row[UsersTable.password])) {
-                                UsersTable.update({ UsersTable.id eq row[UsersTable.id] }) { stmt ->
-                                    stmt[password] = PasswordHasher.hash(request.password)
-                                }
-                            }
-                            val uid = row[UsersTable.id]
-                            LoginResponse(
-                                id = uid,
-                                userName = row[UsersTable.username],
-                                email = row[UsersTable.email],
-                                token = JwtConfig.generateToken(uid),
-                                avatarUrl = AvatarGenerator.avatarUrlFor(uid, row[UsersTable.avatarUrl]),
-                                isEmailVerified = row[UsersTable.isEmailVerified]
-                            )
-                        }
                 }
 
-                if (user != null) {
-                    call.respond(HttpStatusCode.OK, user)
-                } else {
+                if (userRow == null || !PasswordHasher.matches(request.password, userRow[UsersTable.password])) {
                     call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
+                    return@post
                 }
+
+                // Strict Login Gate: Unverified users cannot log in
+                if (!userRow[UsersTable.isEmailVerified]) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        mapOf(
+                            "error" to "EMAIL_NOT_VERIFIED",
+                            "message" to "Please verify your email before logging in.",
+                            "email" to userRow[UsersTable.email]
+                        )
+                    )
+                    return@post
+                }
+
+                if (!PasswordHasher.isHashed(userRow[UsersTable.password])) {
+                    dbQuery {
+                        UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) { stmt ->
+                            stmt[password] = PasswordHasher.hash(request.password)
+                        }
+                    }
+                }
+
+                val uid = userRow[UsersTable.id]
+                val response = LoginResponse(
+                    id = uid,
+                    userName = userRow[UsersTable.username],
+                    email = userRow[UsersTable.email],
+                    token = JwtConfig.generateToken(uid),
+                    avatarUrl = AvatarGenerator.avatarUrlFor(uid, userRow[UsersTable.avatarUrl]),
+                    isEmailVerified = true
+                )
+                call.respond(HttpStatusCode.OK, response)
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, "Malformed request body or server error")
             }
@@ -266,36 +286,218 @@ fun Application.configureRouting() {
         post("/api/register") {
             try {
                 val request = call.receive<RegisterRequest>()
+                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedUsername = request.userName.trim()
+
+                if (trimmedEmail.isBlank() || trimmedUsername.isBlank() || request.password.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, "All fields are required")
+                    return@post
+                }
+
                 val userExists = dbQuery {
-                    UsersTable.selectAll().where { UsersTable.email eq request.email }.count() > 0
+                    UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.count() > 0
                 }
 
                 if (userExists) {
                     call.respond(HttpStatusCode.Conflict, "Email already registered")
                     return@post
                 }
-                val userResponse = dbQuery {
+
+                val generatedId = dbQuery {
                     val insertStatement = UsersTable.insert {
-                        it[email] = request.email
-                        it[username] = request.userName
+                        it[email] = trimmedEmail
+                        it[username] = trimmedUsername
                         it[password] = PasswordHasher.hash(request.password)
+                        it[isEmailVerified] = false
                     }
-
-                    val generatedId = insertStatement[UsersTable.id]
-
-                    LoginResponse(
-                        id = generatedId,
-                        userName = request.userName,
-                        email = request.email,
-                        token = JwtConfig.generateToken(generatedId),
-                        avatarUrl = AvatarGenerator.avatarUrlFor(generatedId, null),
-                        isEmailVerified = false
-                    )
+                    insertStatement[UsersTable.id]
                 }
 
-                call.respond(HttpStatusCode.Created, userResponse)
+                // Generate 6-digit OTP valid for 15 minutes
+                val otp = String.format("%06d", (100000..999999).random())
+                val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+
+                dbQuery {
+                    UserVerificationTable.deleteWhere { UserVerificationTable.userId eq generatedId }
+                    UserVerificationTable.insert {
+                        it[userId] = generatedId
+                        it[token] = otp
+                        it[UserVerificationTable.expiresAt] = expiresAt
+                    }
+                }
+
+                EmailService.sendVerificationOtp(trimmedEmail, otp)
+
+                call.respond(
+                    HttpStatusCode.Created,
+                    RegisterResponse(
+                        userId = generatedId,
+                        email = trimmedEmail,
+                        message = "Registration successful! A 6-digit verification code has been sent to your email."
+                    )
+                )
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, "Server Error")
+                call.respond(HttpStatusCode.BadRequest, "Server Error: ${e.message}")
+            }
+        }
+
+        post("/api/auth/verify-registration") {
+            try {
+                val request = call.receive<VerifyRegistrationRequest>()
+                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedOtp = request.otp.trim()
+
+                val result = dbQuery {
+                    val userRow = UsersTable.selectAll()
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
+                        .singleOrNull() ?: return@dbQuery "NOT_FOUND"
+
+                    val uid = userRow[UsersTable.id]
+                    val verificationRow = UserVerificationTable.selectAll()
+                        .where { UserVerificationTable.userId eq uid }
+                        .singleOrNull() ?: return@dbQuery "NO_CODE"
+
+                    if (System.currentTimeMillis() > verificationRow[UserVerificationTable.expiresAt]) {
+                        return@dbQuery "EXPIRED"
+                    }
+
+                    if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
+                        return@dbQuery "INVALID"
+                    }
+
+                    UsersTable.update({ UsersTable.id eq uid }) {
+                        it[isEmailVerified] = true
+                    }
+                    UserVerificationTable.deleteWhere { UserVerificationTable.userId eq uid }
+                    "OK"
+                }
+
+                when (result) {
+                    "OK" -> call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Email verified successfully! You can now log in."))
+                    "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Verification code expired. Please request a new code."))
+                    "INVALID" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid verification code. Please check and try again."))
+                    "NO_CODE" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "No pending verification found for this account."))
+                    else -> call.respond(HttpStatusCode.NotFound, AuthMessageResponse(false, "Account not found."))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+            }
+        }
+
+        post("/api/auth/resend-verification") {
+            try {
+                val request = call.receive<ResendVerificationRequest>()
+                val trimmedEmail = request.email.trim().lowercase()
+
+                val userRow = dbQuery {
+                    UsersTable.selectAll()
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
+                        .singleOrNull()
+                }
+
+                if (userRow == null) {
+                    call.respond(HttpStatusCode.NotFound, AuthMessageResponse(false, "Account not found."))
+                    return@post
+                }
+
+                if (userRow[UsersTable.isEmailVerified]) {
+                    call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Email is already verified. You can log in."))
+                    return@post
+                }
+
+                val uid = userRow[UsersTable.id]
+                val otp = String.format("%06d", (100000..999999).random())
+                val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+
+                dbQuery {
+                    UserVerificationTable.deleteWhere { UserVerificationTable.userId eq uid }
+                    UserVerificationTable.insert {
+                        it[userId] = uid
+                        it[token] = otp
+                        it[UserVerificationTable.expiresAt] = expiresAt
+                    }
+                }
+
+                EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)
+                call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "A new 6-digit verification code has been sent to your email."))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+            }
+        }
+
+        post("/api/auth/forgot-password") {
+            try {
+                val request = call.receive<ForgotPasswordRequest>()
+                val trimmedEmail = request.email.trim().lowercase()
+
+                val userExists = dbQuery {
+                    UsersTable.selectAll()
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
+                        .count() > 0
+                }
+
+                if (userExists) {
+                    val otp = String.format("%06d", (100000..999999).random())
+                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+
+                    dbQuery {
+                        PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
+                        PasswordResetTable.insert {
+                            it[email] = trimmedEmail
+                            it[PasswordResetTable.otp] = otp
+                            it[PasswordResetTable.expiresAt] = expiresAt
+                        }
+                    }
+
+                    EmailService.sendPasswordResetOtp(trimmedEmail, otp)
+                }
+
+                call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "If an account exists for $trimmedEmail, a reset code has been sent."))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+            }
+        }
+
+        post("/api/auth/reset-password") {
+            try {
+                val request = call.receive<ResetPasswordRequest>()
+                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedOtp = request.otp.trim()
+
+                if (request.newPassword.length < 4) {
+                    call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Password must be at least 4 characters."))
+                    return@post
+                }
+
+                val resetResult = dbQuery {
+                    val resetRow = PasswordResetTable.selectAll()
+                        .where { PasswordResetTable.email eq trimmedEmail }
+                        .singleOrNull() ?: return@dbQuery "NO_REQUEST"
+
+                    if (System.currentTimeMillis() > resetRow[PasswordResetTable.expiresAt]) {
+                        return@dbQuery "EXPIRED"
+                    }
+
+                    if (resetRow[PasswordResetTable.otp] != trimmedOtp) {
+                        return@dbQuery "INVALID"
+                    }
+
+                    val updated = UsersTable.update({ UsersTable.email.lowerCase() eq trimmedEmail }) {
+                        it[password] = PasswordHasher.hash(request.newPassword)
+                    }
+
+                    PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
+                    if (updated > 0) "OK" else "USER_NOT_FOUND"
+                }
+
+                when (resetResult) {
+                    "OK" -> call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Password reset successfully! You can now log in."))
+                    "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Reset code expired. Please request a new code."))
+                    "INVALID" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset code. Please check and try again."))
+                    else -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset request."))
+                }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
 
@@ -971,6 +1173,278 @@ fun Application.configureRouting() {
                         }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.BadRequest, "Error adding member")
+                    }
+                }
+
+                post("/invitations/{workspaceId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<SendInvitationRequest>()
+                        val trimmedEmail = request.email.trim().lowercase()
+
+                        if (trimmedEmail.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Email cannot be blank")
+                        }
+
+                        val wsInfo = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
+                            val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq workspaceIdParam }.singleOrNull()
+                            val inviter = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            if (ws != null && inviter != null) {
+                                Pair(ws[WorkspacesTable.workspaceName], inviter[UsersTable.username])
+                            } else null
+                        } ?: return@post call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+
+                        val (workspaceName, inviterName) = wsInfo
+
+                        // Check if already a member
+                        val alreadyMember = dbQuery {
+                            val userRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
+                            if (userRow != null) {
+                                WorkspaceMembersTable.selectAll().where {
+                                    (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq userRow[UsersTable.id])
+                                }.count() > 0
+                            } else false
+                        }
+
+                        if (alreadyMember) {
+                            return@post call.respond(HttpStatusCode.Conflict, "User is already a member of this workspace")
+                        }
+
+                        // Generate unique 6-character alphanumeric code
+                        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+                        val inviteCode = (1..6).map { chars.random() }.joinToString("")
+                        val expiresAt = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // 7 days
+
+                        val insertedInvitation = dbQuery {
+                            val invId = WorkspaceInvitationsTable.insert {
+                                it[workspaceId] = workspaceIdParam
+                                it[inviterUserId] = actingUserId
+                                it[inviteeEmail] = trimmedEmail
+                                it[WorkspaceInvitationsTable.inviteCode] = inviteCode
+                                it[status] = "PENDING"
+                                it[WorkspaceInvitationsTable.expiresAt] = expiresAt
+                            }[WorkspaceInvitationsTable.id]
+
+                            // If recipient is already a registered user, send an in-app notification too
+                            val recipientRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
+                            if (recipientRow != null) {
+                                NotificationsTable.insert {
+                                    it[recipientId] = recipientRow[UsersTable.id]
+                                    it[actorId] = actingUserId
+                                    it[type] = "WORKSPACE_INVITE"
+                                    it[title] = "Workspace Invitation"
+                                    it[body] = "$inviterName invited you to join $workspaceName (Code: $inviteCode)"
+                                    it[workspaceId] = workspaceIdParam
+                                    it[referenceId] = invId
+                                }
+                            }
+
+                            InvitationResponse(
+                                id = invId,
+                                workspaceId = workspaceIdParam,
+                                workspaceName = workspaceName,
+                                inviterName = inviterName,
+                                inviteeEmail = trimmedEmail,
+                                inviteCode = inviteCode,
+                                status = "PENDING",
+                                createdAt = System.currentTimeMillis()
+                            )
+                        }
+
+                        EmailService.sendWorkspaceInvitation(trimmedEmail, workspaceName, inviterName, inviteCode)
+                        call.respond(HttpStatusCode.Created, insertedInvitation)
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, "Failed to send invitation: ${e.message}")
+                    }
+                }
+
+                get("/invitations/pending") {
+                    try {
+                        val actingUserId = call.authenticatedUserId()
+                        val userEmail = dbQuery {
+                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
+                        } ?: return@get call.respond(HttpStatusCode.Unauthorized, "User not found")
+
+                        val pendingInvites = dbQuery {
+                            (WorkspaceInvitationsTable innerJoin WorkspacesTable innerJoin UsersTable)
+                                .selectAll()
+                                .where {
+                                    (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) and
+                                    (WorkspaceInvitationsTable.status eq "PENDING") and
+                                    (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
+                                }
+                                .map {
+                                    InvitationResponse(
+                                        id = it[WorkspaceInvitationsTable.id],
+                                        workspaceId = it[WorkspaceInvitationsTable.workspaceId],
+                                        workspaceName = it[WorkspacesTable.workspaceName],
+                                        inviterName = it[UsersTable.username],
+                                        inviteeEmail = it[WorkspaceInvitationsTable.inviteeEmail],
+                                        inviteCode = it[WorkspaceInvitationsTable.inviteCode],
+                                        status = it[WorkspaceInvitationsTable.status],
+                                        createdAt = it[WorkspaceInvitationsTable.createdAt]
+                                    )
+                                }
+                        }
+                        call.respond(HttpStatusCode.OK, pendingInvites)
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to fetch invitations")
+                    }
+                }
+
+                post("/invitations/{id}/accept") {
+                    try {
+                        val invId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing invitation id")
+                        val actingUserId = call.authenticatedUserId()
+
+                        val userEmail = dbQuery {
+                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
+                        } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
+
+                        val acceptResult = dbQuery {
+                            val invRow = WorkspaceInvitationsTable.selectAll()
+                                .where { (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) }
+                                .singleOrNull() ?: return@dbQuery "NOT_FOUND"
+
+                            if (invRow[WorkspaceInvitationsTable.status] != "PENDING") {
+                                return@dbQuery "ALREADY_PROCESSED"
+                            }
+
+                            if (System.currentTimeMillis() > invRow[WorkspaceInvitationsTable.expiresAt]) {
+                                return@dbQuery "EXPIRED"
+                            }
+
+                            val wsId = invRow[WorkspaceInvitationsTable.workspaceId]
+
+                            val alreadyMember = WorkspaceMembersTable.selectAll().where {
+                                (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
+                            }.count() > 0
+
+                            if (!alreadyMember) {
+                                WorkspaceMembersTable.insert {
+                                    it[workspaceId] = wsId
+                                    it[userId] = actingUserId
+                                }
+                                WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
+                                    it[updatedAt] = System.currentTimeMillis()
+                                }
+                            }
+
+                            WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invId }) {
+                                it[status] = "ACCEPTED"
+                            }
+                            "OK"
+                        }
+
+                        when (acceptResult) {
+                            "OK" -> call.respond(HttpStatusCode.OK, mapOf("status" to "success", "message" to "Invitation accepted"))
+                            "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, "Invitation expired")
+                            "ALREADY_PROCESSED" -> call.respond(HttpStatusCode.BadRequest, "Invitation already processed")
+                            else -> call.respond(HttpStatusCode.NotFound, "Invitation not found")
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, "Failed to accept invitation")
+                    }
+                }
+
+                post("/invitations/{id}/decline") {
+                    try {
+                        val invId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing invitation id")
+                        val actingUserId = call.authenticatedUserId()
+
+                        val userEmail = dbQuery {
+                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
+                        } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
+
+                        val declined = dbQuery {
+                            val updated = WorkspaceInvitationsTable.update({
+                                (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase())
+                            }) {
+                                it[status] = "DECLINED"
+                            }
+                            updated > 0
+                        }
+
+                        if (declined) {
+                            call.respond(HttpStatusCode.OK, mapOf("status" to "success", "message" to "Invitation declined"))
+                        } else {
+                            call.respond(HttpStatusCode.NotFound, "Invitation not found")
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, "Failed to decline invitation")
+                    }
+                }
+
+                post("/join-by-code") {
+                    try {
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<JoinWorkspaceByCodeRequest>()
+                        val trimmedCode = request.inviteCode.trim().uppercase()
+
+                        if (trimmedCode.isBlank()) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Invite code cannot be blank")
+                        }
+
+                        val joinedWorkspace = dbQuery {
+                            val invRow = WorkspaceInvitationsTable.selectAll()
+                                .where {
+                                    (WorkspaceInvitationsTable.inviteCode eq trimmedCode) and
+                                    (WorkspaceInvitationsTable.status eq "PENDING") and
+                                    (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
+                                }
+                                .singleOrNull()
+
+                            val wsId = if (invRow != null) {
+                                invRow[WorkspaceInvitationsTable.workspaceId]
+                            } else {
+                                null
+                            }
+
+                            if (wsId == null) return@dbQuery null
+
+                            val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq wsId }.singleOrNull()
+                                ?: return@dbQuery null
+
+                            val alreadyMember = WorkspaceMembersTable.selectAll().where {
+                                (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
+                            }.count() > 0
+
+                            if (!alreadyMember) {
+                                WorkspaceMembersTable.insert {
+                                    it[workspaceId] = wsId
+                                    it[userId] = actingUserId
+                                }
+                                WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
+                                    it[updatedAt] = System.currentTimeMillis()
+                                }
+                            }
+
+                            if (invRow != null) {
+                                WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invRow[WorkspaceInvitationsTable.id] }) {
+                                    it[status] = "ACCEPTED"
+                                }
+                            }
+
+                            WorkspaceResponse(
+                                id = ws[WorkspacesTable.id],
+                                userId = ws[WorkspacesTable.userId],
+                                workspaceName = ws[WorkspacesTable.workspaceName],
+                                workspaceOwner = ws[WorkspacesTable.workspaceOwner]
+                            )
+                        }
+
+                        if (joinedWorkspace != null) {
+                            call.respond(HttpStatusCode.OK, joinedWorkspace)
+                        } else {
+                            call.respond(HttpStatusCode.NotFound, "Invalid or expired invite code")
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, "Failed to join workspace: ${e.message}")
                     }
                 }
 

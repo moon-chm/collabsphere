@@ -160,13 +160,34 @@ object NotificationsTable : Table("notifications") {
     val id = integer("id").autoIncrement()
     val recipientId = integer("recipient_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val actorId = integer("actor_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
-    val type = varchar("type", 30)          // DM | CHANNEL_MESSAGE | MENTION | TASK_ASSIGNED | TASK_UPDATED
+    val type = varchar("type", 30)          // DM | CHANNEL_MESSAGE | MENTION | TASK_ASSIGNED | TASK_UPDATED | WORKSPACE_INVITE
     val title = varchar("title", 255)
     val body = text("body")
     val workspaceId = integer("workspace_id").nullable()
-    val referenceId = integer("reference_id").nullable()  // message id, task id, etc.
+    val referenceId = integer("reference_id").nullable()  // message id, task id, invitation id, etc.
     val isRead = bool("is_read").default(false)
     val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object PasswordResetTable : Table("password_resets") {
+    val email = varchar("email", 255)
+    val otp = varchar("otp", 10)
+    val expiresAt = long("expires_at")
+
+    override val primaryKey = PrimaryKey(email)
+}
+
+object WorkspaceInvitationsTable : Table("workspace_invitations") {
+    val id = integer("id").autoIncrement()
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val inviterUserId = integer("inviter_user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val inviteeEmail = varchar("invitee_email", 255).index()
+    val inviteCode = varchar("invite_code", 16).index()
+    val status = varchar("status", 20).default("PENDING") // PENDING | ACCEPTED | DECLINED
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val expiresAt = long("expires_at")
 
     override val primaryKey = PrimaryKey(id)
 }

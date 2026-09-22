@@ -39,6 +39,7 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages:${ktor_version}")
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("com.google.firebase:firebase-admin:9.2.0")
+    implementation("com.sun.mail:jakarta.mail:2.0.1")
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
 }

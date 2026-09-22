@@ -282,4 +282,80 @@ class WorkspaceRepo(
             preferences[androidx.datastore.preferences.core.intPreferencesKey("temp_ws_$tempId")] = realId
         }
     }
+
+    suspend fun sendInvitation(workspaceId: Int, email: String): Result<com.collabsphere.app.dto.workspace.InvitationResponse> = withContext(Dispatchers.IO) {
+        try {
+            val response = workspaceApiService.sendInvitation(workspaceId, com.collabsphere.app.dto.workspace.SendInvitationRequest(email.trim().lowercase()))
+            Result.success(response)
+        } catch (e: Exception) {
+            Log.e("WorkspaceRepo", "Failed to send invitation", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPendingInvitations(): Result<List<com.collabsphere.app.dto.workspace.InvitationResponse>> = withContext(Dispatchers.IO) {
+        try {
+            val list = workspaceApiService.getPendingInvitations()
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e("WorkspaceRepo", "Failed to get pending invitations", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun acceptInvitation(invitationId: Int): Result<com.collabsphere.app.dto.workspace.MemberResponse> = withContext(Dispatchers.IO) {
+        try {
+            val member = workspaceApiService.acceptInvitation(invitationId)
+            val remoteWorkspaces = workspaceApiService.getWorkspacesByUserId(member.userId)
+            remoteWorkspaces.forEach { ws ->
+                workspaceDao.upsertWorkspace(
+                    WorkspaceEntity(
+                        id = ws.id,
+                        userId = ws.userId,
+                        workspaceName = ws.workspaceName,
+                        workspaceOwner = ws.workspaceOwner,
+                        workspacePassword = ""
+                    )
+                )
+            }
+            syncWorkspaceMembers(member.workspaceId)
+            Result.success(member)
+        } catch (e: Exception) {
+            Log.e("WorkspaceRepo", "Failed to accept invitation", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun declineInvitation(invitationId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val ok = workspaceApiService.declineInvitation(invitationId)
+            Result.success(ok)
+        } catch (e: Exception) {
+            Log.e("WorkspaceRepo", "Failed to decline invitation", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun joinWorkspaceByCode(inviteCode: String, actingUserId: Int): Result<com.collabsphere.app.dto.workspace.MemberResponse> = withContext(Dispatchers.IO) {
+        try {
+            val member = workspaceApiService.joinByCode(com.collabsphere.app.dto.workspace.JoinWorkspaceByCodeRequest(inviteCode.trim().uppercase()))
+            val remoteWorkspaces = workspaceApiService.getWorkspacesByUserId(actingUserId)
+            remoteWorkspaces.forEach { ws ->
+                workspaceDao.upsertWorkspace(
+                    WorkspaceEntity(
+                        id = ws.id,
+                        userId = ws.userId,
+                        workspaceName = ws.workspaceName,
+                        workspaceOwner = ws.workspaceOwner,
+                        workspacePassword = ""
+                    )
+                )
+            }
+            syncWorkspaceMembers(member.workspaceId)
+            Result.success(member)
+        } catch (e: Exception) {
+            Log.e("WorkspaceRepo", "Failed to join workspace by code", e)
+            Result.failure(e)
+        }
+    }
 }

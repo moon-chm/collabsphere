@@ -80,7 +80,9 @@ object DatabaseFactory {
                 WorkspaceMembersTable,
                 UserBlocksTable,
                 UserVerificationTable,
-                NotificationsTable
+                NotificationsTable,
+                PasswordResetTable,
+                WorkspaceInvitationsTable
             )
         }
     }

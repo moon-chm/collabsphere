@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
@@ -37,7 +39,9 @@ import com.collabsphere.app.viewmodel.NotificationsViewModel
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
     onBack: () -> Unit,
-    onNotificationClick: (NotificationResponse) -> Unit
+    onNotificationClick: (NotificationResponse) -> Unit,
+    onAcceptInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
+    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null
 ) {
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -141,7 +145,9 @@ fun NotificationsScreen(
                             NotificationRow(
                                 notification = notification,
                                 onClick = { onNotificationClick(notification) },
-                                onDelete = { viewModel.onDelete(notification.id) }
+                                onDelete = { viewModel.onDelete(notification.id) },
+                                onAcceptInvitation = onAcceptInvitation,
+                                onDeclineInvitation = onDeclineInvitation
                             )
                         }
                     }
@@ -154,6 +160,7 @@ fun NotificationsScreen(
 private fun iconFor(type: String): ImageVector = when (type) {
     "MENTION" -> Icons.Default.AlternateEmail
     "TASK_ASSIGNED", "TASK_UPDATED" -> Icons.AutoMirrored.Filled.Assignment
+    "WORKSPACE_INVITE" -> Icons.Default.GroupAdd
     else -> Icons.AutoMirrored.Filled.Chat
 }
 
@@ -161,7 +168,9 @@ private fun iconFor(type: String): ImageVector = when (type) {
 private fun NotificationRow(
     notification: NotificationResponse,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAcceptInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
+    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null
 ) {
     Box(
         modifier = Modifier
@@ -213,6 +222,45 @@ private fun NotificationRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = Muted
                 )
+
+                if (notification.type == "WORKSPACE_INVITE" && notification.referenceId != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MintGreen)
+                                .clickable {
+                                    onAcceptInvitation?.invoke(notification.referenceId, notification.id)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Accept",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Surface)
+                                .clickable {
+                                    onDeclineInvitation?.invoke(notification.referenceId, notification.id)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Decline",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Muted
+                            )
+                        }
+                    }
+                }
             }
 
             if (!notification.isRead) {

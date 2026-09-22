@@ -90,31 +90,91 @@ class WorkspaceViewModel(
         }
     }
 
+    private val _invitationStatus = MutableStateFlow<String?>(null)
+    val invitationStatus: StateFlow<String?> = _invitationStatus.asStateFlow()
+
+    private val _joinByCodeStatus = MutableStateFlow<String?>(null)
+    val joinByCodeStatus: StateFlow<String?> = _joinByCodeStatus.asStateFlow()
+
     fun onJoinWorkspace(workspaceId: Int, email: String) {
+        sendInvitation(workspaceId, email)
+    }
+
+    fun sendInvitation(workspaceId: Int, email: String) {
         val trimmedEmail = email.trim().lowercase()
 
         if (trimmedEmail.isEmpty()) {
-            _workspaceStatus.value = "Email address cannot be empty"
+            _invitationStatus.value = "Email address cannot be empty"
             return
         }
-        viewModelScope.launch {
-            val isAlreadyMember = repo.isUserMember(workspaceId, trimmedEmail)
-            if (isAlreadyMember) {
-                _workspaceStatus.value = "Member already present"
-                return@launch
-            }
-            val result = repo.addMemberToWorkspaceByEmail(workspaceId, trimmedEmail)
 
+        viewModelScope.launch {
+            val result = repo.sendInvitation(workspaceId, trimmedEmail)
             result.onSuccess {
-                _workspaceStatus.value = "Joined workspace successfully!"
+                _invitationStatus.value = "Invitation sent to $trimmedEmail with invite code: ${it.inviteCode}"
+                _workspaceStatus.value = "Invitation sent to $trimmedEmail"
                 clearInputs()
                 loadWorkspaceMembers(workspaceId)
             }
-
             result.onFailure {
-                _workspaceStatus.value = it.localizedMessage ?: "Failed to join workspace"
+                _invitationStatus.value = it.localizedMessage ?: "Failed to send invitation"
+                _workspaceStatus.value = it.localizedMessage ?: "Failed to send invitation"
             }
         }
+    }
+
+    fun joinByCode(inviteCode: String, onJoined: ((Int) -> Unit)? = null) {
+        val trimmedCode = inviteCode.trim().uppercase()
+        if (trimmedCode.length < 6) {
+            _joinByCodeStatus.value = "Please enter a valid 6-character invite code"
+            return
+        }
+
+        viewModelScope.launch {
+            val result = repo.joinWorkspaceByCode(trimmedCode, loggedInUserId)
+            result.onSuccess { member ->
+                _joinByCodeStatus.value = "Successfully joined workspace!"
+                _workspaceStatus.value = "Successfully joined workspace!"
+                onJoined?.invoke(member.workspaceId)
+            }
+            result.onFailure {
+                _joinByCodeStatus.value = it.localizedMessage ?: "Invalid or expired invite code"
+            }
+        }
+    }
+
+    fun acceptInvitation(invitationId: Int, onComplete: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = repo.acceptInvitation(invitationId)
+            result.onSuccess {
+                _workspaceStatus.value = "Joined workspace!"
+                onComplete?.invoke()
+            }
+            result.onFailure {
+                _workspaceStatus.value = it.localizedMessage ?: "Failed to accept invitation"
+            }
+        }
+    }
+
+    fun declineInvitation(invitationId: Int, onComplete: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = repo.declineInvitation(invitationId)
+            result.onSuccess {
+                _workspaceStatus.value = "Invitation declined"
+                onComplete?.invoke()
+            }
+            result.onFailure {
+                _workspaceStatus.value = it.localizedMessage ?: "Failed to decline invitation"
+            }
+        }
+    }
+
+    fun clearInvitationStatus() {
+        _invitationStatus.value = null
+    }
+
+    fun clearJoinByCodeStatus() {
+        _joinByCodeStatus.value = null
     }
 
     fun onDeleteWorkspace() {

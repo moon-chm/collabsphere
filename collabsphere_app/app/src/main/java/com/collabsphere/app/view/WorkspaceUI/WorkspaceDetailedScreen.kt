@@ -177,15 +177,16 @@ fun WorkspaceDetailedScreen(
                     }
 
                     Text(
-                        text = "Add team member",
+                        text = "Invite team member",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Ink
                     )
 
                     Text(
-                        text = "Enter email address to invite to $workspaceName.",
+                        text = "Enter email address to send an invitation to $workspaceName. An invitation code will be emailed.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Muted
+                        color = Muted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
 
                     // Inset debossed email field
@@ -324,7 +325,7 @@ fun WorkspaceDetailedScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Add",
+                                text = "Send Invite",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )

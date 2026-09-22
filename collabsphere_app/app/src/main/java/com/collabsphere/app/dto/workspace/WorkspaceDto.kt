@@ -45,3 +45,26 @@ data class WorkspaceSyncDto(
 data class DeleteWorkspaceResponse(
     val deletedIds: List<Int>
 )
+
+@Serializable
+data class SendInvitationRequest(
+    val email: String
+)
+
+@Serializable
+data class JoinWorkspaceByCodeRequest(
+    val inviteCode: String
+)
+
+@Serializable
+data class InvitationResponse(
+    val id: Int,
+    val workspaceId: Int,
+    val workspaceName: String,
+    val inviterName: String,
+    val inviteeEmail: String,
+    val inviteCode: String,
+    val status: String,
+    val createdAt: Long,
+    val expiresAt: Long
+)

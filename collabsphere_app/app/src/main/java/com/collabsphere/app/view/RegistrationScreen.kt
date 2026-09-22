@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
@@ -26,12 +27,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.LoginViewModel
@@ -41,14 +44,17 @@ fun RegistrationScreen(
     viewModel: LoginViewModel,
     onNavigateToLogin: () -> Unit
 ) {
-    // ── All original state & logic preserved exactly ──
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val loginStatus by viewModel.loginStatus.collectAsStateWithLifecycle()
+    val registrationSuccessEmail by viewModel.registrationSuccessEmail.collectAsStateWithLifecycle()
+    val verificationStatus by viewModel.verificationStatus.collectAsStateWithLifecycle()
+    val isVerificationSuccess by viewModel.isVerificationSuccess.collectAsStateWithLifecycle()
 
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var otpCode by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var lastClickTime by remember { mutableStateOf(0L) }
@@ -63,6 +69,24 @@ fun RegistrationScreen(
         }
     }
 
+    LaunchedEffect(verificationStatus) {
+        verificationStatus?.let {
+            isLoading = false
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearVerificationStatus()
+        }
+    }
+
+    LaunchedEffect(isVerificationSuccess) {
+        if (isVerificationSuccess) {
+            isLoading = false
+            Toast.makeText(context, "Account verified! You can now log in.", Toast.LENGTH_LONG).show()
+            viewModel.resetVerificationSuccess()
+            viewModel.clearRegistrationEmail()
+            onNavigateToLogin()
+        }
+    }
+
     val handleRegister = {
         val currentTime = System.currentTimeMillis()
         if (isFormValid && currentTime - lastClickTime > 500L) {
@@ -70,6 +94,19 @@ fun RegistrationScreen(
             isLoading = true
             focusManager.clearFocus()
             viewModel.onRegisterClick(email, username, password)
+        }
+    }
+
+    val handleVerify = {
+        val currentTime = System.currentTimeMillis()
+        val targetEmail = registrationSuccessEmail ?: email
+        if (otpCode.trim().length == 6 && currentTime - lastClickTime > 500L) {
+            lastClickTime = currentTime
+            isLoading = true
+            focusManager.clearFocus()
+            viewModel.onVerifyRegistration(targetEmail, otpCode.trim())
+        } else if (otpCode.trim().length != 6) {
+            Toast.makeText(context, "Please enter all 6 digits", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -90,152 +127,256 @@ fun RegistrationScreen(
         ) {
             Spacer(Modifier.height(20.dp))
 
-            // ── Brand mark (Indigo for Register) ──
-            SkeuoBrandMark(letter = "C", accentColor = IndigoStart)
+            if (registrationSuccessEmail != null) {
+                // ── VERIFY EMAIL OTP FLOW ──
+                SkeuoBrandMark(letter = "✓", accentColor = MintGreen)
 
-            Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(20.dp))
 
-            // ── Headline ──
-            Text(
-                text  = "Create account",
-                style = MaterialTheme.typography.displaySmall,
-                color = Ink,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text  = "Join CollabSphere and start collaborating",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Muted,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            // ── Form Card ──
-            SkeuoFormCard {
-                // Username field
-                SkeuoTextField(
-                    value         = username,
-                    onValueChange = { username = it },
-                    label         = "Username",
-                    placeholder   = "john_doe",
-                    keyboardType  = KeyboardType.Text,
-                    imeAction     = ImeAction.Next,
-                    onImeAction   = { focusManager.moveFocus(FocusDirection.Down) },
-                    leadingIcon   = {
-                        Icon(
-                            Icons.Outlined.Person, null,
-                            tint     = IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        AnimatedVisibility(username.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
-                            IconButton(onClick = { username = "" }) {
-                                Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                // Email field
-                SkeuoTextField(
-                    value         = email,
-                    onValueChange = { email = it },
-                    label         = "Email address",
-                    placeholder   = "name@example.com",
-                    keyboardType  = KeyboardType.Email,
-                    imeAction     = ImeAction.Next,
-                    onImeAction   = { focusManager.moveFocus(FocusDirection.Down) },
-                    leadingIcon   = {
-                        Icon(
-                            Icons.Outlined.Email, null,
-                            tint     = IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
-                            IconButton(onClick = { email = "" }) {
-                                Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                )
-
-                Spacer(Modifier.height(14.dp))
-
-                // Password field
-                SkeuoTextField(
-                    value                = password,
-                    onValueChange        = { password = it },
-                    label                = "Password",
-                    placeholder          = "At least 6 characters",
-                    keyboardType         = KeyboardType.Password,
-                    imeAction            = ImeAction.Done,
-                    onImeAction          = { handleRegister() },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None
-                                           else PasswordVisualTransformation(),
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.Lock, null,
-                            tint     = IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector    = if (passwordVisible) Icons.Outlined.Visibility
-                                                 else Icons.Outlined.VisibilityOff,
-                                contentDescription = if (passwordVisible) "Hide" else "Show",
-                                tint           = Muted,
-                                modifier       = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                )
-
-                Spacer(Modifier.height(22.dp))
-
-                // CTA
-                SkeuoPrimaryButton(
-                    text        = "Create account",
-                    isLoading   = isLoading,
-                    enabled     = isFormValid && !isLoading,
-                    accentColor = IndigoStart,
-                    onClick     = { handleRegister() }
-                )
-            }
-
-            Spacer(Modifier.height(28.dp))
-
-            // ── Footer ──
-            Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
                 Text(
-                    text  = "Already have an account?",
+                    text = "Verify your email",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = Ink,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Enter the 6-digit code sent to\n${registrationSuccessEmail}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Muted
+                    color = Muted,
+                    textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.width(4.dp))
+
+                Spacer(Modifier.height(28.dp))
+
+                SkeuoFormCard {
+                    SkeuoTextField(
+                        value = otpCode,
+                        onValueChange = { if (it.length <= 6) otpCode = it.filter { ch -> ch.isDigit() } },
+                        label = "Verification Code",
+                        placeholder = "123456",
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                        onImeAction = { handleVerify() },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.Lock, null,
+                                tint = MintGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            AnimatedVisibility(otpCode.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                                IconButton(onClick = { otpCode = "" }) {
+                                    Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    )
+
+                    Spacer(Modifier.height(22.dp))
+
+                    SkeuoPrimaryButton(
+                        text = "Verify & Activate Account",
+                        isLoading = isLoading,
+                        enabled = otpCode.trim().length == 6 && !isLoading,
+                        accentColor = MintGreen,
+                        onClick = { handleVerify() }
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                viewModel.onResendVerification(registrationSuccessEmail!!)
+                            }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Resend Code",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = IndigoStart
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Wrong email?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Change details",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = CoralStart,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                viewModel.clearRegistrationEmail()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
+            } else {
+                // ── REGISTRATION FORM FLOW ──
+                SkeuoBrandMark(letter = "C", accentColor = IndigoStart)
+
+                Spacer(Modifier.height(20.dp))
+
                 Text(
-                    text  = "Log in",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = CoralStart,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication        = null
-                        ) { onNavigateToLogin() }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                    text = "Create account",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = Ink,
+                    textAlign = TextAlign.Center
                 )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Join CollabSphere and start collaborating",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(32.dp))
+
+                SkeuoFormCard {
+                    SkeuoTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = "Username",
+                        placeholder = "john_doe",
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.Person, null,
+                                tint = IndigoStart,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            AnimatedVisibility(username.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                                IconButton(onClick = { username = "" }) {
+                                    Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    SkeuoTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = "Email address",
+                        placeholder = "name@example.com",
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.Email, null,
+                                tint = IndigoStart,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                                IconButton(onClick = { email = "" }) {
+                                    Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    SkeuoTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = "Password",
+                        placeholder = "At least 6 characters",
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                        onImeAction = { handleRegister() },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None
+                        else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.Lock, null,
+                                tint = IndigoStart,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.Visibility
+                                    else Icons.Outlined.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "Hide" else "Show",
+                                    tint = Muted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    )
+
+                    Spacer(Modifier.height(22.dp))
+
+                    SkeuoPrimaryButton(
+                        text = "Create account",
+                        isLoading = isLoading,
+                        enabled = isFormValid && !isLoading,
+                        accentColor = IndigoStart,
+                        onClick = { handleRegister() }
+                    )
+                }
+
+                Spacer(Modifier.height(28.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Already have an account?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Log in",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = CoralStart,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onNavigateToLogin() }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))

@@ -211,6 +211,10 @@ fun AppNavigation(
                     )
                 }
             ) {
+                val workspaceViewModel: WorkspaceViewModel =
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
+                val joinByCodeStatus by workspaceViewModel.joinByCodeStatus.collectAsStateWithLifecycle()
+
                 DashboardScreen(
                     viewModel = dashboardViewModel,
                     currentUserName = loggedInUsername,
@@ -247,11 +251,21 @@ fun AppNavigation(
                             navController.navigate("notifications")
                         }
                     },
-                    unreadNotificationCount = unreadNotificationCount
+                    unreadNotificationCount = unreadNotificationCount,
+                    onJoinByCode = { code ->
+                        workspaceViewModel.joinByCode(code)
+                    },
+                    joinByCodeStatus = joinByCodeStatus,
+                    onClearJoinByCodeStatus = {
+                        workspaceViewModel.clearJoinByCodeStatus()
+                    }
                 )
             }
 
             composable("notifications") {
+                val workspaceViewModel: WorkspaceViewModel =
+                    koinViewModel { parametersOf(loggedInUserId.toInt()) }
+
                 NotificationsScreen(
                     viewModel = notificationsViewModel,
                     onBack = { navController.popBackStack() },
@@ -261,11 +275,18 @@ fun AppNavigation(
                             val wsName = dashboardViewModel.workspaces.value
                                 ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
                             val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
-                            // Best-effort per type — the notification payload doesn't carry a channelId,
-                            // so CHANNEL_MESSAGE/MENTION land on the workspace's Channels tab rather than
-                            // the exact channel; TASK_* land on the Tasks tab.
                             val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED") 1 else 0
                             navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=$tab")
+                        }
+                    },
+                    onAcceptInvitation = { invitationId, notificationId ->
+                        workspaceViewModel.acceptInvitation(invitationId) {
+                            notificationsViewModel.onDelete(notificationId)
+                        }
+                    },
+                    onDeclineInvitation = { invitationId, notificationId ->
+                        workspaceViewModel.declineInvitation(invitationId) {
+                            notificationsViewModel.onDelete(notificationId)
                         }
                     }
                 )
@@ -483,10 +504,19 @@ fun AppNavigation(
                     }
                 )
 
+                val invitationStatus by workspaceViewModel.invitationStatus.collectAsStateWithLifecycle()
+
                 LaunchedEffect(workspaceStatus) {
                     workspaceStatus?.let {
                         Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
                         workspaceViewModel.clearWorkspaceStatus()
+                    }
+                }
+
+                LaunchedEffect(invitationStatus) {
+                    invitationStatus?.let {
+                        Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+                        workspaceViewModel.clearInvitationStatus()
                     }
                 }
 

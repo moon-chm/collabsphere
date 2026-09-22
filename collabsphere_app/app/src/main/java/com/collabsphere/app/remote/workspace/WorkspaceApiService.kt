@@ -67,4 +67,40 @@ class WorkspaceApiService(
             contentType(ContentType.Application.Json)
         }.body()
     }
+
+    suspend fun sendInvitation(
+        workspaceId: Int,
+        request: com.collabsphere.app.dto.workspace.SendInvitationRequest
+    ): com.collabsphere.app.dto.workspace.InvitationResponse {
+        return client.post("$baseUrl/invitations/$workspaceId") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+    }
+
+    suspend fun getPendingInvitations(): List<com.collabsphere.app.dto.workspace.InvitationResponse> {
+        return client.get("$baseUrl/invitations/pending") {
+            contentType(ContentType.Application.Json)
+        }.body()
+    }
+
+    suspend fun acceptInvitation(invitationId: Int): MemberResponse {
+        return client.post("$baseUrl/invitations/$invitationId/accept") {
+            contentType(ContentType.Application.Json)
+        }.body()
+    }
+
+    suspend fun declineInvitation(invitationId: Int): Boolean {
+        val response = client.post("$baseUrl/invitations/$invitationId/decline") {
+            contentType(ContentType.Application.Json)
+        }
+        return response.status.isSuccess()
+    }
+
+    suspend fun joinByCode(request: com.collabsphere.app.dto.workspace.JoinWorkspaceByCodeRequest): MemberResponse {
+        return client.post("$baseUrl/join-by-code") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+    }
 }

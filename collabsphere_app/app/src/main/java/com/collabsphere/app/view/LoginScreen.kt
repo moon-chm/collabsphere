@@ -52,6 +52,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.ui.window.Dialog
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.LoginViewModel
 
@@ -78,6 +80,51 @@ fun LoginScreen(
             isLoading = false
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
             viewModel.clearLoginStatus()
+        }
+    }
+
+    val unverifiedEmailForLogin by viewModel.unverifiedEmailForLogin.collectAsStateWithLifecycle()
+    val forgotPasswordStatus by viewModel.forgotPasswordStatus.collectAsStateWithLifecycle()
+    val forgotPasswordStep by viewModel.forgotPasswordStep.collectAsStateWithLifecycle()
+    val isResetPasswordSuccess by viewModel.isResetPasswordSuccess.collectAsStateWithLifecycle()
+    val verificationStatus by viewModel.verificationStatus.collectAsStateWithLifecycle()
+    val isVerificationSuccess by viewModel.isVerificationSuccess.collectAsStateWithLifecycle()
+
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var showVerifyEmailDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(unverifiedEmailForLogin) {
+        if (unverifiedEmailForLogin != null) {
+            showVerifyEmailDialog = true
+        }
+    }
+
+    LaunchedEffect(forgotPasswordStatus) {
+        forgotPasswordStatus?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(isResetPasswordSuccess) {
+        if (isResetPasswordSuccess) {
+            showForgotPasswordDialog = false
+            viewModel.clearForgotPasswordState()
+            Toast.makeText(context, "Password reset successfully! Please sign in.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(verificationStatus) {
+        verificationStatus?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearVerificationStatus()
+        }
+    }
+
+    LaunchedEffect(isVerificationSuccess) {
+        if (isVerificationSuccess) {
+            showVerifyEmailDialog = false
+            viewModel.resetVerificationSuccess()
+            Toast.makeText(context, "Email verified! You can now log in.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -192,7 +239,29 @@ fun LoginScreen(
                     }
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(8.dp))
+
+                // Forgot password link
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "Forgot password?",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = CoralStart,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                showForgotPasswordDialog = true
+                            }
+                            .padding(4.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
 
                 // CTA Button
                 SkeuoPrimaryButton(
@@ -238,6 +307,253 @@ fun LoginScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+
+        // Dialogs
+        if (showForgotPasswordDialog) {
+            ForgotPasswordDialog(
+                initialEmail = email,
+                step = forgotPasswordStep,
+                onDismiss = {
+                    showForgotPasswordDialog = false
+                    viewModel.clearForgotPasswordState()
+                },
+                onRequestCode = { targetEmail ->
+                    viewModel.onForgotPasswordRequest(targetEmail)
+                },
+                onResetPassword = { targetEmail, otp, newPass, confirmPass ->
+                    viewModel.onResetPasswordSubmit(targetEmail, otp, newPass, confirmPass)
+                }
+            )
+        }
+
+        if (showVerifyEmailDialog) {
+            val targetEmail = unverifiedEmailForLogin ?: email
+            VerifyEmailDialog(
+                email = targetEmail,
+                onDismiss = {
+                    showVerifyEmailDialog = false
+                    viewModel.clearUnverifiedEmailForLogin()
+                },
+                onVerify = { otp ->
+                    viewModel.onVerifyRegistration(targetEmail, otp)
+                },
+                onResend = {
+                    viewModel.onResendVerification(targetEmail)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun ForgotPasswordDialog(
+    initialEmail: String,
+    step: Int,
+    onDismiss: () -> Unit,
+    onRequestCode: (String) -> Unit,
+    onResetPassword: (email: String, otp: String, pass: String, confirmPass: String) -> Unit
+) {
+    var emailInput by remember { mutableStateOf(initialEmail) }
+    var otpInput by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var newPasswordVisible by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = if (step == 1) "Reset password" else "Set new password",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
+                )
+
+                Text(
+                    text = if (step == 1)
+                        "Enter your registered email address and we'll send a 6-digit reset code."
+                    else
+                        "Enter the 6-digit code sent to $emailInput along with your new password.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted,
+                    textAlign = TextAlign.Center
+                )
+
+                if (step == 1) {
+                    SkeuoTextField(
+                        value = emailInput,
+                        onValueChange = { emailInput = it },
+                        label = "Email address",
+                        placeholder = "name@example.com",
+                        keyboardType = KeyboardType.Email,
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Email, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                        }
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    SkeuoPrimaryButton(
+                        text = "Send Reset Code",
+                        enabled = emailInput.isNotBlank(),
+                        accentColor = CoralStart,
+                        onClick = { onRequestCode(emailInput.trim()) }
+                    )
+                } else {
+                    SkeuoTextField(
+                        value = otpInput,
+                        onValueChange = { if (it.length <= 6) otpInput = it.filter { ch -> ch.isDigit() } },
+                        label = "6-Digit Code",
+                        placeholder = "123456",
+                        keyboardType = KeyboardType.Number,
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                        }
+                    )
+
+                    SkeuoTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = "New Password",
+                        placeholder = "At least 6 characters",
+                        keyboardType = KeyboardType.Password,
+                        visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                        }
+                    )
+
+                    SkeuoTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = "Confirm Password",
+                        placeholder = "Re-enter new password",
+                        keyboardType = KeyboardType.Password,
+                        visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                        }
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    SkeuoPrimaryButton(
+                        text = "Reset Password",
+                        enabled = otpInput.length == 6 && newPassword.length >= 6 && newPassword == confirmPassword,
+                        accentColor = CoralStart,
+                        onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword.trim(), confirmPassword.trim()) }
+                    )
+                }
+
+                Text(
+                    text = "Cancel",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Muted,
+                    modifier = Modifier
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onDismiss() }
+                        .padding(8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun VerifyEmailDialog(
+    email: String,
+    onDismiss: () -> Unit,
+    onVerify: (String) -> Unit,
+    onResend: () -> Unit
+) {
+    var otpInput by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Verify your email",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
+                )
+
+                Text(
+                    text = "Your email is not verified yet. Enter the 6-digit code sent to $email.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted,
+                    textAlign = TextAlign.Center
+                )
+
+                SkeuoTextField(
+                    value = otpInput,
+                    onValueChange = { if (it.length <= 6) otpInput = it.filter { ch -> ch.isDigit() } },
+                    label = "6-Digit Code",
+                    placeholder = "123456",
+                    keyboardType = KeyboardType.Number,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Lock, null, tint = MintGreen, modifier = Modifier.size(20.dp))
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                SkeuoPrimaryButton(
+                    text = "Verify & Sign In",
+                    enabled = otpInput.length == 6,
+                    accentColor = MintGreen,
+                    onClick = { onVerify(otpInput.trim()) }
+                )
+
+                Row(
+                    modifier = Modifier
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onResend() }
+                        .padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Resend Code",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = IndigoStart
+                    )
+                }
+
+                Text(
+                    text = "Cancel",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Muted,
+                    modifier = Modifier
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onDismiss() }
+                        .padding(4.dp)
+                )
+            }
         }
     }
 }
@@ -452,7 +768,7 @@ private fun BasicTextField_Compat(
 @Composable
 internal fun SkeuoPrimaryButton(
     text       : String,
-    isLoading  : Boolean,
+    isLoading  : Boolean = false,
     enabled    : Boolean,
     accentColor: Color,
     onClick    : () -> Unit

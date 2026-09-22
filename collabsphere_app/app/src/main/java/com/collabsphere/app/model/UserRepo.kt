@@ -4,6 +4,7 @@ import android.util.Log
 import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.dto.login.LoginRequest
 import com.collabsphere.app.dto.login.RegisterRequest
+import com.collabsphere.app.dto.login.RegisterResponse
 import com.collabsphere.app.dto.login.LoginResponse
 import com.collabsphere.app.dto.login.ChangeEmailRequest
 import com.collabsphere.app.dto.login.DeleteAccountRequest
@@ -23,24 +24,52 @@ class UserRepo(
     private val userPreferences: UserPreferences
 ) {
 
-    suspend fun registerRemote(email: String, username: String, pass: String): Result<LoginResponse> {
+    suspend fun registerRemote(email: String, username: String, pass: String): Result<RegisterResponse> {
         return try {
-            val apiResponse: LoginResponse = apiService.register(RegisterRequest(email, pass, username))
-            userPreferences.saveAuthToken(apiResponse.token)
-
-            val localUser = UserEntity(
-                id = apiResponse.id,
-                email = email,
-                userName = username,
-                password = PasswordHasher.hash(pass),
-                avatarUrl = apiResponse.avatarUrl,
-                isEmailVerified = apiResponse.isEmailVerified
-            )
-            userDao.registerUser(localUser)
-
+            val apiResponse: RegisterResponse = apiService.register(RegisterRequest(email, pass, username))
             Result.success(apiResponse)
         } catch (e: Exception) {
-            Log.e("UserRepo", "Operation failed", e)
+            Log.e("UserRepo", "Registration failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun verifyRegistration(email: String, otp: String): Result<String> {
+        return try {
+            val res = apiService.verifyRegistration(email, otp)
+            Result.success(res.message)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Verification failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun resendVerification(email: String): Result<String> {
+        return try {
+            val res = apiService.resendVerification(email)
+            Result.success(res.message)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Resend verification failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun forgotPassword(email: String): Result<String> {
+        return try {
+            val res = apiService.forgotPassword(email)
+            Result.success(res.message)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Forgot password failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun resetPassword(email: String, otp: String, newPass: String): Result<String> {
+        return try {
+            val res = apiService.resetPassword(email, otp, newPass)
+            Result.success(res.message)
+        } catch (e: Exception) {
+            Log.e("UserRepo", "Reset password failed", e)
             Result.failure(e)
         }
     }
@@ -70,7 +99,18 @@ class UserRepo(
             userDao.registerUser(userEntity)
             Result.success(userEntity)
         } catch (e: Exception) {
+            val errorMsg = e.message ?: ""
+            if (errorMsg.contains("EMAIL_NOT_VERIFIED", ignoreCase = true) ||
+                errorMsg.contains("verify your email", ignoreCase = true) ||
+                errorMsg.contains("403", ignoreCase = true)
+            ) {
+                return Result.failure(Exception("EMAIL_NOT_VERIFIED: Please verify your email before logging in."))
+            }
+
             if (localUser != null) {
+                if (!localUser.isEmailVerified) {
+                    return Result.failure(Exception("EMAIL_NOT_VERIFIED: Please verify your email before logging in."))
+                }
                 if (PasswordHasher.matches(pass, localUser.password)) {
                     if (!PasswordHasher.isHashed(localUser.password)) {
                         userDao.registerUser(localUser.copy(password = PasswordHasher.hash(pass)))

@@ -22,6 +22,12 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.widget.Toast
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -66,10 +72,22 @@ fun DashboardScreen(
     onProfileClick        : () -> Unit = {},
     onSearchClick         : () -> Unit = {},
     onNotificationsClick  : () -> Unit = {},
-    unreadNotificationCount: Int = 0
+    unreadNotificationCount: Int = 0,
+    onJoinByCode          : ((String) -> Unit)? = null,
+    joinByCodeStatus      : String? = null,
+    onClearJoinByCodeStatus: (() -> Unit)? = null
 ) {
     // ── All original state preserved ──
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
+    var showJoinByCodeDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    LaunchedEffect(joinByCodeStatus) {
+        joinByCodeStatus?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            onClearJoinByCodeStatus?.invoke()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -475,13 +493,33 @@ fun DashboardScreen(
             }
         }
 
-        // ── Skeuomorphic FAB ──
-        SkeuoFab(
+        // ── Skeuomorphic Action Buttons ──
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 24.dp, bottom = 32.dp),
-            onClick  = onNavigateToWorkspace
-        )
+                .padding(end = 20.dp, bottom = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SkeuoSecondaryFab(
+                text = "Join with Code",
+                icon = Icons.Outlined.GroupAdd,
+                onClick = { showJoinByCodeDialog = true }
+            )
+            SkeuoFab(
+                modifier = Modifier,
+                onClick = onNavigateToWorkspace
+            )
+        }
+
+        if (showJoinByCodeDialog) {
+            JoinWorkspaceByCodeDialog(
+                onDismiss = { showJoinByCodeDialog = false },
+                onSubmit = { code ->
+                    onJoinByCode?.invoke(code)
+                }
+            )
+        }
     }
 }
 
@@ -808,7 +846,7 @@ private fun DashboardEmptyState() {
 // ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
+private fun SkeuoFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue   = if (pressed) 0.93f else 1f,
@@ -898,6 +936,215 @@ private fun SkeuoFab(modifier: Modifier, onClick: () -> Unit) {
         if (pressed) {
             kotlinx.coroutines.delay(120)
             pressed = false
+        }
+    }
+}
+
+@Composable
+private fun SkeuoSecondaryFab(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    Box(
+        modifier = Modifier
+            .height(52.dp)
+            .drawWithCache {
+                val cr = CornerRadius(16.dp.toPx())
+                onDrawBehind {
+                    if (pressed) {
+                        drawRoundRect(
+                            color = ShadowDark.copy(alpha = 0.25f),
+                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
+                            cornerRadius = cr
+                        )
+                        drawRoundRect(color = Background.copy(alpha = 0.8f), cornerRadius = cr)
+                    } else {
+                        drawRoundRect(
+                            color = ShadowDark.copy(alpha = 0.12f),
+                            topLeft = Offset(0f, 4.dp.toPx()),
+                            size = size,
+                            cornerRadius = cr
+                        )
+                        drawRoundRect(
+                            color = SurfaceRaised,
+                            cornerRadius = cr
+                        )
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.7f), Color.Transparent),
+                                startY = 0f,
+                                endY = 16.dp.toPx()
+                            ),
+                            cornerRadius = cr,
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    }
+                }
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, null, tint = IndigoStart, modifier = Modifier.size(18.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = Ink
+            )
+        }
+    }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(120)
+            pressed = false
+        }
+    }
+}
+
+@Composable
+private fun JoinWorkspaceByCodeDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit
+) {
+    var codeInput by remember { mutableStateOf("") }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(IndigoStart.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.GroupAdd,
+                        contentDescription = null,
+                        tint = IndigoStart,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                Text(
+                    text = "Join Workspace",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
+                )
+
+                Text(
+                    text = "Enter the 6-character invitation code you received by email or invitation.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted,
+                    textAlign = TextAlign.Center
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicTextField(
+                        value = codeInput,
+                        onValueChange = {
+                            if (it.length <= 6) codeInput = it.uppercase().filter { ch -> ch.isLetterOrDigit() }
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleMedium.copy(
+                            color = Ink,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            letterSpacing = 4.sp
+                        ),
+                        cursorBrush = SolidColor(IndigoStart),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.Center) {
+                                if (codeInput.isEmpty()) {
+                                    Text(
+                                        text = "INVITE",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            color = Muted.copy(alpha = 0.5f),
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            letterSpacing = 4.sp
+                                        )
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
+                    }
+
+                    val canSubmit = codeInput.trim().length == 6
+                    val submitAlpha = if (canSubmit) 1f else 0.5f
+                    Box(
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(IndigoStart.copy(alpha = submitAlpha))
+                            .clickable(enabled = canSubmit) {
+                                onSubmit(codeInput.trim())
+                                onDismiss()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Join Workspace",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }
