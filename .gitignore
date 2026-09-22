@@ -29,3 +29,8 @@ test_download.docx
 *firebase-adminsdk*.json
 service-account.json
 firebase-service-account.json
+
+# Google API OAuth credentials & tokens — NEVER commit these
+*client_secret*.json
+credentials.json
+token.json

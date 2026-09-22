@@ -15,6 +15,14 @@ services:
         value: /app/local_files_upload
       - key: JWT_SECRET
         generateValue: true
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: GMAIL_SENDER
+        value: collabsphere.studio@gmail.com
 
 databases:
   - name: collabsphere-db
