@@ -390,7 +390,7 @@ fun MessageScreen(
                         CircularProgressIndicator(color = CoralStart)
                     }
                 }
-                messages.isEmpty() -> {
+                messages!!.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -466,7 +466,7 @@ fun MessageScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(messages!!, key = { it.id ?: it.hashCode() }) { message ->
+                    items(messages ?: emptyList(), key = { it.id ?: it.hashCode() }) { message ->
                         val isOwnMessage = message.userId == currentUserId
 
                         Box(
@@ -631,4 +631,5 @@ fun MessageScreen(
             }
         }
     }
+}
 }

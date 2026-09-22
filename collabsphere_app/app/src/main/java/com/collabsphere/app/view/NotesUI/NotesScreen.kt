@@ -193,7 +193,8 @@ fun NotesScreen(
                         }
                     }
                 }
-            } else {
+                } // close notes.isEmpty() branch
+                else -> {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -215,8 +216,9 @@ fun NotesScreen(
                         )
                     }
                 }
-            } // when
+            }
         }
+    }
 
         // Tactile Skeuomorphic FAB
         val fabInteractionSource = remember { MutableInteractionSource() }

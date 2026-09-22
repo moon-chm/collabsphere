@@ -193,7 +193,8 @@ fun ChannelScreen(
                         }
                     }
                 }
-            } else {
+                } // close channels.isEmpty() branch
+                else -> {
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -206,7 +207,7 @@ fun ChannelScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(channels!!, key = { it.id }) { channel ->
+                    items(channels ?: emptyList(), key = { it.id }) { channel ->
                         SkeuoChannelItem(
                             channel = channel,
                             onChannelClick = { onChannelClick(channel) },
@@ -215,8 +216,9 @@ fun ChannelScreen(
                         )
                     }
                 }
-            } // when
+            }
         }
+    }
 
         // Tactile Skeuomorphic FAB
         val fabInteractionSource = remember { MutableInteractionSource() }

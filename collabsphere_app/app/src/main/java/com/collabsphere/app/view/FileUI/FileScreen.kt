@@ -252,7 +252,9 @@ onDrawBehind {
                         }
                     }
                 }
-            } else {
+                } // close localFiles.isEmpty() branch
+                else -> {
+
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -281,8 +283,9 @@ onDrawBehind {
                         )
                     }
                 }
-            } // when
+            }
         }
+    }
 
         if (isDownloading) {
             Box(
