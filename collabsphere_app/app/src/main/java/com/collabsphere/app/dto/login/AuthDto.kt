@@ -34,5 +34,6 @@ data class ResetPasswordRequest(
 
 @Serializable
 data class AuthMessageResponse(
+    val success: Boolean = true,
     val message: String
 )
