@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files / Folder icon — outlined open folder, 24dp viewport -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Folder body -->
+    <path
+        android:pathData="M22,19 C22,19.5304 21.7893,20.0391 21.4142,20.4142 C21.0391,20.7893 20.5304,21 20,21 L4,21 C3.4696,21 2.9609,20.7893 2.5858,20.4142 C2.2107,20.0391 2,19.5304 2,19 L2,5 C2,4.4696 2.2107,3.9609 2.5858,3.5858 C2.9609,3.2107 3.4696,3 4,3 L9,3 L11,6 L20,6 C20.5304,6 21.0391,6.2107 21.4142,6.5858 C21.7893,6.9609 22,7.4696 22,8 Z"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -1,0 +1,45 @@
+package com.collabsphere.app.remote.note
+
+import com.collabsphere.app.AppConfig
+import com.collabsphere.app.dto.notes.NotesRequest
+import com.collabsphere.app.dto.notes.NotesResponse
+import com.collabsphere.app.dto.notes.NotesSyncDto
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+
+class NoteApiService(private val client: HttpClient) {
+
+    private val baseUrl = "${AppConfig.BASE_URL}/api/notes"
+
+    suspend fun createNotes(request: NotesRequest): NotesResponse {
+        return client.post(baseUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+    }
+
+    suspend fun updateNote(noteId: Int, request: NotesRequest): NotesResponse {
+        return client.put("$baseUrl/$noteId") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+    }
+
+    suspend fun getNotes(workspaceId: Int): List<NotesResponse> {
+        return client.get("$baseUrl/workspace/$workspaceId").body()
+    }
+
+    suspend fun deleteNote(noteId: Int): Boolean {
+        val response = client.delete("$baseUrl/$noteId")
+        return response.status.isSuccess()
+    }
+
+    suspend fun getNoteUpdates(workspaceId: Int, since: Long): List<NotesSyncDto> {
+        return client.get("$baseUrl/sync/$workspaceId") {
+            parameter("since", since)
+            contentType(ContentType.Application.Json)
+        }.body()
+    }
+}

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Quick-action button background — raised squircle button with skeuomorphic depth.
+
+  Layer stack (bottom → top):
+    1. Ambient shadow: very soft warm shadow
+    2. Contact shadow: medium depth below surface
+    3. Button surface: warm beige fill (#EDE8DF)
+    4. Top-lit specular top gradient: bright at top, transparent at bottom
+    5. Hairline outline stroke: 1dp warm boundary
+
+  Corner radius: 12dp for a softer squircle look.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Layer 1: Ambient shadow -->
+    <item
+        android:top="5dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:bottom="0dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#14704030" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Layer 2: Contact shadow -->
+    <item
+        android:top="3dp"
+        android:left="1dp"
+        android:right="1dp"
+        android:bottom="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#1E704030" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Layer 3: Button surface — warm off-white -->
+    <item
+        android:top="0dp"
+        android:left="0dp"
+        android:right="0dp"
+        android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#EDE8DF" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Layer 4: Specular top highlight -->
+    <item
+        android:top="0dp"
+        android:left="0dp"
+        android:right="0dp"
+        android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#38FFFFFF"
+                android:endColor="#00FFFFFF"
+                android:angle="270"
+                android:type="linear" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+    <!-- Layer 5: Hairline border -->
+    <item
+        android:top="0dp"
+        android:left="0dp"
+        android:right="0dp"
+        android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <stroke android:width="1dp" android:color="#D4CFC6" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+
+</layer-list>

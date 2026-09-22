@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.CollabSphere" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.UCropCustom" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:fitsSystemWindows">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">#C95E30</item>
+    </style>
+</resources>

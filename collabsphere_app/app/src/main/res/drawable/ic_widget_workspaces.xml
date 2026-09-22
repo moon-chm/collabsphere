@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Workspaces / Buildings icon — outlined office building, 24dp viewport -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Building outline -->
+    <path
+        android:pathData="M3,21 L21,21"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M5,21 L5,7 C5,6.4696 5.2107,5.9609 5.5858,5.5858 C5.9609,5.2107 6.4696,5 7,5 L17,5 C17.5304,5 18.0391,5.2107 18.4142,5.5858 C18.7893,5.9609 19,6.4696 19,7 L19,21"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Windows row 1 -->
+    <path
+        android:pathData="M9,9 L9,9"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M12,9 L12,9"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M15,9 L15,9"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <!-- Windows row 2 -->
+    <path
+        android:pathData="M9,13 L9,13"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M12,13 L12,13"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M15,13 L15,13"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <!-- Door -->
+    <path
+        android:pathData="M10,21 L10,17 C10,16.7348 10.1054,16.4804 10.2929,16.2929 C10.4804,16.1054 10.7348,16 11,16 L13,16 C13.2652,16 13.5196,16.1054 13.7071,16.2929 C13.8946,16.4804 14,16.7348 14,17 L14,21"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

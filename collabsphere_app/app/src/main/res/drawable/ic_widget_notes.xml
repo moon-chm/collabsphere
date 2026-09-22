@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notes / Document icon — outlined page with lines, 24dp viewport -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Page outline with folded top-right corner -->
+    <path
+        android:pathData="M14,3 L6,3 C4.9,3 4,3.9 4,5 L4,19 C4,20.1 4.9,21 6,21 L18,21 C19.1,21 20,20.1 20,19 L20,9 Z"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Fold corner -->
+    <path
+        android:pathData="M14,3 L14,9 L20,9"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Text lines on page -->
+    <path
+        android:pathData="M8,13 L16,13"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M8,16.5 L13,16.5"
+        android:strokeColor="#BA5330"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+</vector>
