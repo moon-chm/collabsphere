@@ -170,14 +170,20 @@ onDrawBehind {
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${localFiles.size} files",
+                        text = "${localFiles?.size ?: "…"} files",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = Muted
                     )
                 }
             }
 
-            if (localFiles.isEmpty()) {
+            when {
+                localFiles == null -> {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                localFiles!!.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -259,7 +265,7 @@ onDrawBehind {
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(localFiles, key = { it.id }) { file ->
+                    items(localFiles!!, key = { it.id }) { file ->
                         SkeuoFileItemRow(
                             file = file,
                             onFileClick = {
@@ -275,7 +281,7 @@ onDrawBehind {
                         )
                     }
                 }
-            }
+            } // when
         }
 
         if (isDownloading) {

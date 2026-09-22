@@ -4,7 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -29,4 +31,16 @@ interface NotesDao {
 
     @Query("SELECT * FROM notes WHERE userId = :userId ORDER BY id DESC")
     fun getNotesByUser(userId: Int): Flow<List<NotesEntity>>
+
+    @Upsert
+    suspend fun upsertAll(notes: List<NotesEntity>)
+
+    @Query("DELETE FROM notes WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Int>)
+
+    @Transaction
+    suspend fun applyDelta(upserts: List<NotesEntity>, deletes: List<Int>) {
+        if (deletes.isNotEmpty()) deleteByIds(deletes)
+        if (upserts.isNotEmpty()) upsertAll(upserts)
+    }
 }

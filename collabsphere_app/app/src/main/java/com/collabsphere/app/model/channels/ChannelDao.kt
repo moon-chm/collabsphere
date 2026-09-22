@@ -4,15 +4,16 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChannelDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun createChannels(channelEntity: ChannelEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun insertAllChannels(channels: List<ChannelEntity>)
     @Query("SELECT * FROM channels WHERE workspaceId = :workspaceId")
     fun getchannels(workspaceId: Int): Flow<List<ChannelEntity>>

@@ -111,14 +111,20 @@ fun ChannelScreen(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${channels.size} active",
+                        text = "${channels?.size ?: "…"} active",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = Muted
                     )
                 }
             }
 
-            if (channels.isEmpty()) {
+            when {
+                channels == null -> {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                channels!!.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -200,7 +206,7 @@ fun ChannelScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(channels, key = { it.id }) { channel ->
+                    items(channels!!, key = { it.id }) { channel ->
                         SkeuoChannelItem(
                             channel = channel,
                             onChannelClick = { onChannelClick(channel) },
@@ -209,7 +215,7 @@ fun ChannelScreen(
                         )
                     }
                 }
-            }
+            } // when
         }
 
         // Tactile Skeuomorphic FAB

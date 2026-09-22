@@ -23,12 +23,12 @@ class ChannelViewModel(
         }
     }
 
-    val userChannels: StateFlow<List<ChannelEntity>> = repo
+    val userChannels: StateFlow<List<ChannelEntity>?> = repo
         .getallchannelbyuser(loggedWorkspaceId)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
+            initialValue = null
         )
 
     private val _channelName = MutableStateFlow("")

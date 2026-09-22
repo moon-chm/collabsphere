@@ -67,17 +67,18 @@ fun MessageScreen(
     var isEditing by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(messages?.size) {
+        val msgs = messages ?: return@LaunchedEffect
+        if (msgs.isEmpty()) return@LaunchedEffect
 
         val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-        val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= messages.size - 2
-        val isOwnMessage = messages.last().userId == currentUserId
+        val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= msgs.size - 2
+        val isOwnMessage = msgs.last().userId == currentUserId
 
         // Only yank the view to the newest message if the user was already reading near the
         // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
         if (wasNearBottom || isOwnMessage) {
-            listState.animateScrollToItem(messages.lastIndex)
+            listState.animateScrollToItem(msgs.lastIndex)
         }
     }
 
@@ -382,13 +383,20 @@ fun MessageScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (messages.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+            when {
+                messages == null -> {
+                    // Loading: Room hasn't emitted yet — show spinner instead of blank/empty flash
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = CoralStart)
+                    }
+                }
+                messages.isEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                     // Tactile empty card
                     Box(
                         modifier = Modifier
@@ -449,15 +457,16 @@ fun MessageScreen(
                             )
                         }
                     }
+                    }
                 }
-            } else {
+                else -> {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(messages, key = { it.id ?: it.hashCode() }) { message ->
+                    items(messages!!, key = { it.id ?: it.hashCode() }) { message ->
                         val isOwnMessage = message.userId == currentUserId
 
                         Box(

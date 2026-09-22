@@ -12,10 +12,7 @@ import com.collabsphere.app.remote.message.MessageApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -73,26 +70,9 @@ class MessageRepo(
         }
     }
 
-    fun getMessage(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>> = flow {
-        try {
-            val remoteMessage = apiService.getMessageByuser(workspaceId, channelId)
-            val messageEntity = remoteMessage.map { remote ->
-                MessageEntity(
-                    id = remote.id,
-                    userId = remote.userId,
-                    workspaceId = remote.workspaceId,
-                    channelId = remote.channelId,
-                    userName = remote.userName,
-                    content = remote.content,
-                    status = MessageStatus.valueOf(remote.status)
-                )
-            }
-            messageDao.insertAllMessage(messageEntity)
-        } catch (e: Exception) {
-            Log.e("MessageRepo", "Operation failed", e)
-        }
-        emitAll(messageDao.getMessageForChannels(workspaceId, channelId))
-    }.flowOn(Dispatchers.IO)
+    // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
+    fun getMessage(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>> =
+        messageDao.getMessageForChannels(workspaceId, channelId)
 
     suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Boolean =
         withContext(Dispatchers.IO) {
@@ -157,27 +137,19 @@ class MessageRepo(
                 val updates = apiService.getMessageUpdates(workspaceId, channelId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
-                        if (remote.isDeleted) {
-                            messageDao.deleteMessage(
-                                messageId = remote.id,
-                                userId = remote.userId,
-                                workspaceId = remote.workspaceId,
-                                channelId = remote.channelId
-                            )
-                        } else {
-                            val entity = MessageEntity(
-                                id = remote.id,
-                                userId = remote.userId,
-                                workspaceId = remote.workspaceId,
-                                channelId = remote.channelId,
-                                userName = remote.userName,
-                                content = remote.content,
-                                status = MessageStatus.valueOf(remote.status)
-                            )
-                            messageDao.sendMessage(entity)
-                        }
+                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
+                        MessageEntity(
+                            id = remote.id,
+                            userId = remote.userId,
+                            workspaceId = remote.workspaceId,
+                            channelId = remote.channelId,
+                            userName = remote.userName,
+                            content = remote.content,
+                            status = MessageStatus.valueOf(remote.status)
+                        )
                     }
+                    val deletes = updates.filter { it.isDeleted }.map { it.id }
+                    messageDao.applyDelta(upserts, deletes)
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
@@ -187,7 +159,7 @@ class MessageRepo(
             } catch (e: Exception) {
                 Log.e("MessageRepo", "Operation failed", e)
             }
-            delay(1000)
+            delay(2000)
         }
         } finally {
             activeSyncLoops.remove(loopKey)

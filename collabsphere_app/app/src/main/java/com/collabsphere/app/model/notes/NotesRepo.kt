@@ -32,31 +32,9 @@ class NotesRepo(
     // backstack entry) starts a second independent 3s poller against the same endpoint.
     private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
-    fun getallnotestoscreen(workspaceId: Int): Flow<List<NotesEntity>> {
-        return flow {
-            emitAll(notesDao.getallnotedbyuser(workspaceId))
-        }.onStart {
-            withContext(Dispatchers.IO) {
-                try {
-                    val remoteNotes = apiService.getNotes(workspaceId)
-                    if (!remoteNotes.isNullOrEmpty()) {
-                        val notesEntities = remoteNotes.map { remote ->
-                            NotesEntity(
-                                id = remote.id,
-                                userId = remote.userId,
-                                workspaceId = remote.workspaceId,
-                                notesName = remote.notesName,
-                                description = remote.description
-                            )
-                        }
-                        notesDao.insertAllNotes(notesEntities)
-                    }
-                } catch (e: Exception) {
-                    Log.e("NotesRepo", "Initial notes fetch failed", e)
-                }
-            }
-        }.flowOn(Dispatchers.IO)
-    }
+    // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
+    fun getallnotestoscreen(workspaceId: Int): Flow<List<NotesEntity>> =
+        notesDao.getallnotedbyuser(workspaceId)
 
 
     // Runs directly in the caller's coroutine (matching every other repo's sync loop) instead of an
@@ -73,20 +51,17 @@ class NotesRepo(
                 val updates = apiService.getNoteUpdates(workspaceId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
-                        if (remote.isDeleted) {
-                            notesDao.deleteNoteById(remote.id)
-                        } else {
-                            val entity = NotesEntity(
-                                id = remote.id,
-                                userId = remote.userId,
-                                workspaceId = remote.workspaceId,
-                                notesName = remote.notesName,
-                                description = remote.description
-                            )
-                            notesDao.createNotes(entity)
-                        }
+                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
+                        NotesEntity(
+                            id = remote.id,
+                            userId = remote.userId,
+                            workspaceId = remote.workspaceId,
+                            notesName = remote.notesName,
+                            description = remote.description
+                        )
                     }
+                    val deletes = updates.filter { it.isDeleted }.map { it.id }
+                    notesDao.applyDelta(upserts, deletes)
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
@@ -98,7 +73,7 @@ class NotesRepo(
             } catch (e: Exception) {
                 Log.e("NotesRepo", "Delta sync iteration error", e)
             }
-            delay(1000)
+            delay(5000)
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

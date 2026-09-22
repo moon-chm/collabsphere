@@ -17,12 +17,12 @@ class NotesViewModel(
     private val loggedWorkspaceId: Int
 ) : ViewModel() {
 
-    val allNotes: StateFlow<List<NotesEntity>> = repo
+    val allNotes: StateFlow<List<NotesEntity>?> = repo
         .getallnotestoscreen(loggedWorkspaceId)
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Lazily,
-            initialValue = emptyList()
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
         )
 
     private val _notesName = MutableStateFlow("")

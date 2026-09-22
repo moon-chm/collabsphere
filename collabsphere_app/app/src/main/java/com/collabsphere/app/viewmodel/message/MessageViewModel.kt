@@ -28,11 +28,11 @@ class MessageViewModel(
         }
     }
 
-    val messages: StateFlow<List<MessageEntity>> =
+    val messages: StateFlow<List<MessageEntity>?> =
         repo.getMessage(loggedWorkspaceId, loggedChannelId).stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
+            initialValue = null
         )
 
     private val _messageContent = MutableStateFlow("")

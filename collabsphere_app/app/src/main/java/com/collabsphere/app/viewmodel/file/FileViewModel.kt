@@ -29,11 +29,11 @@ class FileViewModel(
         }
     }
 
-    val getallfile: StateFlow<List<FileEntity>> =
+    val getallfile: StateFlow<List<FileEntity>?> =
         repo.getfiles(loggedWorkspaceId).stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
+            initialValue = null
         )
 
     private val _uploadingStatus = MutableStateFlow<Boolean>(false)

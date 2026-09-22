@@ -111,14 +111,20 @@ fun NotesScreen(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${notes.size} notes",
+                        text = "${notes?.size ?: "…"} notes",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = Muted
                     )
                 }
             }
 
-            if (notes.isEmpty()) {
+            when {
+                notes == null -> {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                notes!!.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -200,7 +206,7 @@ fun NotesScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(notes, key = { it.id }) { note ->
+                    items(notes!!, key = { it.id }) { note ->
                         SkeuoNotesItem(
                             notes = note,
                             deleteNote = { noteToDelete = note },
@@ -209,7 +215,7 @@ fun NotesScreen(
                         )
                     }
                 }
-            }
+            } // when
         }
 
         // Tactile Skeuomorphic FAB

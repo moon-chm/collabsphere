@@ -12,9 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -93,33 +91,9 @@ class FileRepo(
         }
     }
 
-    fun getfiles(workspaceId: Int): Flow<List<FileEntity>> {
-        return fileDoa.getallfiles(workspaceId)
-            .onStart {
-                try {
-                    val remoteFiles = fileApiService.getFilesByWorkspace(workspaceId)
-                    val entities = remoteFiles.map { remote ->
-                        FileEntity(
-                            id = remote.id,
-                            userId = remote.userId,
-                            workspaceId = remote.workspaceId,
-                            userName = remote.userName,
-                            url = remote.url,
-                            mimeType = remote.mimeType,
-                            localpath = remote.localpath,
-                            fileName = remote.fileName,
-                            sizebytes = remote.sizebytes,
-                            fileLocation = remote.fileLocation
-                        )
-                    }
-                    entities.forEach { fileDoa.insertFile(it) }
-                } catch (e: Exception) {
-                    System.err.println("Error fetching network files on loop initialization:")
-                    Log.e("FileRepo", "Operation failed", e)
-                }
-            }
-            .flowOn(Dispatchers.IO)
-    }
+    // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
+    fun getfiles(workspaceId: Int): Flow<List<FileEntity>> =
+        fileDoa.getallfiles(workspaceId)
 
     suspend fun downloadFileFromServer(url: String, destination: File) {
         fileApiService.downloadFile(url, destination)
@@ -161,25 +135,22 @@ class FileRepo(
                 val updates = fileApiService.getFileUpdates(workspaceId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
-                        if (remote.isDeleted) {
-                            fileDoa.deleteFileById(remote.id)
-                        } else {
-                            val entity = FileEntity(
-                                id = remote.id,
-                                userId = remote.userId,
-                                workspaceId = remote.workspaceId,
-                                userName = remote.userName,
-                                url = remote.url,
-                                mimeType = remote.mimeType,
-                                localpath = remote.localpath,
-                                fileName = remote.fileName,
-                                sizebytes = remote.sizebytes,
-                                fileLocation = remote.fileLocation
-                            )
-                            fileDoa.insertFile(entity)
-                        }
+                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
+                        FileEntity(
+                            id = remote.id,
+                            userId = remote.userId,
+                            workspaceId = remote.workspaceId,
+                            userName = remote.userName,
+                            url = remote.url,
+                            mimeType = remote.mimeType,
+                            localpath = remote.localpath,
+                            fileName = remote.fileName,
+                            sizebytes = remote.sizebytes,
+                            fileLocation = remote.fileLocation
+                        )
                     }
+                    val deletes = updates.filter { it.isDeleted }.map { it.id }
+                    fileDoa.applyDelta(upserts, deletes)
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
@@ -190,7 +161,7 @@ class FileRepo(
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)
             }
-            delay(1000)
+            delay(5000)
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

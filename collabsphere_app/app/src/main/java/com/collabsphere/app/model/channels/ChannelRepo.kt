@@ -14,9 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -94,27 +92,9 @@ class ChannelRepo(
         }
     }
 
-    fun getallchannelbyuser(workspaceId: Int): Flow<List<ChannelEntity>> {
-        return channelDao.getchannels(workspaceId)
-            .onStart {
-                try {
-                    val remoteChannels = apiService.getchannelbyuser(workspaceId)
-                    val channelEntities = remoteChannels.map { remote ->
-                        ChannelEntity(
-                            id = remote.id,
-                            userId = remote.userId ?: 0,
-                            workspaceId = remote.workspaceId,
-                            channelName = remote.channelName,
-                            description = remote.description
-                        )
-                    }
-                    channelDao.insertAllChannels(channelEntities)
-                } catch (e: Exception) {
-                    Log.e("ChannelRepo", "Operation failed", e)
-                }
-            }
-            .flowOn(Dispatchers.IO)
-    }
+    // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
+    fun getallchannelbyuser(workspaceId: Int): Flow<List<ChannelEntity>> =
+        channelDao.getchannels(workspaceId)
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
@@ -127,24 +107,25 @@ class ChannelRepo(
                 val updates = apiService.getChannelUpdates(workspaceId, lastSyncTime)
 
                 if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
-                        if (remote.isDeleted) {
-                            channelDao.deletechannel(
-                                channelName = remote.channelName,
-                                workspaceId = remote.workspaceId,
-                                userId = remote.userId ?: 0
-                            )
-                        } else {
-                            val entity = ChannelEntity(
-                                id = remote.id,
-                                userId = remote.userId ?: 0,
-                                workspaceId = remote.workspaceId,
-                                channelName = remote.channelName,
-                                description = remote.description
-                            )
-                            channelDao.createChannels(entity)
-                        }
+                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
+                        ChannelEntity(
+                            id = remote.id,
+                            userId = remote.userId ?: 0,
+                            workspaceId = remote.workspaceId,
+                            channelName = remote.channelName,
+                            description = remote.description
+                        )
                     }
+                    val deletes = updates.filter { it.isDeleted }
+                    // Delete individually since channels use (name, workspaceId) not a simple id list
+                    deletes.forEach { remote ->
+                        channelDao.deletechannel(
+                            channelName = remote.channelName,
+                            workspaceId = remote.workspaceId,
+                            userId = remote.userId ?: 0
+                        )
+                    }
+                    if (upserts.isNotEmpty()) channelDao.insertAllChannels(upserts)
 
                     val newestTimestamp = updates.maxOf { it.updatedAt }
                     dataStore.edit { preferences ->
@@ -154,7 +135,7 @@ class ChannelRepo(
             } catch (e: Exception) {
                 Log.e("ChannelRepo", "Operation failed", e)
             }
-            delay(1000)
+            delay(5000)
         }
         } finally {
             activeSyncLoops.remove(workspaceId)
