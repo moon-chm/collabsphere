@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.core.content.ContextCompat
 import com.collabsphere.app.ui.theme.CollabSphereTheme
 import androidx.compose.runtime.LaunchedEffect
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -137,6 +138,18 @@ class MainActivity : ComponentActivity() {
                         widgetDestination == "workspaces" && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
                         savedUserId != -1 || loggedInUserId != 0L -> "dashboard"
                         else -> "onboarding"
+                    }
+
+                    LaunchedEffect(Unit) {
+                        SessionEvents.expiredToken.collect { token ->
+                            if (!SessionEvents.claim(token)) return@collect
+                            loginViewModel.logout()
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Your session expired. Please log in again.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
 
                     LaunchedEffect(savedUserId) {

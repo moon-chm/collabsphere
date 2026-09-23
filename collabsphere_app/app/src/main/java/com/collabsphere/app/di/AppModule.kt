@@ -34,6 +34,9 @@ import com.collabsphere.app.viewmodel.profile.ProfileViewModel
 import com.collabsphere.app.viewmodel.GitHubViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpResponseValidator
+import io.ktor.http.HttpStatusCode
+import com.collabsphere.app.SessionEvents
 import com.collabsphere.app.NotificationHelper
 import com.collabsphere.app.model.channels.ChannelSyncWorker
 import com.collabsphere.app.model.dm.DmSyncWorker
@@ -109,6 +112,17 @@ val networkModule = module {
                 // Read lazily per-request — if captured at construction time the token
                 // is null (client is built before login completes) and never refreshes.
                 AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            }
+            HttpResponseValidator {
+                validateResponse { response ->
+                    if (response.status == HttpStatusCode.Unauthorized) {
+                        val request = response.call.request
+                        if (!request.url.encodedPath.endsWith("/api/login")) {
+                            val sentToken = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")
+                            SessionEvents.onUnauthorized(sentToken)
+                        }
+                    }
+                }
             }
         }
     }
