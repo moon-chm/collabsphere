@@ -21,5 +21,5 @@ data class FileEntity(
     val localpath : String?,
     val fileName: String,
     val sizebytes: Long,
-    val fileLocation: String
+    val fileLocation: String? = null
 )
