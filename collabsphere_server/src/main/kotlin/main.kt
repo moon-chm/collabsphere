@@ -1,6 +1,7 @@
 package com.collabsphere
 
 import plugins.configureRouting
+import plugins.configureGitHubRoutes
 import com.collabsphere.util.JwtConfig
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -60,5 +61,5 @@ fun Application.module() {
     }
 
     configureRouting()
-    plugins.configureGitHubRoutes()
+    configureGitHubRoutes()
 }
