@@ -41,6 +41,7 @@ fun Application.configureGitHubRoutes() {
                 val code = call.request.queryParameters["code"]
                 val installationIdStr = call.request.queryParameters["installation_id"]
                 val setupAction = call.request.queryParameters["setup_action"]
+                val workspaceId = call.request.queryParameters["state"]?.toIntOrNull()
 
                 if (code == null) {
                     call.respond(HttpStatusCode.BadRequest, "Missing authorization code")
@@ -57,13 +58,26 @@ fun Application.configureGitHubRoutes() {
                 val installationId = installationIdStr?.toLongOrNull()
                 
                 // If installationId is provided in callback, we can fetch repos immediately
-                // Otherwise, we might need to query the user's installations.
-                if (installationId != null) {
-                    val repos = GitHubService.getInstallationRepositories(tokenResponse.access_token, installationId)
-                    // TODO: We need the CollabSphere userId to link this in the DB.
-                    // Usually this callback is opened in a browser where the user is already logged in
-                    // or we pass a state token. 
-                    // For now, this is the foundational route.
+                if (installationId != null && workspaceId != null) {
+                    val reposResponse = GitHubService.getInstallationRepositories(tokenResponse.access_token, installationId)
+                    if (reposResponse != null && reposResponse.repositories.isNotEmpty()) {
+                        val repo = reposResponse.repositories.first()
+                        
+                        dbQuery {
+                            // Check if workspace already has a repo linked
+                            val existing = GitHubRepositoriesTable.select { GitHubRepositoriesTable.workspaceId eq workspaceId }.singleOrNull()
+                            if (existing == null) {
+                                GitHubRepositoriesTable.insert {
+                                    it[GitHubRepositoriesTable.workspaceId] = workspaceId
+                                    it[GitHubRepositoriesTable.installationId] = installationId
+                                    it[GitHubRepositoriesTable.repositoryId] = repo.id
+                                    it[GitHubRepositoriesTable.fullName] = repo.full_name
+                                    it[GitHubRepositoriesTable.owner] = repo.owner.login
+                                    it[GitHubRepositoriesTable.name] = repo.name
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Redirect back to Android App via deep link
