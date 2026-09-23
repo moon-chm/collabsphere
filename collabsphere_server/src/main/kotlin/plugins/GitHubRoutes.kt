@@ -126,6 +126,39 @@ fun Application.configureGitHubRoutes() {
 
                 call.respondRedirect("collabsphere://github-auth-success?installation_id=$installationId&workspace_id=$workspaceId")
             }
+
+            // Quick reset endpoints for testing/debugging via browser
+            get("/unlink/{workspaceId}") {
+                val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
+                if (workspaceId == null) {
+                    call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+                    return@get
+                }
+                val count = dbQuery {
+                    GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                }
+                call.respondText("Successfully unlinked repository from workspace $workspaceId (rows removed: $count). Now open the app and pick a repo!")
+            }
+
+            get("/reset/{workspaceId}") {
+                val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
+                if (workspaceId == null) {
+                    call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+                    return@get
+                }
+                val info = dbQuery {
+                    val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
+                    if (workspaceRow != null) {
+                        val userId = workspaceRow[WorkspacesTable.userId]
+                        val connDeleted = GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.userId eq userId }
+                        val repoDeleted = GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                        "Deleted connection ($connDeleted) and repo ($repoDeleted) for user $userId, workspace $workspaceId"
+                    } else {
+                        "Workspace $workspaceId not found"
+                    }
+                }
+                call.respondText("Reset complete: $info")
+            }
         }
 
         post("/webhook/github") {
@@ -232,6 +265,49 @@ fun Application.configureGitHubRoutes() {
                     } catch (e: Exception) {
                         println("[GitHub] Error linking repo: ${e.message}")
                         call.respond(HttpStatusCode.InternalServerError, "Failed to link repo")
+                    }
+                }
+                
+                // Unlink repo from this workspace
+                post("/unlink-repo") {
+                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
+                    if (workspaceId == null) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+                        return@post
+                    }
+                    try {
+                        dbQuery {
+                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                        }
+                        println("[GitHub] Unlinked repo from workspace $workspaceId")
+                        call.respond(HttpStatusCode.OK, mapOf("status" to "unlinked"))
+                    } catch (e: Exception) {
+                        println("[GitHub] Error unlinking repo: ${e.message}")
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to unlink repo")
+                    }
+                }
+
+                // Disconnect GitHub completely for this workspace / user
+                post("/disconnect") {
+                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
+                    if (workspaceId == null) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+                        return@post
+                    }
+                    try {
+                        dbQuery {
+                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
+                            if (workspaceRow != null) {
+                                val userId = workspaceRow[WorkspacesTable.userId]
+                                GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.userId eq userId }
+                            }
+                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                        }
+                        println("[GitHub] Disconnected GitHub for workspace $workspaceId")
+                        call.respond(HttpStatusCode.OK, mapOf("status" to "disconnected"))
+                    } catch (e: Exception) {
+                        println("[GitHub] Error disconnecting GitHub: ${e.message}")
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to disconnect GitHub")
                     }
                 }
                 
