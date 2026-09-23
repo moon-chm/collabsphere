@@ -1,27 +1,50 @@
 package plugins
 
+import com.collabsphere.dto.GitHubAnalyticsResponse
+import com.collabsphere.dto.GitHubChannelOption
+import com.collabsphere.dto.GitHubNotifyChannelRequest
+import com.collabsphere.dto.GitHubTaskLinkResponse
+import com.collabsphere.model.ChannelsTable
+import com.collabsphere.model.GitHubTaskLinksTable
+import com.collabsphere.model.TasksTable
+import com.collabsphere.dto.GitHubCommitItem
+import com.collabsphere.dto.GitHubContributorStats
+import com.collabsphere.dto.GitHubDailyCount
+import com.collabsphere.dto.GitHubPullRequestItem
+import com.collabsphere.model.GitHubCommitsTable
 import com.collabsphere.model.GitHubConnectionsTable
+import com.collabsphere.model.GitHubPullRequestsTable
 import com.collabsphere.model.GitHubRepositoriesTable
 import com.collabsphere.model.WorkspacesTable
-import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.util.GitHubAuthService
+import com.collabsphere.util.GitHubDataStore
+import com.collabsphere.util.GitHubRepository
 import com.collabsphere.util.GitHubService
+import com.collabsphere.util.GitHubSyncManager
+import com.collabsphere.util.GitHubWebhookService
+import com.collabsphere.util.JwtConfig
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
+import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 @Serializable
 data class LinkRepoRequest(
@@ -45,190 +68,192 @@ data class AvailableRepo(
     val defaultBranch: String
 )
 
+private data class GitHubWorkspaceAccess(
+    val workspaceId: Int,
+    val ownerId: Int,
+    val callerId: Int
+) {
+    val isOwner: Boolean get() = ownerId == callerId
+}
+
+private suspend fun ApplicationCall.resolveGitHubAccess(requireOwner: Boolean): GitHubWorkspaceAccess? {
+    val workspaceId = parameters["workspaceId"]?.toIntOrNull()
+    if (workspaceId == null) {
+        respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+        return null
+    }
+    val callerId = authenticatedUserId()
+    val ownerId = dbQuery {
+        val ownerId = WorkspacesTable.selectAll()
+            .where { (WorkspacesTable.id eq workspaceId) and (WorkspacesTable.isDeleted eq false) }
+            .singleOrNull()
+            ?.get(WorkspacesTable.userId)
+        ownerId?.takeIf { it == callerId || isMember(callerId, workspaceId) }
+    }
+    if (ownerId == null) {
+        respond(HttpStatusCode.NotFound, "Workspace not found")
+        return null
+    }
+    if (requireOwner && ownerId != callerId) {
+        respond(HttpStatusCode.Forbidden, "Only the workspace owner can manage GitHub")
+        return null
+    }
+    return GitHubWorkspaceAccess(workspaceId, ownerId, callerId)
+}
+
+private fun findConnection(userId: Int): ResultRow? =
+    GitHubConnectionsTable.selectAll()
+        .where { GitHubConnectionsTable.userId eq userId }
+        .singleOrNull()
+
+private const val GITHUB_APP_SLUG = "collabspheregithubfeat"
+private const val ACTIVITY_DAYS = 14
+private const val TOP_CONTRIBUTORS = 5
+private const val RECENT_ITEMS = 10
+
+private suspend fun ApplicationCall.redirectGitHubResult(workspaceId: Int?, error: String?) {
+    val params = listOfNotNull(
+        workspaceId?.let { "workspace_id=$it" },
+        error?.let { "error=$it" }
+    ).joinToString("&")
+    respondRedirect("collabsphere://github-auth-success?$params")
+}
+
+private suspend fun installationRepositories(ownerId: Int): List<GitHubRepository>? {
+    val connection = dbQuery {
+        findConnection(ownerId)?.let {
+            it[GitHubConnectionsTable.installationId] to it[GitHubConnectionsTable.accessTokenEncrypted]
+        }
+    } ?: return emptyList()
+    val (installationId, userToken) = connection
+    return GitHubService.listInstallationRepositories(installationId, userToken)
+}
+
 fun Application.configureGitHubRoutes() {
     routing {
-        
-        // Unauthenticated routes for OAuth and Webhooks
-        route("/auth/github") {
-            
-            // Redirect to GitHub for App Installation & Authorization
-            get("/install") {
-                val workspaceId = call.request.queryParameters["workspaceId"]
-                println("[GitHub] /install hit. workspaceId=$workspaceId")
-                val url = "https://github.com/apps/collabspheregithubfeat/installations/new?state=$workspaceId"
-                println("[GitHub] Redirecting to App install page: $url")
-                call.respondRedirect(url)
-            }
 
-            // Callback: save the GitHub connection only. User picks repo in-app.
+        route("/auth/github") {
+
             get("/callback") {
                 val code = call.request.queryParameters["code"]
-                val installationIdStr = call.request.queryParameters["installation_id"]
-                val workspaceId = call.request.queryParameters["state"]?.toIntOrNull()
-                
-                println("[GitHub] /callback hit! code=${code?.take(10)}..., installation_id=$installationIdStr, workspaceId=$workspaceId")
+                val state = call.request.queryParameters["state"]?.let { JwtConfig.verifyGitHubState(it) }
 
-                if (code == null) {
-                    println("[GitHub] ERROR: No code parameter!")
-                    call.respond(HttpStatusCode.BadRequest, "Missing authorization code")
+                if (code == null || state == null) {
+                    call.redirectGitHubResult(state?.second, "invalid_request")
                     return@get
                 }
+                val (userId, workspaceId) = state
 
-                println("[GitHub] Exchanging code for user token...")
                 val tokenResponse = GitHubAuthService.exchangeCodeForUserToken(code)
                 if (tokenResponse == null) {
-                    println("[GitHub] ERROR: Token exchange failed!")
-                    call.respond(HttpStatusCode.InternalServerError, "Failed to exchange token")
+                    call.redirectGitHubResult(workspaceId, "token_exchange_failed")
                     return@get
                 }
-                println("[GitHub] Token exchange SUCCESS")
+                val userToken = tokenResponse.access_token
 
-                var installationId = installationIdStr?.toLongOrNull()
-                if (installationId == null) {
-                    println("[GitHub] No installation_id in callback, querying user installations...")
-                    val installations = GitHubService.getUserInstallations(tokenResponse.access_token)
-                    installationId = installations?.firstOrNull()?.id
-                    println("[GitHub] Using installationId=$installationId")
+                val installations = GitHubService.getUserInstallations(userToken).orEmpty()
+                val requestedInstallationId = call.request.queryParameters["installation_id"]?.toLongOrNull()
+                val installation = if (requestedInstallationId != null) {
+                    installations.firstOrNull { it.id == requestedInstallationId }
+                } else {
+                    installations.singleOrNull()
                 }
-                
-                if (installationId != null && workspaceId != null) {
-                    try {
-                        dbQuery {
-                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                            if (workspaceRow != null) {
-                                val userId = workspaceRow[WorkspacesTable.userId]
-                                
-                                val existingConn = GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq userId }.singleOrNull()
-                                if (existingConn == null) {
-                                    println("[GitHub] Creating new GitHubConnection for userId=$userId")
-                                    GitHubConnectionsTable.insert {
-                                        it[GitHubConnectionsTable.userId] = userId
-                                        it[GitHubConnectionsTable.githubUserId] = 0L
-                                        it[GitHubConnectionsTable.githubUsername] = "connected_user"
-                                        it[GitHubConnectionsTable.installationId] = installationId
-                                        it[GitHubConnectionsTable.accessTokenEncrypted] = tokenResponse.access_token
-                                    }
-                                } else {
-                                    println("[GitHub] Updating existing GitHubConnection for userId=$userId")
-                                    GitHubConnectionsTable.update({ GitHubConnectionsTable.userId eq userId }) {
-                                        it[GitHubConnectionsTable.installationId] = installationId
-                                        it[GitHubConnectionsTable.accessTokenEncrypted] = tokenResponse.access_token
-                                        it[GitHubConnectionsTable.updatedAt] = System.currentTimeMillis()
-                                    }
+                if (installation == null) {
+                    call.redirectGitHubResult(workspaceId, "installation_not_found")
+                    return@get
+                }
+
+                val githubUser = GitHubService.getAuthenticatedUser(userToken)
+                val tokenExpiresAt = tokenResponse.expires_in
+                    .takeIf { it > 0 }
+                    ?.let { System.currentTimeMillis() + it * 1000 }
+
+                val saved = try {
+                    dbQuery {
+                        val isOwner = WorkspacesTable.selectAll()
+                            .where {
+                                (WorkspacesTable.id eq workspaceId) and
+                                    (WorkspacesTable.userId eq userId) and
+                                    (WorkspacesTable.isDeleted eq false)
+                            }
+                            .count() > 0
+                        if (!isOwner) return@dbQuery false
+
+                        if (findConnection(userId) == null) {
+                            GitHubConnectionsTable.insert {
+                                it[GitHubConnectionsTable.userId] = userId
+                                it[GitHubConnectionsTable.githubUserId] = githubUser?.id ?: 0L
+                                it[GitHubConnectionsTable.githubUsername] = githubUser?.login ?: installation.account.login
+                                it[GitHubConnectionsTable.installationId] = installation.id
+                                it[GitHubConnectionsTable.accessTokenEncrypted] = userToken
+                                it[GitHubConnectionsTable.accessTokenExpiresAt] = tokenExpiresAt
+                            }
+                        } else {
+                            GitHubConnectionsTable.update({ GitHubConnectionsTable.userId eq userId }) {
+                                if (githubUser != null) {
+                                    it[GitHubConnectionsTable.githubUserId] = githubUser.id
+                                    it[GitHubConnectionsTable.githubUsername] = githubUser.login
                                 }
-                                println("[GitHub] Connection saved! User will pick repo in-app.")
+                                it[GitHubConnectionsTable.installationId] = installation.id
+                                it[GitHubConnectionsTable.accessTokenEncrypted] = userToken
+                                it[GitHubConnectionsTable.accessTokenExpiresAt] = tokenExpiresAt
+                                it[GitHubConnectionsTable.updatedAt] = System.currentTimeMillis()
                             }
                         }
-                    } catch (e: Exception) {
-                        println("[GitHub] DB ERROR: ${e.message}")
-                        e.printStackTrace()
+                        true
                     }
+                } catch (e: Exception) {
+                    println("[GitHub] Failed to save connection: ${e.message}")
+                    null
                 }
 
-                call.respondRedirect("collabsphere://github-auth-success?installation_id=$installationId&workspace_id=$workspaceId")
-            }
-
-            // Quick reset endpoints for testing/debugging via browser
-            get("/unlink/{workspaceId}") {
-                val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                if (workspaceId == null) {
-                    call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                    return@get
+                when (saved) {
+                    true -> call.redirectGitHubResult(workspaceId, null)
+                    false -> call.redirectGitHubResult(workspaceId, "not_workspace_owner")
+                    null -> call.redirectGitHubResult(workspaceId, "save_failed")
                 }
-                val count = dbQuery {
-                    GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
-                }
-                call.respondText("Successfully unlinked repository from workspace $workspaceId (rows removed: $count). Now open the app and pick a repo!")
-            }
-
-            get("/reset/{workspaceId}") {
-                val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                if (workspaceId == null) {
-                    call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                    return@get
-                }
-                val info = dbQuery {
-                    val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                    if (workspaceRow != null) {
-                        val userId = workspaceRow[WorkspacesTable.userId]
-                        val connDeleted = GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.userId eq userId }
-                        val repoDeleted = GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
-                        "Deleted connection ($connDeleted) and repo ($repoDeleted) for user $userId, workspace $workspaceId"
-                    } else {
-                        "Workspace $workspaceId not found"
-                    }
-                }
-                call.respondText("Reset complete: $info")
-            }
-
-            get("/debug") {
-                val info = dbQuery {
-                    val conns = GitHubConnectionsTable.selectAll().map {
-                        "Conn(id=${it[GitHubConnectionsTable.id]}, userId=${it[GitHubConnectionsTable.userId]}, instId=${it[GitHubConnectionsTable.installationId]}, user=${it[GitHubConnectionsTable.githubUsername]})"
-                    }
-                    val repos = GitHubRepositoriesTable.selectAll().map {
-                        "Repo(id=${it[GitHubRepositoriesTable.id]}, connId=${it[GitHubRepositoriesTable.connectionId]}, wsId=${it[GitHubRepositoriesTable.workspaceId]}, fullName=${it[GitHubRepositoriesTable.fullName]})"
-                    }
-                    val workspaces = WorkspacesTable.selectAll().map {
-                        "WS(id=${it[WorkspacesTable.id]}, userId=${it[WorkspacesTable.userId]}, name=${it[WorkspacesTable.workspaceName]})"
-                    }
-                    "=== WORKSPACES ===\n${workspaces.joinToString("\n")}\n\n=== CONNECTIONS ===\n${conns.joinToString("\n")}\n\n=== REPOSITORIES ===\n${repos.joinToString("\n")}"
-                }
-                call.respondText(info)
             }
         }
 
         post("/webhook/github") {
-            val eventType = call.request.header("X-GitHub-Event")
+            val payload = call.receive<ByteArray>()
             val signature = call.request.header("X-Hub-Signature-256")
-            val payload = call.receiveText()
-            
-            val isValid = com.collabsphere.util.GitHubWebhookService.verifySignature(payload, signature)
-            if (!isValid) {
-                println("Warning: Webhook signature verification failed or secret not set.")
+            if (!GitHubWebhookService.verifySignature(payload, signature)) {
+                println("[GitHub] Rejected webhook with invalid signature")
+                call.respond(HttpStatusCode.Unauthorized)
+                return@post
             }
-            com.collabsphere.util.GitHubWebhookService.handleWebhookEvent(eventType, payload)
+            val activities = try {
+                GitHubWebhookService.handleWebhookEvent(call.request.header("X-GitHub-Event"), payload.decodeToString())
+            } catch (e: Exception) {
+                println("[GitHub] Webhook processing failed: ${e.message}")
+                call.respond(HttpStatusCode.InternalServerError)
+                return@post
+            }
             call.respond(HttpStatusCode.OK)
+            processGitHubActivities(activities)
         }
 
-        // Authenticated routes for the Android App
         authenticate("auth-jwt") {
             route("/api/workspace/{workspaceId}/github") {
-                
-                // List repos the user can link to this workspace
+
+                get("/install-url") {
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@get
+                    val state = JwtConfig.generateGitHubState(access.callerId, access.workspaceId)
+                    val url = "https://github.com/apps/$GITHUB_APP_SLUG/installations/new?state=${state.encodeURLQueryComponent()}"
+                    call.respond(HttpStatusCode.OK, mapOf("url" to url))
+                }
+
                 get("/available-repos") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                        return@get
-                    }
-                    
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@get
+
                     try {
-                        val connectionInfo = dbQuery {
-                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                            val wsOwnerId = workspaceRow?.get(WorkspacesTable.userId)
-                            val callerUserId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
-                            
-                            val connRow = (if (wsOwnerId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq wsOwnerId }.firstOrNull() else null)
-                                ?: (if (callerUserId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq callerUserId }.firstOrNull() else null)
-                                ?: GitHubConnectionsTable.selectAll().firstOrNull()
-                                ?: return@dbQuery null
-                                
-                            Pair(
-                                connRow[GitHubConnectionsTable.installationId],
-                                connRow[GitHubConnectionsTable.accessTokenEncrypted]
-                            )
-                        }
-                        
-                        if (connectionInfo == null) {
-                            call.respond(HttpStatusCode.OK, emptyList<AvailableRepo>())
+                        val repos = installationRepositories(access.ownerId)
+                        if (repos == null) {
+                            call.respond(HttpStatusCode.BadGateway, "GitHub did not return the repository list")
                             return@get
                         }
-                        
-                        val (installationId, accessToken) = connectionInfo
-                        val repos = GitHubService.getInstallationRepositories(accessToken ?: "", installationId)
-                        
-                        val available = repos?.map { repo ->
+                        val available = repos.map { repo ->
                             AvailableRepo(
                                 id = repo.id,
                                 fullName = repo.full_name,
@@ -238,132 +263,166 @@ fun Application.configureGitHubRoutes() {
                                 htmlUrl = repo.html_url,
                                 defaultBranch = repo.default_branch
                             )
-                        } ?: emptyList()
-                        
+                        }
                         call.respond(HttpStatusCode.OK, available)
                     } catch (e: Exception) {
                         println("[GitHub] Error fetching available repos: ${e.message}")
                         call.respond(HttpStatusCode.InternalServerError, "Failed to fetch repos")
                     }
                 }
-                
-                // Link a specific repo to this workspace
+
                 post("/link-repo") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                        return@post
-                    }
-                    
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@post
+                    val workspaceId = access.workspaceId
                     val request = call.receive<LinkRepoRequest>()
-                    
+
                     try {
-                        var insertedRepoId: Int? = null
-                        var userToken: String? = null
-                        
-                        val linkSuccess = dbQuery {
-                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                                ?: return@dbQuery false
-                            val wsOwnerId = workspaceRow[WorkspacesTable.userId]
-                            val callerUserId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
-                            
-                            val connRow = (if (wsOwnerId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq wsOwnerId }.firstOrNull() else null)
-                                ?: (if (callerUserId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq callerUserId }.firstOrNull() else null)
-                                ?: GitHubConnectionsTable.selectAll().firstOrNull()
-                                ?: return@dbQuery false
-                                
-                            val connectionId = connRow[GitHubConnectionsTable.id]
-                            userToken = connRow[GitHubConnectionsTable.accessTokenEncrypted]
-                            
-                            // Remove any existing link for this workspace
-                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
-                            
-                            val repoId = GitHubRepositoriesTable.insert {
-                                it[GitHubRepositoriesTable.connectionId] = connectionId
-                                it[GitHubRepositoriesTable.workspaceId] = workspaceId
-                                it[GitHubRepositoriesTable.githubRepoId] = request.repoId
-                                it[GitHubRepositoriesTable.fullName] = request.fullName
-                                it[GitHubRepositoriesTable.owner] = request.owner
-                                it[GitHubRepositoriesTable.name] = request.name
-                                it[GitHubRepositoriesTable.isPrivate] = request.isPrivate
-                                it[GitHubRepositoriesTable.htmlUrl] = request.htmlUrl
-                                it[GitHubRepositoriesTable.defaultBranch] = request.defaultBranch
-                            } get GitHubRepositoriesTable.id
-                            
-                            insertedRepoId = repoId
-                            println("[GitHub] Linked repo ${request.fullName} (id=$repoId) to workspace $workspaceId")
-                            true
-                        }
-                        
-                        if (!linkSuccess) {
-                            println("[GitHub] Failed to link repo: No connection or workspace found for ws=$workspaceId")
-                            call.respond(HttpStatusCode.NotFound, "No GitHub connection or workspace found. Please connect to GitHub first.")
+                        val repo = installationRepositories(access.ownerId)?.firstOrNull { it.id == request.repoId }
+                        if (repo == null) {
+                            call.respond(HttpStatusCode.NotFound, "This repository is not accessible to the GitHub App installation.")
                             return@post
                         }
-                        
-                        // Initial sync of recent commits and PRs so analytics immediately shows data
-                        if (insertedRepoId != null && !userToken.isNullOrBlank()) {
-                            try {
-                                val recentCommits = GitHubService.getRecentCommits(userToken!!, request.fullName)
-                                if (recentCommits != null && recentCommits.isNotEmpty()) {
-                                    dbQuery {
-                                        for (c in recentCommits) {
-                                            com.collabsphere.model.GitHubCommitsTable.insert {
-                                                it[com.collabsphere.model.GitHubCommitsTable.repositoryId] = insertedRepoId!!
-                                                it[com.collabsphere.model.GitHubCommitsTable.sha] = c.sha
-                                                it[com.collabsphere.model.GitHubCommitsTable.message] = c.commit?.message ?: ""
-                                                it[com.collabsphere.model.GitHubCommitsTable.authorName] = c.commit?.author?.name
-                                                it[com.collabsphere.model.GitHubCommitsTable.authorEmail] = c.commit?.author?.email
-                                                it[com.collabsphere.model.GitHubCommitsTable.commitDate] = System.currentTimeMillis()
-                                            }
-                                        }
-                                    }
-                                    println("[GitHub] Synced ${recentCommits.size} initial commits for ${request.fullName}")
-                                }
-                                
-                                val recentPrs = GitHubService.getRecentPullRequests(userToken!!, request.fullName)
-                                if (recentPrs != null && recentPrs.isNotEmpty()) {
-                                    dbQuery {
-                                        for (pr in recentPrs) {
-                                            com.collabsphere.model.GitHubPullRequestsTable.insert {
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.repositoryId] = insertedRepoId!!
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.githubPrId] = pr.id
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.number] = pr.number
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.title] = pr.title
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.state] = pr.state
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.authorUsername] = "github_user"
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.createdAt] = System.currentTimeMillis()
-                                                it[com.collabsphere.model.GitHubPullRequestsTable.mergedAt] = if (pr.merged_at != null) System.currentTimeMillis() else null
-                                            }
-                                        }
-                                    }
-                                    println("[GitHub] Synced ${recentPrs.size} initial PRs for ${request.fullName}")
-                                }
-                            } catch (e: Exception) {
-                                println("[GitHub] Warning: Initial sync of commits/PRs failed: ${e.message}")
-                            }
+
+                        val linked = dbQuery {
+                            val connRow = findConnection(access.ownerId) ?: return@dbQuery null
+
+                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+
+                            val repoId = GitHubRepositoriesTable.insert {
+                                it[GitHubRepositoriesTable.connectionId] = connRow[GitHubConnectionsTable.id]
+                                it[GitHubRepositoriesTable.workspaceId] = workspaceId
+                                it[GitHubRepositoriesTable.githubRepoId] = repo.id
+                                it[GitHubRepositoriesTable.fullName] = repo.full_name
+                                it[GitHubRepositoriesTable.owner] = repo.owner.login
+                                it[GitHubRepositoriesTable.name] = repo.name
+                                it[GitHubRepositoriesTable.isPrivate] = repo.private
+                                it[GitHubRepositoriesTable.htmlUrl] = repo.html_url
+                                it[GitHubRepositoriesTable.defaultBranch] = repo.default_branch
+                            } get GitHubRepositoriesTable.id
+
+                            Triple(repoId, connRow[GitHubConnectionsTable.installationId], connRow[GitHubConnectionsTable.accessTokenEncrypted])
                         }
-                        
-                        call.respond(HttpStatusCode.OK, mapOf("status" to "linked", "repo" to request.fullName))
+
+                        if (linked == null) {
+                            call.respond(HttpStatusCode.NotFound, "No GitHub connection found. Please connect to GitHub first.")
+                            return@post
+                        }
+
+                        val (insertedRepoId, installationId, userToken) = linked
+                        GitHubSyncManager.start(insertedRepoId, installationId, userToken, repo.full_name, repo.default_branch)
+
+                        call.respond(HttpStatusCode.OK, mapOf("status" to "linked", "repo" to repo.full_name))
                     } catch (e: Exception) {
                         println("[GitHub] Error linking repo: ${e.message}")
-                        e.printStackTrace()
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to link repo: ${e.message}")
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to link repo")
                     }
                 }
-                
-                // Unlink repo from this workspace
-                post("/unlink-repo") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
+
+                post("/sync") {
+                    val access = call.resolveGitHubAccess(requireOwner = false) ?: return@post
+                    val target = dbQuery {
+                        val repoRow = GitHubRepositoriesTable.selectAll()
+                            .where { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
+                            .singleOrNull() ?: return@dbQuery null
+                        val connRow = GitHubConnectionsTable.selectAll()
+                            .where { GitHubConnectionsTable.id eq repoRow[GitHubRepositoriesTable.connectionId] }
+                            .singleOrNull() ?: return@dbQuery null
+                        repoRow to connRow
+                    }
+                    if (target == null) {
+                        call.respond(HttpStatusCode.NotFound, "No repository linked to this workspace")
                         return@post
                     }
+                    val (repoRow, connRow) = target
+                    val repositoryId = repoRow[GitHubRepositoriesTable.id]
+                    if (GitHubSyncManager.isSyncing(repositoryId)) {
+                        call.respond(HttpStatusCode.Accepted, mapOf("status" to "syncing"))
+                        return@post
+                    }
+                    val started = GitHubSyncManager.start(
+                        repositoryId = repositoryId,
+                        installationId = connRow[GitHubConnectionsTable.installationId],
+                        userToken = connRow[GitHubConnectionsTable.accessTokenEncrypted],
+                        repoFullName = repoRow[GitHubRepositoriesTable.fullName],
+                        branch = repoRow[GitHubRepositoriesTable.defaultBranch],
+                        manual = true
+                    )
+                    if (started) {
+                        call.respond(HttpStatusCode.Accepted, mapOf("status" to "syncing"))
+                    } else {
+                        call.respond(HttpStatusCode.TooManyRequests, "Synced recently. Please wait a moment before syncing again.")
+                    }
+                }
+
+                post("/notify-channel") {
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@post
+                    val request = try {
+                        call.receive<GitHubNotifyChannelRequest>()
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid request body")
+                        return@post
+                    }
+                    val updated = dbQuery {
+                        val channelId = request.channelId
+                        if (channelId != null) {
+                            val valid = ChannelsTable.selectAll()
+                                .where {
+                                    (ChannelsTable.id eq channelId) and
+                                        (ChannelsTable.workspaceId eq access.workspaceId) and
+                                        (ChannelsTable.isDeleted eq false)
+                                }
+                                .count() > 0
+                            if (!valid) return@dbQuery false
+                        }
+                        GitHubRepositoriesTable.update({ GitHubRepositoriesTable.workspaceId eq access.workspaceId }) {
+                            it[GitHubRepositoriesTable.notifyChannelId] = channelId
+                        } > 0
+                    }
+                    if (updated) {
+                        call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, "Channel or linked repository not found")
+                    }
+                }
+
+                get("/tasks/{taskId}/links") {
+                    val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                    val taskId = call.parameters["taskId"]?.toIntOrNull()
+                    if (taskId == null) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid task ID")
+                        return@get
+                    }
+                    val links = dbQuery {
+                        val taskInWorkspace = TasksTable.selectAll()
+                            .where { (TasksTable.id eq taskId) and (TasksTable.workspaceId eq access.workspaceId) }
+                            .count() > 0
+                        if (!taskInWorkspace) return@dbQuery null
+                        GitHubTaskLinksTable.selectAll()
+                            .where { GitHubTaskLinksTable.taskId eq taskId }
+                            .orderBy(GitHubTaskLinksTable.createdAt, SortOrder.DESC)
+                            .map {
+                                GitHubTaskLinkResponse(
+                                    kind = it[GitHubTaskLinksTable.kind],
+                                    ref = it[GitHubTaskLinksTable.ref],
+                                    title = it[GitHubTaskLinksTable.title],
+                                    url = it[GitHubTaskLinksTable.url],
+                                    createdAt = it[GitHubTaskLinksTable.createdAt]
+                                )
+                            }
+                    }
+                    if (links == null) {
+                        call.respond(HttpStatusCode.NotFound, "Task not found")
+                    } else {
+                        call.respond(HttpStatusCode.OK, links)
+                    }
+                }
+
+                post("/unlink-repo") {
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@post
                     try {
                         dbQuery {
-                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
                         }
-                        println("[GitHub] Unlinked repo from workspace $workspaceId")
                         call.respond(HttpStatusCode.OK, mapOf("status" to "unlinked"))
                     } catch (e: Exception) {
                         println("[GitHub] Error unlinking repo: ${e.message}")
@@ -371,58 +430,47 @@ fun Application.configureGitHubRoutes() {
                     }
                 }
 
-                // Disconnect GitHub completely for this workspace / user
                 post("/disconnect") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                        return@post
-                    }
+                    val access = call.resolveGitHubAccess(requireOwner = true) ?: return@post
                     try {
-                        dbQuery {
-                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                            val wsOwnerId = workspaceRow?.get(WorkspacesTable.userId)
-                            val callerUserId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
-                            if (wsOwnerId != null) {
-                                GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.userId eq wsOwnerId }
-                            }
-                            if (callerUserId != null) {
-                                GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.userId eq callerUserId }
-                            }
-                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                        val revokedToken = dbQuery {
+                            GitHubRepositoriesTable.deleteWhere { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
+                            val connRow = findConnection(access.ownerId) ?: return@dbQuery null
+                            val connectionId = connRow[GitHubConnectionsTable.id]
+                            val stillUsed = GitHubRepositoriesTable.selectAll()
+                                .where { GitHubRepositoriesTable.connectionId eq connectionId }
+                                .count() > 0
+                            if (stillUsed) return@dbQuery null
+                            GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.id eq connectionId }
+                            connRow[GitHubConnectionsTable.accessTokenEncrypted]
                         }
-                        println("[GitHub] Disconnected GitHub for workspace $workspaceId")
+                        if (!revokedToken.isNullOrBlank()) {
+                            GitHubAuthService.revokeUserGrant(revokedToken)
+                        }
                         call.respond(HttpStatusCode.OK, mapOf("status" to "disconnected"))
                     } catch (e: Exception) {
                         println("[GitHub] Error disconnecting GitHub: ${e.message}")
                         call.respond(HttpStatusCode.InternalServerError, "Failed to disconnect GitHub")
                     }
                 }
-                
+
                 get("/analytics") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid workspace ID")
-                        return@get
-                    }
-                    
+                    val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                    val zone = call.request.queryParameters["tz"]
+                        ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                        ?: ZoneOffset.UTC
+
                     val analytics = dbQuery {
-                        val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                        val wsOwnerId = workspaceRow?.get(WorkspacesTable.userId)
-                        val callerUserId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
-                        
-                        val hasConnection = (if (wsOwnerId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq wsOwnerId }.count() > 0 else false)
-                            || (if (callerUserId != null) GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq callerUserId }.count() > 0 else false)
-                            || (GitHubConnectionsTable.selectAll().count() > 0)
-                        
-                        val repoRow = GitHubRepositoriesTable
-                            .select { GitHubRepositoriesTable.workspaceId eq workspaceId }
+                        val hasConnection = findConnection(access.ownerId) != null
+                        val repoRow = GitHubRepositoriesTable.selectAll()
+                            .where { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
                             .singleOrNull()
 
                         if (repoRow == null) {
-                            return@dbQuery com.collabsphere.dto.GitHubAnalyticsResponse(
+                            return@dbQuery GitHubAnalyticsResponse(
                                 isConnected = false,
                                 hasConnection = hasConnection,
+                                canManage = access.isOwner,
                                 repositoryName = null,
                                 totalCommits = 0,
                                 openPullRequests = 0,
@@ -432,31 +480,101 @@ fun Application.configureGitHubRoutes() {
                         }
 
                         val repoId = repoRow[GitHubRepositoriesTable.id]
-                        val repoName = repoRow[GitHubRepositoriesTable.fullName]
 
-                        val totalCommits = com.collabsphere.model.GitHubCommitsTable
-                            .select { com.collabsphere.model.GitHubCommitsTable.repositoryId eq repoId }
+                        val totalCommits = GitHubCommitsTable.selectAll()
+                            .where { GitHubCommitsTable.repositoryId eq repoId }
                             .count().toInt()
 
-                        val openPrs = com.collabsphere.model.GitHubPullRequestsTable
-                            .select { (com.collabsphere.model.GitHubPullRequestsTable.repositoryId eq repoId) and (com.collabsphere.model.GitHubPullRequestsTable.state eq "open") }
+                        val openPrs = GitHubPullRequestsTable.selectAll()
+                            .where { (GitHubPullRequestsTable.repositoryId eq repoId) and (GitHubPullRequestsTable.state eq "open") }
                             .count().toInt()
 
-                        val mergedPrs = com.collabsphere.model.GitHubPullRequestsTable
-                            .select { (com.collabsphere.model.GitHubPullRequestsTable.repositoryId eq repoId) and (com.collabsphere.model.GitHubPullRequestsTable.mergedAt neq null) }
+                        val mergedPrs = GitHubPullRequestsTable.selectAll()
+                            .where { (GitHubPullRequestsTable.repositoryId eq repoId) and GitHubPullRequestsTable.mergedAt.isNotNull() }
                             .count().toInt()
 
-                        com.collabsphere.dto.GitHubAnalyticsResponse(
+                        val commitCount = GitHubCommitsTable.id.count()
+                        val topContributors = GitHubCommitsTable
+                            .select(GitHubCommitsTable.authorName, commitCount)
+                            .where { GitHubCommitsTable.repositoryId eq repoId }
+                            .groupBy(GitHubCommitsTable.authorName)
+                            .orderBy(commitCount, SortOrder.DESC)
+                            .limit(TOP_CONTRIBUTORS)
+                            .map {
+                                GitHubContributorStats(
+                                    username = it[GitHubCommitsTable.authorName] ?: "Unknown",
+                                    commits = it[commitCount].toInt()
+                                )
+                            }
+
+                        val today = LocalDate.now(zone)
+                        val since = today.minusDays(ACTIVITY_DAYS - 1L).atStartOfDay(zone).toInstant().toEpochMilli()
+                        val countsByDay = GitHubCommitsTable
+                            .select(GitHubCommitsTable.commitDate)
+                            .where { (GitHubCommitsTable.repositoryId eq repoId) and (GitHubCommitsTable.commitDate greaterEq since) }
+                            .map { Instant.ofEpochMilli(it[GitHubCommitsTable.commitDate]).atZone(zone).toLocalDate() }
+                            .groupingBy { it }
+                            .eachCount()
+                        val commitActivity = (ACTIVITY_DAYS - 1 downTo 0).map { daysAgo ->
+                            val day = today.minusDays(daysAgo.toLong())
+                            GitHubDailyCount(day.toString(), countsByDay[day] ?: 0)
+                        }
+
+                        val recentCommits = GitHubCommitsTable.selectAll()
+                            .where { GitHubCommitsTable.repositoryId eq repoId }
+                            .orderBy(GitHubCommitsTable.commitDate, SortOrder.DESC)
+                            .limit(RECENT_ITEMS)
+                            .map {
+                                GitHubCommitItem(
+                                    sha = it[GitHubCommitsTable.sha],
+                                    message = it[GitHubCommitsTable.message].lineSequence().first().take(200),
+                                    authorName = it[GitHubCommitsTable.authorName],
+                                    commitDate = it[GitHubCommitsTable.commitDate]
+                                )
+                            }
+
+                        val recentPullRequests = GitHubPullRequestsTable.selectAll()
+                            .where { GitHubPullRequestsTable.repositoryId eq repoId }
+                            .orderBy(GitHubPullRequestsTable.createdAt, SortOrder.DESC)
+                            .limit(RECENT_ITEMS)
+                            .map {
+                                GitHubPullRequestItem(
+                                    number = it[GitHubPullRequestsTable.number],
+                                    title = it[GitHubPullRequestsTable.title],
+                                    state = it[GitHubPullRequestsTable.state],
+                                    authorUsername = it[GitHubPullRequestsTable.authorUsername],
+                                    createdAt = it[GitHubPullRequestsTable.createdAt],
+                                    mergedAt = it[GitHubPullRequestsTable.mergedAt]
+                                )
+                            }
+
+                        GitHubAnalyticsResponse(
                             isConnected = true,
-                            hasConnection = true,
-                            repositoryName = repoName,
+                            hasConnection = hasConnection,
+                            canManage = access.isOwner,
+                            repositoryName = repoRow[GitHubRepositoriesTable.fullName],
+                            repositoryUrl = repoRow[GitHubRepositoriesTable.htmlUrl],
+                            lastSyncedAt = repoRow[GitHubRepositoriesTable.lastSyncedAt],
+                            isSyncing = GitHubSyncManager.isSyncing(repoId),
                             totalCommits = totalCommits,
                             openPullRequests = openPrs,
                             mergedPullRequests = mergedPrs,
-                            topContributors = emptyList()
+                            topContributors = topContributors,
+                            commitActivity = commitActivity,
+                            recentCommits = recentCommits,
+                            recentPullRequests = recentPullRequests,
+                            notifyChannelId = repoRow[GitHubRepositoriesTable.notifyChannelId],
+                            channels = if (access.isOwner) {
+                                ChannelsTable.selectAll()
+                                    .where { (ChannelsTable.workspaceId eq access.workspaceId) and (ChannelsTable.isDeleted eq false) }
+                                    .orderBy(ChannelsTable.channelName)
+                                    .map { GitHubChannelOption(it[ChannelsTable.id], it[ChannelsTable.channelName]) }
+                            } else {
+                                emptyList()
+                            }
                         )
                     }
-                    
+
                     call.respond(HttpStatusCode.OK, analytics)
                 }
             }

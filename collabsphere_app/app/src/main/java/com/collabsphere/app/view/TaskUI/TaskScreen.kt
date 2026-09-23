@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.TaskUI
 
+import com.collabsphere.app.viewmodel.GitHubViewModel
 import android.widget.Toast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -64,7 +65,8 @@ import com.collabsphere.app.viewmodel.task.TaskViewModel
 @Composable
 fun TaskScreen(
     viewModel: TaskViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gitHubViewModel: GitHubViewModel? = null
 ) {
     val context = LocalContext.current
 
@@ -311,7 +313,8 @@ onDrawBehind {
             UpdateTaskDialog(
                 task = task,
                 viewModel = viewModel,
-                onDismiss = { taskToUpdate = null }
+                onDismiss = { taskToUpdate = null },
+                gitHubViewModel = gitHubViewModel
             )
         }
 
@@ -505,6 +508,13 @@ fun SkeuoKanbanTaskCard(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Column {
+            taskReferenceLabel(taskUi.task.id)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9E8E89)
+                )
+            }
             Text(
                 text = taskUi.task.taskName,
                 style = MaterialTheme.typography.titleSmall.copy(
@@ -880,7 +890,8 @@ onDrawBehind {
 fun UpdateTaskDialog(
     task: TaskEntity,
     viewModel: TaskViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    gitHubViewModel: GitHubViewModel? = null
 ) {
     var updatedName by remember { mutableStateOf(task.taskName) }
     var updatedDescription by remember { mutableStateOf(task.taskDescription) }
@@ -937,6 +948,9 @@ onDrawBehind {
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
+                taskReferenceLabel(task.id)?.let {
+                    Text(text = it, style = MaterialTheme.typography.labelMedium, color = Muted)
+                }
 
                 // Debossed Name Field
                 Box(
@@ -1003,6 +1017,14 @@ onDrawBehind {
                                 inner()
                             }
                         }
+                    )
+                }
+
+                if (gitHubViewModel != null) {
+                    TaskGitHubLinksSection(
+                        workspaceId = task.workspaceId,
+                        taskId = task.id,
+                        gitHubViewModel = gitHubViewModel
                     )
                 }
 

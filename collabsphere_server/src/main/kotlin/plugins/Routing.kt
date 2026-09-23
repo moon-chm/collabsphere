@@ -118,7 +118,7 @@ fun ApplicationCall.authenticatedUserId(): Int =
     principal<JWTPrincipal>()!!.payload.getClaim("userId").asInt()
 
 /** Must be called from inside an existing `dbQuery`/transaction block. */
-private fun isMember(userId: Int, workspaceId: Int): Boolean =
+internal fun isMember(userId: Int, workspaceId: Int): Boolean =
     WorkspaceMembersTable.selectAll()
         .where { (WorkspaceMembersTable.workspaceId eq workspaceId) and (WorkspaceMembersTable.userId eq userId) }
         .count() > 0
@@ -130,7 +130,7 @@ private val MENTION_REGEX = Regex("@(\\w{2,})")
  * Inserts a notification row and, if the recipient has an active WebSocket session,
  * pushes the notification frame in real-time. Safe to call from any coroutine context.
  */
-private suspend fun createAndPushNotification(
+internal suspend fun createAndPushNotification(
     recipientId: Int,
     actorId: Int?,
     type: String,
@@ -752,7 +752,11 @@ fun Application.configureRouting() {
 
                         UsersTable.selectAll().where {
                             (UsersTable.username like "%$query%") or (UsersTable.email like "%$query%")
-                        }.filter { it[UsersTable.id] !in blockedIds && it[UsersTable.id] != actingUserId }
+                        }.filter {
+                            it[UsersTable.id] !in blockedIds &&
+                                it[UsersTable.id] != actingUserId &&
+                                it[UsersTable.email] != com.collabsphere.util.GitHubBot.EMAIL
+                        }
                             .map { row ->
                                 SearchUserResult(
                                     id = row[UsersTable.id],

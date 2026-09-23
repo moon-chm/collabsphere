@@ -1,1 +1,38 @@
-﻿‣片摡敬映汩獥⸊牧摡敬ਯ畢汩⽤⨊⼪畢汩⽤⨊⼪楢⽮⨊⼪畯⽴ਊ‣湁牤楯⁤瑓摵潩⼠䤠瑮汥楬⁊䑉䅅⸊摩慥ਯ⸪浩੬⸪灩ੲ⸪睩ੳ欮瑯楬⽮ਊ‣潌慣⁬潣普杩牵瑡潩੮潬慣⹬牰灯牥楴獥⨊氮杯ਊ‣祓瑳浥映汩獥⸊卄卟潴敲吊畨扭⹳扤琊獥彴潤湷潬摡搮捯੸瘮捳摯⽥⨊⼪潬慣彬楦敬彳灵潬摡⨯ℊ⨪氯捯污晟汩獥畟汰慯⽤朮瑩敫灥⨊献汱ਊ‣楆敲慢敳猠牥楶散愠捣畯瑮挠敲敤瑮慩獬钀丠噅剅挠浯業⁴桴獥੥昪物扥獡ⵥ摡業獮此⸪獪湯猊牥楶散愭捣畯瑮樮潳੮楦敲慢敳猭牥楶散愭捣畯瑮樮潳੮⌊䜠潯汧⁥偁⁉䅏瑵⁨牣摥湥楴污⁳…潴敫獮钀丠噅剅挠浯業⁴桴獥੥挪楬湥彴敳牣瑥⸪獪湯挊敲敤瑮慩獬樮潳੮潴敫⹮獪湯⨊⸀瀀攀洀ഀ਀⨀瀮浥਍
+# Gradle files
+.gradle/
+build/
+**/build/
+**/bin/
+**/out/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.kotlin/
+
+# Local configuration
+local.properties
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+test_download.docx
+.vscode/
+**/local_files_upload/*
+!**/local_files_upload/.gitkeep
+*.sql
+
+# Firebase service account credentials - NEVER commit these
+*firebase-adminsdk*.json
+service-account.json
+firebase-service-account.json
+
+# Google API OAuth credentials & tokens - NEVER commit these
+*client_secret*.json
+credentials.json
+token.json
+
+*.pem

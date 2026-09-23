@@ -220,8 +220,26 @@ object GitHubRepositoriesTable : Table("github_repositories") {
     val htmlUrl = varchar("html_url", 500)
     val defaultBranch = varchar("default_branch", 255)
     val lastSyncedAt = long("last_synced_at").clientDefault { System.currentTimeMillis() }
+    val notifyChannelId = integer("notify_channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubTaskLinksTable : Table("github_task_links") {
+    val id = integer("id").autoIncrement()
+    val taskId = integer("task_id").references(TasksTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE)
+    val kind = varchar("kind", 16)
+    val ref = varchar("ref", 64)
+    val title = varchar("title", 500)
+    val url = varchar("url", 500)
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_task_links_unique", taskId, kind, ref)
+    }
 }
 
 object GitHubCommitsTable : Table("github_commits") {
@@ -234,6 +252,10 @@ object GitHubCommitsTable : Table("github_commits") {
     val commitDate = long("commit_date")
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_commits_repo_sha_unique", repositoryId, sha)
+    }
 }
 
 object GitHubPullRequestsTable : Table("github_pull_requests") {
@@ -249,6 +271,10 @@ object GitHubPullRequestsTable : Table("github_pull_requests") {
     val mergedAt = long("merged_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_prs_repo_pr_unique", repositoryId, githubPrId)
+    }
 }
 
 object GitHubContributorsTable : Table("github_contributors") {

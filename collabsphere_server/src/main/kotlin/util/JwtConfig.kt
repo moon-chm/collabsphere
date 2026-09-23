@@ -28,6 +28,31 @@ object JwtConfig {
         .withExpiresAt(Date(System.currentTimeMillis() + validityMs))
         .sign(algorithm)
 
+    private const val GITHUB_STATE_AUDIENCE = "collabsphere-github-state"
+    private val githubStateValidityMs = TimeUnit.MINUTES.toMillis(10)
+
+    private val githubStateVerifier = JWT.require(algorithm)
+        .withIssuer(issuer)
+        .withAudience(GITHUB_STATE_AUDIENCE)
+        .build()
+
+    fun generateGitHubState(userId: Int, workspaceId: Int): String = JWT.create()
+        .withIssuer(issuer)
+        .withAudience(GITHUB_STATE_AUDIENCE)
+        .withClaim("userId", userId)
+        .withClaim("workspaceId", workspaceId)
+        .withExpiresAt(Date(System.currentTimeMillis() + githubStateValidityMs))
+        .sign(algorithm)
+
+    fun verifyGitHubState(token: String): Pair<Int, Int>? = try {
+        val decoded = githubStateVerifier.verify(token)
+        val userId = decoded.getClaim("userId").asInt()
+        val workspaceId = decoded.getClaim("workspaceId").asInt()
+        if (userId != null && workspaceId != null) userId to workspaceId else null
+    } catch (e: Exception) {
+        null
+    }
+
     init {
         if (secret == DEV_FALLBACK_SECRET) {
             println("WARNING: JWT_SECRET env var is not set — using an insecure development fallback secret. Set JWT_SECRET before deploying to production.")

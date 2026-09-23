@@ -588,7 +588,7 @@ fun WorkspaceDetailedScreen(
                         viewModel = channelViewModel,
                         onChannelClick = onChannelClick
                     )
-                    1 -> TaskScreen(viewModel = taskViewModel)
+                    1 -> TaskScreen(viewModel = taskViewModel, gitHubViewModel = gitHubViewModel)
                     2 -> FileScreen(viewModel = fileViewModel)
                     3 -> NotesScreen(viewModel = notesViewModel)
                     4 -> DMScreen(

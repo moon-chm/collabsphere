@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.exists
 import org.jetbrains.exposed.sql.transactions.transaction
 import com.collabsphere.model.*
 import java.net.URI
@@ -67,6 +68,18 @@ object DatabaseFactory {
         val database = Database.connect(dataSource)
 
         transaction(database) {
+            if (GitHubCommitsTable.exists()) {
+                exec(
+                    "DELETE FROM github_commits a USING github_commits b " +
+                        "WHERE a.id > b.id AND a.repository_id = b.repository_id AND a.sha = b.sha"
+                )
+            }
+            if (GitHubPullRequestsTable.exists()) {
+                exec(
+                    "DELETE FROM github_pull_requests a USING github_pull_requests b " +
+                        "WHERE a.id < b.id AND a.repository_id = b.repository_id AND a.github_pr_id = b.github_pr_id"
+                )
+            }
             SchemaUtils.createMissingTablesAndColumns(
                 UsersTable,
                 WorkspacesTable,
@@ -87,8 +100,10 @@ object DatabaseFactory {
                 GitHubRepositoriesTable,
                 GitHubCommitsTable,
                 GitHubPullRequestsTable,
-                GitHubContributorsTable
+                GitHubContributorsTable,
+                GitHubTaskLinksTable
             )
+            com.collabsphere.util.GitHubBot.ensureExists()
         }
     }
 }

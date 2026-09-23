@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.view.AppNavigation
 import com.collabsphere.app.viewmodel.LoginViewModel
+import com.collabsphere.app.viewmodel.GitHubAuthEvents
 import com.collabsphere.app.viewmodel.DashboardViewModel
 import com.collabsphere.app.viewmodel.dm.DmViewModel
 import org.koin.android.ext.android.inject
@@ -28,6 +29,8 @@ import android.content.Intent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.koin.core.parameter.parametersOf
+
+private const val GITHUB_TAB_INDEX = 5
 
 data class NotificationDeepLink(
     val workspaceId: Int,
@@ -89,11 +92,21 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         extractNotificationDeepLink(intent)
+        GitHubAuthEvents.publish(intent.data)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         extractNotificationDeepLink(intent)
+        if (savedInstanceState == null && GitHubAuthEvents.publish(intent?.data)) {
+            GitHubAuthEvents.result.value?.workspaceId?.let { workspaceId ->
+                notificationDeepLink = NotificationDeepLink(
+                    workspaceId = workspaceId,
+                    senderName = "",
+                    targetTab = GITHUB_TAB_INDEX
+                )
+            }
+        }
         checkAndRequestNotificationPermission()
 
         setContent {
