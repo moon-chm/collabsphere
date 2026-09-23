@@ -115,6 +115,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
 
+    // ── Vico (beautiful, performant Compose charting for GitHub Analytics) ──
+    implementation("com.patrykandpatrick.vico:compose-m3:1.15.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -191,3 +191,71 @@ object WorkspaceInvitationsTable : Table("workspace_invitations") {
 
     override val primaryKey = PrimaryKey(id)
 }
+
+object GitHubConnectionsTable : Table("github_connections") {
+    val id = integer("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).uniqueIndex()
+    val githubUserId = long("github_user_id")
+    val githubUsername = varchar("github_username", 255)
+    val installationId = long("installation_id")
+    val refreshTokenEncrypted = text("refresh_token_encrypted").nullable()
+    val refreshTokenExpiresAt = long("refresh_token_expires_at").nullable()
+    val accessTokenEncrypted = text("access_token_encrypted").nullable()
+    val accessTokenExpiresAt = long("access_token_expires_at").nullable()
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubRepositoriesTable : Table("github_repositories") {
+    val id = integer("id").autoIncrement()
+    val connectionId = integer("connection_id").references(GitHubConnectionsTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubRepoId = long("github_repo_id")
+    val owner = varchar("owner", 255)
+    val name = varchar("name", 255)
+    val fullName = varchar("full_name", 255)
+    val isPrivate = bool("is_private")
+    val htmlUrl = varchar("html_url", 500)
+    val defaultBranch = varchar("default_branch", 255)
+    val lastSyncedAt = long("last_synced_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubCommitsTable : Table("github_commits") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val sha = varchar("sha", 40)
+    val message = text("message")
+    val authorName = varchar("author_name", 255).nullable()
+    val authorEmail = varchar("author_email", 255).nullable()
+    val commitDate = long("commit_date")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubPullRequestsTable : Table("github_pull_requests") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubPrId = long("github_pr_id")
+    val number = integer("number")
+    val title = varchar("title", 500)
+    val state = varchar("state", 50) // open, closed
+    val authorUsername = varchar("author_username", 255)
+    val createdAt = long("created_at")
+    val closedAt = long("closed_at").nullable()
+    val mergedAt = long("merged_at").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubContributorsTable : Table("github_contributors") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubUsername = varchar("github_username", 255)
+    val commitCount = integer("commit_count").default(0)
+
+    override val primaryKey = PrimaryKey(id)
+}

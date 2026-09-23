@@ -60,4 +60,5 @@ fun Application.module() {
     }
 
     configureRouting()
+    plugins.configureGitHubRoutes()
 }

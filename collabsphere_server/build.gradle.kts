@@ -40,6 +40,10 @@ dependencies {
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("com.google.firebase:firebase-admin:9.2.0")
     implementation("com.sun.mail:jakarta.mail:2.0.1")
+    implementation("io.ktor:ktor-client-core:${ktor_version}")
+    implementation("io.ktor:ktor-client-cio:${ktor_version}")
+    implementation("io.ktor:ktor-client-content-negotiation:${ktor_version}")
+    
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
 }

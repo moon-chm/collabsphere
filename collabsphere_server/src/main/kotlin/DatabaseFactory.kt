@@ -82,7 +82,12 @@ object DatabaseFactory {
                 UserVerificationTable,
                 NotificationsTable,
                 PasswordResetTable,
-                WorkspaceInvitationsTable
+                WorkspaceInvitationsTable,
+                GitHubConnectionsTable,
+                GitHubRepositoriesTable,
+                GitHubCommitsTable,
+                GitHubPullRequestsTable,
+                GitHubContributorsTable
             )
         }
     }

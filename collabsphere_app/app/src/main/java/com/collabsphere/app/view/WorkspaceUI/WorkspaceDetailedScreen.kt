@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,6 +71,7 @@ import com.collabsphere.app.viewmodel.file.FileViewModel
 import com.collabsphere.app.viewmodel.notes.NotesViewModel
 import com.collabsphere.app.viewmodel.task.TaskViewModel
 import com.collabsphere.app.viewmodel.dm.DmViewModel
+import com.collabsphere.app.viewmodel.GitHubViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +89,7 @@ fun WorkspaceDetailedScreen(
     notesViewModel: NotesViewModel,
     fileViewModel: FileViewModel,
     dmViewModel: DmViewModel,
+    gitHubViewModel: GitHubViewModel,
     workspaceMembers: List<UserEntity>
 ) {
     var selectedTab by remember(initialTab) { mutableStateOf(initialTab) }
@@ -533,6 +536,13 @@ fun WorkspaceDetailedScreen(
                             modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 2 }
                         )
+                        SkeuoTabItem(
+                            selected = selectedTab == 5,
+                            icon = Icons.Outlined.AccountTree,
+                            label = "GitHub",
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedTab = 5 }
+                        )
                     }
                 }
             }
@@ -588,6 +598,10 @@ fun WorkspaceDetailedScreen(
                         initialPartnerId = initialPartnerId,
                         onConversationActiveChange = { active -> isDmInConversation = active },
                         onExitModule = { selectedTab = 0 }
+                    )
+                    5 -> WorkspaceGitHubScreen(
+                        workspaceId = workspaceId,
+                        viewModel = gitHubViewModel
                     )
                 }
             }
