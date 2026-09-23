@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class GitHubAnalyticsResponse(
     val isConnected: Boolean,
+    val hasConnection: Boolean = false,
     val repositoryName: String?,
     val totalCommits: Int,
     val openPullRequests: Int,
