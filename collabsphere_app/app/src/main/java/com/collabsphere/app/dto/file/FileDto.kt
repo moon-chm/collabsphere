@@ -12,7 +12,7 @@ data class FileRequest(
     val localpath: String?,
     val fileName: String,
     val sizebytes: Long,
-    val fileLocation: String
+    val fileLocation: String? = null
 )
 
 @Serializable
@@ -26,7 +26,7 @@ data class FileResponse(
     val localpath: String?,
     val fileName: String,
     val sizebytes: Long,
-    val fileLocation: String
+    val fileLocation: String? = null
 )
 @Serializable
 data class FileSyncDto(
@@ -39,7 +39,7 @@ data class FileSyncDto(
     val localpath: String?,
     val fileName: String,
     val sizebytes: Long,
-    val fileLocation: String,
+    val fileLocation: String? = null,
     val isDeleted: Boolean,
     val updatedAt: Long
 )
