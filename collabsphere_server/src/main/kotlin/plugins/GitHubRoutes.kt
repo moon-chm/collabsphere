@@ -29,13 +29,13 @@ fun Application.configureGitHubRoutes() {
             // Redirect to GitHub for App Installation & Authorization
             get("/install") {
                 val workspaceId = call.request.queryParameters["workspaceId"]
-                val clientId = System.getenv("GITHUB_CLIENT_ID")
-                println("[GitHub] /install hit. workspaceId=$workspaceId, clientId=$clientId")
+                println("[GitHub] /install hit. workspaceId=$workspaceId")
                 
-                // Use OAuth authorize with redirect_uri pointing back to our callback
-                val callbackUrl = "https://collabsphere-server-qtke.onrender.com/auth/github/callback"
-                val url = "https://github.com/login/oauth/authorize?client_id=$clientId&redirect_uri=$callbackUrl&state=$workspaceId"
-                println("[GitHub] Redirecting to: $url")
+                // Redirect to GitHub App INSTALLATION page (not OAuth authorize).
+                // This page lets the user install the app on their repos AND authorize in one step.
+                // The callback will include both `code` and `installation_id`.
+                val url = "https://github.com/apps/collabspheregithubfeat/installations/new?state=$workspaceId"
+                println("[GitHub] Redirecting to App install page: $url")
                 call.respondRedirect(url)
             }
 
