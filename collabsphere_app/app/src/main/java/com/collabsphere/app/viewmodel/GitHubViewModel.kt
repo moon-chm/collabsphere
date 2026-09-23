@@ -120,9 +120,18 @@ class GitHubViewModel(
                     ))
                 }
                 if (response.status == HttpStatusCode.OK) {
-                    // Refresh analytics — now it should show as connected
-                    loadAnalytics(workspaceId)
                     _availableRepos.value = emptyList()
+                    // Immediately fetch fresh analytics so the screen smoothly transitions
+                    try {
+                        val analyticsRes = client.get("${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/analytics") {
+                            header(HttpHeaders.Authorization, "Bearer $token")
+                        }
+                        if (analyticsRes.status == HttpStatusCode.OK) {
+                            _analytics.value = analyticsRes.body<GitHubAnalyticsResponse>()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

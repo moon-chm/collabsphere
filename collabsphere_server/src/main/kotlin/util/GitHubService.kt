@@ -93,4 +93,64 @@ object GitHubService {
             return null
         }
     }
+
+    suspend fun getRecentCommits(userAccessToken: String, repoFullName: String): List<GitHubCommitInfo>? {
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/commits?per_page=30") {
+                header(HttpHeaders.Authorization, "Bearer $userAccessToken")
+                header(HttpHeaders.Accept, "application/vnd.github.v3+json")
+            }
+            if (response.status.isSuccess()) {
+                return response.body<List<GitHubCommitInfo>>()
+            }
+            return null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    suspend fun getRecentPullRequests(userAccessToken: String, repoFullName: String): List<GitHubPullRequestInfo>? {
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/pulls?state=all&per_page=30") {
+                header(HttpHeaders.Authorization, "Bearer $userAccessToken")
+                header(HttpHeaders.Accept, "application/vnd.github.v3+json")
+            }
+            if (response.status.isSuccess()) {
+                return response.body<List<GitHubPullRequestInfo>>()
+            }
+            return null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
 }
+
+@Serializable
+data class GitHubCommitInfo(
+    val sha: String,
+    val commit: GitHubCommitDetail? = null
+)
+
+@Serializable
+data class GitHubCommitDetail(
+    val message: String? = null,
+    val author: GitHubCommitAuthor? = null
+)
+
+@Serializable
+data class GitHubCommitAuthor(
+    val name: String? = null,
+    val email: String? = null,
+    val date: String? = null
+)
+
+@Serializable
+data class GitHubPullRequestInfo(
+    val id: Long,
+    val number: Int,
+    val title: String,
+    val state: String,
+    val merged_at: String? = null
+)
