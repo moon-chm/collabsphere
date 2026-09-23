@@ -59,14 +59,19 @@ fun WorkspaceGitHubScreen(
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else if (analytics?.isConnected == true) {
             // ── Connected: Show Analytics ──
-            ConnectedView(analytics!!)
+            ConnectedView(
+                analytics = analytics!!,
+                onChangeRepo = { viewModel.unlinkRepo(workspaceId) },
+                onDisconnect = { viewModel.disconnectGitHub(workspaceId) }
+            )
         } else if (analytics?.hasConnection == true || availableRepos.isNotEmpty()) {
             // ── Connected to GitHub but no repo selected: Show Repo Picker ──
             RepoPickerView(
                 repos = availableRepos,
                 isLinking = isLinking,
                 onRepoSelected = { repo -> viewModel.linkRepo(workspaceId, repo) },
-                onRefresh = { viewModel.loadAvailableRepos(workspaceId) }
+                onRefresh = { viewModel.loadAvailableRepos(workspaceId) },
+                onDisconnect = { viewModel.disconnectGitHub(workspaceId) }
             )
         } else {
             // ── Not connected at all: Show Connect Button ──
@@ -125,7 +130,8 @@ private fun RepoPickerView(
     repos: List<AvailableRepo>,
     isLinking: Boolean,
     onRepoSelected: (AvailableRepo) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onDisconnect: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -218,11 +224,23 @@ private fun RepoPickerView(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        TextButton(
+            onClick = onDisconnect,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Text("Disconnect GitHub Account", color = Color(0xFF9E8E89), fontSize = 13.sp)
+        }
     }
 }
 
 @Composable
-private fun ConnectedView(analytics: com.collabsphere.app.viewmodel.GitHubAnalyticsResponse) {
+private fun ConnectedView(
+    analytics: com.collabsphere.app.viewmodel.GitHubAnalyticsResponse,
+    onChangeRepo: () -> Unit,
+    onDisconnect: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -269,6 +287,29 @@ private fun ConnectedView(analytics: com.collabsphere.app.viewmodel.GitHubAnalyt
             StatCard("Total Commits", analytics.totalCommits.toString(), Modifier.weight(1f))
             StatCard("Open PRs", analytics.openPullRequests.toString(), Modifier.weight(1f))
             StatCard("Merged", analytics.mergedPullRequests.toString(), Modifier.weight(1f))
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onChangeRepo,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Change Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+            }
+            OutlinedButton(
+                onClick = onDisconnect,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Disconnect", fontSize = 13.sp)
+            }
         }
     }
 }

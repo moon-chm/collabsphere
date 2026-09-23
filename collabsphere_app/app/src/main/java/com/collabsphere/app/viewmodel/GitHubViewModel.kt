@@ -131,4 +131,43 @@ class GitHubViewModel(
             }
         }
     }
+
+    fun unlinkRepo(workspaceId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val token = com.collabsphere.app.AuthTokenHolder.token
+                val response = client.post("${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/unlink-repo") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+                if (response.status == HttpStatusCode.OK) {
+                    loadAnalytics(workspaceId)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun disconnectGitHub(workspaceId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val token = com.collabsphere.app.AuthTokenHolder.token
+                val response = client.post("${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/disconnect") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+                if (response.status == HttpStatusCode.OK) {
+                    _availableRepos.value = emptyList()
+                    loadAnalytics(workspaceId)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
 }
