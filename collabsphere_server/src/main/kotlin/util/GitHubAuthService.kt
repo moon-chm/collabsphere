@@ -142,6 +142,11 @@ object GitHubAuthService {
         installationTokens.remove(installationId)
     }
 
+    fun authorizeUrl(state: String): String? =
+        clientId?.takeIf { it.isNotBlank() }?.let {
+            "https://github.com/login/oauth/authorize?client_id=${it.encodeURLQueryComponent()}&state=${state.encodeURLQueryComponent()}"
+        }
+
     suspend fun revokeUserGrant(userToken: String) {
         if (clientId.isNullOrBlank() || clientSecret.isNullOrBlank()) return
         try {

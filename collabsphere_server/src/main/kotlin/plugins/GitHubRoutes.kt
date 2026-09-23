@@ -111,6 +111,9 @@ private const val ACTIVITY_DAYS = 14
 private const val TOP_CONTRIBUTORS = 5
 private const val RECENT_ITEMS = 10
 
+private fun installPageUrl(state: String): String =
+    "https://github.com/apps/$GITHUB_APP_SLUG/installations/new?state=${state.encodeURLQueryComponent()}"
+
 private suspend fun ApplicationCall.redirectGitHubResult(workspaceId: Int?, error: String?) {
     val params = listOfNotNull(
         workspaceId?.let { "workspace_id=$it" },
@@ -136,7 +139,8 @@ fun Application.configureGitHubRoutes() {
 
             get("/callback") {
                 val code = call.request.queryParameters["code"]
-                val state = call.request.queryParameters["state"]?.let { JwtConfig.verifyGitHubState(it) }
+                val rawState = call.request.queryParameters["state"]
+                val state = rawState?.let { JwtConfig.verifyGitHubState(it) }
 
                 if (code == null || state == null) {
                     call.redirectGitHubResult(state?.second, "invalid_request")
@@ -151,19 +155,24 @@ fun Application.configureGitHubRoutes() {
                 }
                 val userToken = tokenResponse.access_token
 
+                val githubUser = GitHubService.getAuthenticatedUser(userToken)
                 val installations = GitHubService.getUserInstallations(userToken).orEmpty()
                 val requestedInstallationId = call.request.queryParameters["installation_id"]?.toLongOrNull()
+                if (requestedInstallationId == null && installations.isEmpty() && rawState != null) {
+                    call.respondRedirect(installPageUrl(rawState))
+                    return@get
+                }
                 val installation = if (requestedInstallationId != null) {
                     installations.firstOrNull { it.id == requestedInstallationId }
                 } else {
-                    installations.singleOrNull()
+                    installations.firstOrNull { it.account.login.equals(githubUser?.login, ignoreCase = true) }
+                        ?: installations.firstOrNull()
                 }
                 if (installation == null) {
                     call.redirectGitHubResult(workspaceId, "installation_not_found")
                     return@get
                 }
 
-                val githubUser = GitHubService.getAuthenticatedUser(userToken)
                 val tokenExpiresAt = tokenResponse.expires_in
                     .takeIf { it > 0 }
                     ?.let { System.currentTimeMillis() + it * 1000 }
@@ -240,7 +249,7 @@ fun Application.configureGitHubRoutes() {
                 get("/install-url") {
                     val access = call.resolveGitHubAccess(requireOwner = true) ?: return@get
                     val state = JwtConfig.generateGitHubState(access.callerId, access.workspaceId)
-                    val url = "https://github.com/apps/$GITHUB_APP_SLUG/installations/new?state=${state.encodeURLQueryComponent()}"
+                    val url = GitHubAuthService.authorizeUrl(state) ?: installPageUrl(state)
                     call.respond(HttpStatusCode.OK, mapOf("url" to url))
                 }
 
