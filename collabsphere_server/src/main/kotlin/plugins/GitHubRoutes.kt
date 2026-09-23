@@ -59,21 +59,44 @@ fun Application.configureGitHubRoutes() {
                 
                 // If installationId is provided in callback, we can fetch repos immediately
                 if (installationId != null && workspaceId != null) {
-                    val reposResponse = GitHubService.getInstallationRepositories(tokenResponse.access_token, installationId)
-                    if (reposResponse != null && reposResponse.repositories.isNotEmpty()) {
-                        val repo = reposResponse.repositories.first()
+                    val repos = GitHubService.getInstallationRepositories(tokenResponse.access_token, installationId)
+                    if (repos != null && repos.isNotEmpty()) {
+                        val repo = repos.first()
                         
                         dbQuery {
-                            // Check if workspace already has a repo linked
-                            val existing = GitHubRepositoriesTable.select { GitHubRepositoriesTable.workspaceId eq workspaceId }.singleOrNull()
-                            if (existing == null) {
-                                GitHubRepositoriesTable.insert {
-                                    it[GitHubRepositoriesTable.workspaceId] = workspaceId
-                                    it[GitHubRepositoriesTable.installationId] = installationId
-                                    it[GitHubRepositoriesTable.repositoryId] = repo.id
-                                    it[GitHubRepositoriesTable.fullName] = repo.full_name
-                                    it[GitHubRepositoriesTable.owner] = repo.owner.login
-                                    it[GitHubRepositoriesTable.name] = repo.name
+                            // Find the workspace owner to link the connection
+                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
+                            if (workspaceRow != null) {
+                                val userId = workspaceRow[WorkspacesTable.userId]
+                                
+                                // Get or create GitHubConnection
+                                var connectionRow = GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq userId }.singleOrNull()
+                                val connectionId = if (connectionRow == null) {
+                                    GitHubConnectionsTable.insert {
+                                        it[GitHubConnectionsTable.userId] = userId
+                                        it[GitHubConnectionsTable.githubUserId] = 0L
+                                        it[GitHubConnectionsTable.githubUsername] = "connected_user"
+                                        it[GitHubConnectionsTable.installationId] = installationId
+                                        it[GitHubConnectionsTable.accessTokenEncrypted] = tokenResponse.access_token
+                                    }[GitHubConnectionsTable.id]
+                                } else {
+                                    connectionRow[GitHubConnectionsTable.id]
+                                }
+
+                                // Check if workspace already has a repo linked
+                                val existingRepo = GitHubRepositoriesTable.select { GitHubRepositoriesTable.workspaceId eq workspaceId }.singleOrNull()
+                                if (existingRepo == null) {
+                                    GitHubRepositoriesTable.insert {
+                                        it[GitHubRepositoriesTable.connectionId] = connectionId
+                                        it[GitHubRepositoriesTable.workspaceId] = workspaceId
+                                        it[GitHubRepositoriesTable.githubRepoId] = repo.id
+                                        it[GitHubRepositoriesTable.fullName] = repo.full_name
+                                        it[GitHubRepositoriesTable.owner] = repo.owner.login
+                                        it[GitHubRepositoriesTable.name] = repo.name
+                                        it[GitHubRepositoriesTable.isPrivate] = repo.private
+                                        it[GitHubRepositoriesTable.htmlUrl] = repo.html_url
+                                        it[GitHubRepositoriesTable.defaultBranch] = repo.default_branch
+                                    }
                                 }
                             }
                         }
