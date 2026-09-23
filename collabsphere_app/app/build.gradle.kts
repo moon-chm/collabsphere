@@ -118,6 +118,8 @@ dependencies {
     // ── Vico (beautiful, performant Compose charting for GitHub Analytics) ──
     implementation("com.patrykandpatrick.vico:compose-m3:1.15.0")
 
+    implementation("androidx.browser:browser:1.8.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

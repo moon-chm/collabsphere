@@ -221,8 +221,45 @@ object GitHubRepositoriesTable : Table("github_repositories") {
     val defaultBranch = varchar("default_branch", 255)
     val lastSyncedAt = long("last_synced_at").clientDefault { System.currentTimeMillis() }
     val notifyChannelId = integer("notify_channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val lastDigestAt = long("last_digest_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubCheckSuitesTable : Table("github_check_suites") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubSuiteId = long("github_suite_id")
+    val headSha = varchar("head_sha", 40)
+    val status = varchar("status", 20)
+    val conclusion = varchar("conclusion", 30).nullable()
+    val updatedAt = long("updated_at")
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_check_suites_unique", repositoryId, githubSuiteId)
+        index(false, repositoryId, headSha)
+    }
+}
+
+object GitHubIssuesTable : Table("github_issues") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubIssueId = long("github_issue_id")
+    val number = integer("number")
+    val title = varchar("title", 500)
+    val state = varchar("state", 20)
+    val authorUsername = varchar("author_username", 255)
+    val url = varchar("url", 500)
+    val createdAt = long("created_at")
+    val closedAt = long("closed_at").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_issues_repo_issue_unique", repositoryId, githubIssueId)
+    }
 }
 
 object GitHubTaskLinksTable : Table("github_task_links") {
@@ -269,6 +306,7 @@ object GitHubPullRequestsTable : Table("github_pull_requests") {
     val createdAt = long("created_at")
     val closedAt = long("closed_at").nullable()
     val mergedAt = long("merged_at").nullable()
+    val headSha = varchar("head_sha", 40).nullable()
 
     override val primaryKey = PrimaryKey(id)
 

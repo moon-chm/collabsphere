@@ -1925,9 +1925,11 @@ fun Application.configureRouting() {
                         return@put
                     }
 
+                    var previousStatus: String? = null
                     val updateResult = dbQuery {
                         val existingTask = TasksTable.selectAll().where { TasksTable.id eq taskId }.singleOrNull()
                             ?: return@dbQuery -1
+                        previousStatus = existingTask[TasksTable.status]
                         if (!isMember(actingUserId, existingTask[TasksTable.workspaceId]) ||
                             !isMember(actingUserId, request.workspaceId)
                         ) {
@@ -1994,6 +1996,7 @@ fun Application.configureRouting() {
                         )
                     } else {
                         call.respond(HttpStatusCode.OK, updatedTask)
+                        syncLinkedIssuesWithTask(updatedTask.id, previousStatus, updatedTask.status)
                         // ── Notification: task updated ────────────────────────────────────
                         val assigneeId = updatedTask.assignedToUserId
                         if (assigneeId != null && assigneeId != actingUserId) {

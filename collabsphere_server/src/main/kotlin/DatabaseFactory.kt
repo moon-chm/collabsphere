@@ -101,9 +101,11 @@ object DatabaseFactory {
                 GitHubCommitsTable,
                 GitHubPullRequestsTable,
                 GitHubContributorsTable,
-                GitHubTaskLinksTable
+                GitHubTaskLinksTable,
+                GitHubIssuesTable,
+                GitHubCheckSuitesTable
             )
             com.collabsphere.util.GitHubBot.ensureExists()
         }
     }
-}
+}

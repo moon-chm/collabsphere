@@ -2,6 +2,7 @@ package plugins
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class GitHubAutomationTest {
 
@@ -24,5 +25,25 @@ class GitHubAutomationTest {
     @Test
     fun `closingTaskReferences ignores plain mentions`() {
         assertEquals(emptySet(), closingTaskReferences("Work on T-9 continues"))
+    }
+
+    @Test
+    fun `weekly digest is skipped for a quiet week`() {
+        assertNull(formatWeeklyDigest("acme/app", 0, 0, 0, 0, 0, emptyList()))
+    }
+
+    @Test
+    fun `weekly digest summarises activity and contributors`() {
+        val digest = formatWeeklyDigest("acme/app", 1, 2, 3, 4, 5, listOf("Asha" to 1))
+        assertEquals(
+            listOf(
+                "Weekly GitHub digest for acme/app",
+                "• 1 commit",
+                "• 3 PRs merged, 2 opened",
+                "• 4 issues opened, 5 closed",
+                "Top contributors: Asha (1)"
+            ).joinToString("\n"),
+            digest
+        )
     }
 }

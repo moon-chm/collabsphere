@@ -1,7 +1,6 @@
 package com.collabsphere.app.view.TaskUI
 
-import android.content.Intent
-import android.net.Uri
+import com.collabsphere.app.view.openInBrowser
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +11,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import android.widget.Toast
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,9 +42,13 @@ fun TaskGitHubLinksSection(
 ) {
     val reference = taskReferenceLabel(taskId) ?: return
     val context = LocalContext.current
-    val links by produceState<List<GitHubTaskLink>?>(initialValue = null, workspaceId, taskId) {
+    val scope = rememberCoroutineScope()
+    var reloadKey by remember { mutableIntStateOf(0) }
+    var isCreatingIssue by remember { mutableStateOf(false) }
+    val links by produceState<List<GitHubTaskLink>?>(initialValue = null, workspaceId, taskId, reloadKey) {
         value = gitHubViewModel.loadTaskLinks(workspaceId, taskId)
     }
+    val hasIssue = links?.any { it.kind == "issue" } == true
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -54,12 +65,16 @@ fun TaskGitHubLinksSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url))) }
+                    .clickable { openInBrowser(context, link.url) }
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (link.kind == "pr") "PR" else link.ref.take(7),
+                    text = when (link.kind) {
+                        "pr" -> "PR"
+                        "issue" -> "Issue"
+                        else -> link.ref.take(7)
+                    },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF6F42C1)
@@ -72,6 +87,27 @@ fun TaskGitHubLinksSection(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+        if (links != null && !hasIssue) {
+            TextButton(
+                enabled = !isCreatingIssue,
+                onClick = {
+                    isCreatingIssue = true
+                    scope.launch {
+                        gitHubViewModel.createIssueForTask(workspaceId, taskId)
+                            .onSuccess {
+                                Toast.makeText(context, "Created GitHub issue ${it.title}", Toast.LENGTH_SHORT).show()
+                                reloadKey++
+                            }
+                            .onFailure {
+                                Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                            }
+                        isCreatingIssue = false
+                    }
+                }
+            ) {
+                Text(if (isCreatingIssue) "Creating issue…" else "Create GitHub issue", color = Color(0xFF6F42C1))
             }
         }
     }

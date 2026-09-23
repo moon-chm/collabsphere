@@ -22,14 +22,23 @@ data class GitHubPushActivity(
     override val repositoryId: Int,
     val pusher: String,
     val branch: String,
-    val commits: List<CommitRecord>
+    val commits: List<CommitRecord>,
+    val announce: Boolean = true
 ) : GitHubActivity
 
 data class GitHubPullRequestActivity(
     override val repositoryId: Int,
     val action: String,
     val pullRequest: PullRequestRecord,
-    val url: String?
+    val url: String?,
+    val announce: Boolean = true
+) : GitHubActivity
+
+data class GitHubIssueActivity(
+    override val repositoryId: Int,
+    val action: String,
+    val issue: IssueRecord,
+    val announce: Boolean = true
 ) : GitHubActivity
 
 object GitHubWebhookService {
@@ -62,6 +71,11 @@ object GitHubWebhookService {
             when (eventType) {
                 "push" -> handlePushEvent(payload)
                 "pull_request" -> handlePullRequestEvent(payload)
+                "issues" -> handleIssuesEvent(payload)
+                "check_suite" -> {
+                    handleCheckSuiteEvent(payload)
+                    emptyList()
+                }
                 "installation" -> {
                     handleInstallationEvent(payload)
                     emptyList()
@@ -125,7 +139,8 @@ object GitHubWebhookService {
             authorUsername = pr["user"]?.jsonObject?.get("login")?.jsonPrimitive?.contentOrNull ?: "",
             createdAt = parseGitHubTime(pr["created_at"]?.jsonPrimitive?.contentOrNull) ?: System.currentTimeMillis(),
             closedAt = parseGitHubTime(pr["closed_at"]?.jsonPrimitive?.contentOrNull),
-            mergedAt = parseGitHubTime(pr["merged_at"]?.jsonPrimitive?.contentOrNull)
+            mergedAt = parseGitHubTime(pr["merged_at"]?.jsonPrimitive?.contentOrNull),
+            headSha = pr["head"]?.jsonObject?.get("sha")?.jsonPrimitive?.contentOrNull
         )
 
         val url = pr["html_url"]?.jsonPrimitive?.contentOrNull
@@ -135,6 +150,41 @@ object GitHubWebhookService {
             GitHubDataStore.savePullRequest(repositoryId, record)
             GitHubDataStore.markSynced(repositoryId)
             GitHubPullRequestActivity(repositoryId, action, record.copy(body = body), url)
+        }
+    }
+
+    private fun handleIssuesEvent(payload: JsonObject): List<GitHubActivity> {
+        val action = payload["action"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
+        val issueJson = payload["issue"] ?: return emptyList()
+        val repo = payload["repository"]?.jsonObject ?: return emptyList()
+        val githubRepoId = repo["id"]?.jsonPrimitive?.longOrNull ?: return emptyList()
+        val issue = try {
+            json.decodeFromJsonElement(GitHubIssueInfo.serializer(), issueJson)
+        } catch (e: Exception) {
+            println("[GitHub] Failed to parse issue payload: ${e.message}")
+            return emptyList()
+        }
+        if (issue.pull_request != null) return emptyList()
+        val record = issue.toRecord()
+
+        return linkedRepositoryIds(githubRepoId).map { repositoryId ->
+            GitHubDataStore.saveIssue(repositoryId, record)
+            GitHubDataStore.markSynced(repositoryId)
+            GitHubIssueActivity(repositoryId, action, record)
+        }
+    }
+
+    private fun handleCheckSuiteEvent(payload: JsonObject) {
+        val suite = payload["check_suite"]?.jsonObject ?: return
+        val repo = payload["repository"]?.jsonObject ?: return
+        val githubRepoId = repo["id"]?.jsonPrimitive?.longOrNull ?: return
+        val suiteId = suite["id"]?.jsonPrimitive?.longOrNull ?: return
+        val headSha = suite["head_sha"]?.jsonPrimitive?.contentOrNull ?: return
+        val status = suite["status"]?.jsonPrimitive?.contentOrNull ?: return
+        val conclusion = suite["conclusion"]?.jsonPrimitive?.contentOrNull
+
+        linkedRepositoryIds(githubRepoId).forEach { repositoryId ->
+            GitHubDataStore.saveCheckSuite(repositoryId, suiteId, headSha, status, conclusion)
         }
     }
 

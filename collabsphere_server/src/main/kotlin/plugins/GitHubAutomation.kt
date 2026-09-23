@@ -1,12 +1,27 @@
 package plugins
 
 import com.collabsphere.model.ChannelsTable
+import com.collabsphere.model.GitHubCommitsTable
+import com.collabsphere.model.GitHubIssuesTable
+import com.collabsphere.model.GitHubPullRequestsTable
+import io.ktor.server.application.Application
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
+import org.jetbrains.exposed.sql.count
 import com.collabsphere.model.GitHubRepositoriesTable
 import com.collabsphere.model.GitHubTaskLinksTable
 import com.collabsphere.model.MessageTable
 import com.collabsphere.model.TasksTable
 import com.collabsphere.util.GitHubActivity
+import com.collabsphere.model.GitHubConnectionsTable
 import com.collabsphere.util.GitHubBot
+import com.collabsphere.util.GitHubIssueActivity
+import com.collabsphere.util.GitHubService
 import com.collabsphere.util.GitHubPullRequestActivity
 import com.collabsphere.util.GitHubPushActivity
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -24,6 +39,10 @@ private const val STATUS_TO_DO = "TO_DO"
 private const val STATUS_IN_PROGRESS = "IN_PROGRESS"
 private const val STATUS_DONE = "DONE"
 private const val MAX_COMMITS_IN_POST = 5
+private const val DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000L
+private const val DIGEST_CHECK_INTERVAL_MS = 60 * 60 * 1000L
+private const val DIGEST_STARTUP_DELAY_MS = 2 * 60 * 1000L
+private const val DIGEST_TOP_CONTRIBUTORS = 3
 
 private data class LinkedRepo(
     val id: Int,
@@ -48,6 +67,105 @@ internal fun taskReferences(text: String): Set<Int> =
 internal fun closingTaskReferences(text: String): Set<Int> =
     CLOSING_REFERENCE.findAll(text).mapNotNull { it.groupValues[1].toIntOrNull() }.toSet()
 
+fun Application.startGitHubDigestScheduler() {
+    launch {
+        delay(DIGEST_STARTUP_DELAY_MS)
+        while (isActive) {
+            try {
+                postDueDigests(System.currentTimeMillis())
+            } catch (e: Exception) {
+                println("[GitHub] Weekly digest run failed: ${e.message}")
+            }
+            delay(DIGEST_CHECK_INTERVAL_MS)
+        }
+    }
+}
+
+private suspend fun postDueDigests(now: Long) {
+    val candidates = dbQuery {
+        GitHubRepositoriesTable.selectAll()
+            .where { GitHubRepositoriesTable.notifyChannelId.isNotNull() }
+            .map { it.toLinkedRepo() to it[GitHubRepositoriesTable.lastDigestAt] }
+    }
+    for ((repo, lastDigestAt) in candidates) {
+        if (lastDigestAt != null && now - lastDigestAt < DIGEST_INTERVAL_MS) continue
+        if (lastDigestAt != null) {
+            val digest = dbQuery { buildWeeklyDigest(repo, now - DIGEST_INTERVAL_MS) }
+            digest?.let { postToChannel(repo, it) }
+        }
+        dbQuery {
+            GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repo.id }) {
+                it[GitHubRepositoriesTable.lastDigestAt] = now
+            }
+        }
+    }
+}
+
+internal fun formatWeeklyDigest(
+    repoFullName: String,
+    commits: Int,
+    pullRequestsOpened: Int,
+    pullRequestsMerged: Int,
+    issuesOpened: Int,
+    issuesClosed: Int,
+    topContributors: List<Pair<String, Int>>
+): String? {
+    if (commits + pullRequestsOpened + pullRequestsMerged + issuesOpened + issuesClosed == 0) return null
+    val lines = mutableListOf("Weekly GitHub digest for $repoFullName")
+    lines += "• $commits ${if (commits == 1) "commit" else "commits"}"
+    lines += "• $pullRequestsMerged PRs merged, $pullRequestsOpened opened"
+    lines += "• $issuesOpened issues opened, $issuesClosed closed"
+    if (topContributors.isNotEmpty()) {
+        lines += "Top contributors: " + topContributors.joinToString(", ") { (name, count) -> "$name ($count)" }
+    }
+    return lines.joinToString("\n")
+}
+
+private fun buildWeeklyDigest(repo: LinkedRepo, since: Long): String? {
+    val commits = GitHubCommitsTable.selectAll()
+        .where { (GitHubCommitsTable.repositoryId eq repo.id) and (GitHubCommitsTable.commitDate greaterEq since) }
+        .count().toInt()
+    val pullRequestsOpened = GitHubPullRequestsTable.selectAll()
+        .where { (GitHubPullRequestsTable.repositoryId eq repo.id) and (GitHubPullRequestsTable.createdAt greaterEq since) }
+        .count().toInt()
+    val pullRequestsMerged = GitHubPullRequestsTable.selectAll()
+        .where { (GitHubPullRequestsTable.repositoryId eq repo.id) and (GitHubPullRequestsTable.mergedAt greaterEq since) }
+        .count().toInt()
+    val issuesOpened = GitHubIssuesTable.selectAll()
+        .where { (GitHubIssuesTable.repositoryId eq repo.id) and (GitHubIssuesTable.createdAt greaterEq since) }
+        .count().toInt()
+    val issuesClosed = GitHubIssuesTable.selectAll()
+        .where { (GitHubIssuesTable.repositoryId eq repo.id) and (GitHubIssuesTable.closedAt greaterEq since) }
+        .count().toInt()
+
+    val commitCount = GitHubCommitsTable.id.count()
+    val topContributors = GitHubCommitsTable
+        .select(GitHubCommitsTable.authorName, commitCount)
+        .where { (GitHubCommitsTable.repositoryId eq repo.id) and (GitHubCommitsTable.commitDate greaterEq since) }
+        .groupBy(GitHubCommitsTable.authorName)
+        .orderBy(commitCount, SortOrder.DESC)
+        .limit(DIGEST_TOP_CONTRIBUTORS)
+        .map { (it[GitHubCommitsTable.authorName] ?: "Unknown") to it[commitCount].toInt() }
+
+    return formatWeeklyDigest(
+        repoFullName = repo.fullName,
+        commits = commits,
+        pullRequestsOpened = pullRequestsOpened,
+        pullRequestsMerged = pullRequestsMerged,
+        issuesOpened = issuesOpened,
+        issuesClosed = issuesClosed,
+        topContributors = topContributors
+    )
+}
+
+private fun ResultRow.toLinkedRepo() = LinkedRepo(
+    id = this[GitHubRepositoriesTable.id],
+    workspaceId = this[GitHubRepositoriesTable.workspaceId],
+    fullName = this[GitHubRepositoriesTable.fullName],
+    htmlUrl = this[GitHubRepositoriesTable.htmlUrl],
+    notifyChannelId = this[GitHubRepositoriesTable.notifyChannelId]
+)
+
 suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
     for (activity in activities) {
         try {
@@ -55,20 +173,13 @@ suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
                 GitHubRepositoriesTable.selectAll()
                     .where { GitHubRepositoriesTable.id eq activity.repositoryId }
                     .singleOrNull()
-                    ?.let {
-                        LinkedRepo(
-                            id = it[GitHubRepositoriesTable.id],
-                            workspaceId = it[GitHubRepositoriesTable.workspaceId],
-                            fullName = it[GitHubRepositoriesTable.fullName],
-                            htmlUrl = it[GitHubRepositoriesTable.htmlUrl],
-                            notifyChannelId = it[GitHubRepositoriesTable.notifyChannelId]
-                        )
-                    }
+                    ?.toLinkedRepo()
             } ?: continue
 
             when (activity) {
                 is GitHubPushActivity -> handlePush(repo, activity)
                 is GitHubPullRequestActivity -> handlePullRequest(repo, activity)
+                is GitHubIssueActivity -> handleIssue(repo, activity)
             }
         } catch (e: Exception) {
             println("[GitHub] Automation failed for repository ${activity.repositoryId}: ${e.message}")
@@ -99,6 +210,7 @@ private suspend fun handlePush(repo: LinkedRepo, activity: GitHubPushActivity) {
     }
     val more = if (count > MAX_COMMITS_IN_POST) "\n…and ${count - MAX_COMMITS_IN_POST} more" else ""
     val noun = if (count == 1) "commit" else "commits"
+    if (!activity.announce) return
     postToChannel(repo, "${activity.pusher} pushed $count $noun to ${repo.fullName} (${activity.branch})\n$lines$more")
 }
 
@@ -148,8 +260,95 @@ private suspend fun handlePullRequest(repo: LinkedRepo, activity: GitHubPullRequ
         source = "PR #${pr.number}"
     )
     notifyAssignees(changes)
-    post?.let { postToChannel(repo, "$it\n$url") }
+    if (activity.announce) post?.let { postToChannel(repo, "$it\n$url") }
 }
+
+private suspend fun handleIssue(repo: LinkedRepo, activity: GitHubIssueActivity) {
+    val issue = activity.issue
+    val text = "${issue.title}\n${issue.body}"
+    val author = issue.authorUsername.ifBlank { "Someone" }
+
+    val post: String?
+    val closing: Set<Int>
+    when (activity.action) {
+        "opened", "reopened" -> {
+            post = "$author ${activity.action} issue #${issue.number}: ${issue.title}"
+            closing = emptySet()
+        }
+        "closed" -> {
+            post = "Issue #${issue.number} closed: ${issue.title}"
+            closing = tasksLinkedToIssue(repo.id, issue.number) + closingTaskReferences(text)
+        }
+        "edited" -> {
+            post = null
+            closing = emptySet()
+        }
+        else -> return
+    }
+
+    val changes = linkTasks(
+        repo = repo,
+        kind = "issue",
+        ref = issue.number.toString(),
+        title = "#${issue.number} ${issue.title}",
+        url = issue.url,
+        referenced = taskReferences(text),
+        closing = closing,
+        openStatus = null,
+        source = "issue #${issue.number}"
+    )
+    notifyAssignees(changes)
+    if (activity.announce) post?.let { postToChannel(repo, "$it\n${issue.url}") }
+}
+
+private suspend fun tasksLinkedToIssue(repositoryId: Int, number: Int): Set<Int> = dbQuery {
+    GitHubTaskLinksTable.selectAll()
+        .where {
+            (GitHubTaskLinksTable.repositoryId eq repositoryId) and
+                (GitHubTaskLinksTable.kind eq "issue") and
+                (GitHubTaskLinksTable.ref eq number.toString())
+        }
+        .map { it[GitHubTaskLinksTable.taskId] }
+        .toSet()
+}
+
+suspend fun syncLinkedIssuesWithTask(taskId: Int, previousStatus: String?, newStatus: String) {
+    val wasDone = previousStatus == STATUS_DONE
+    val isDone = newStatus == STATUS_DONE
+    if (wasDone == isDone) return
+    val desiredState = if (isDone) "closed" else "open"
+
+    val targets = dbQuery {
+        GitHubTaskLinksTable.selectAll()
+            .where { (GitHubTaskLinksTable.taskId eq taskId) and (GitHubTaskLinksTable.kind eq "issue") }
+            .mapNotNull { link ->
+                val repoRow = GitHubRepositoriesTable.selectAll()
+                    .where { GitHubRepositoriesTable.id eq link[GitHubTaskLinksTable.repositoryId] }
+                    .singleOrNull() ?: return@mapNotNull null
+                val connRow = GitHubConnectionsTable.selectAll()
+                    .where { GitHubConnectionsTable.id eq repoRow[GitHubRepositoriesTable.connectionId] }
+                    .singleOrNull() ?: return@mapNotNull null
+                IssueTarget(
+                    number = link[GitHubTaskLinksTable.ref].toIntOrNull() ?: return@mapNotNull null,
+                    repoFullName = repoRow[GitHubRepositoriesTable.fullName],
+                    installationId = connRow[GitHubConnectionsTable.installationId],
+                    userToken = connRow[GitHubConnectionsTable.accessTokenEncrypted]
+                )
+            }
+    }
+
+    targets.forEach { target ->
+        val token = GitHubService.repoAccessToken(target.installationId, target.userToken) ?: return@forEach
+        GitHubService.setIssueState(token, target.repoFullName, target.number, desiredState)
+    }
+}
+
+private data class IssueTarget(
+    val number: Int,
+    val repoFullName: String,
+    val installationId: Long,
+    val userToken: String?
+)
 
 private suspend fun linkTasks(
     repo: LinkedRepo,

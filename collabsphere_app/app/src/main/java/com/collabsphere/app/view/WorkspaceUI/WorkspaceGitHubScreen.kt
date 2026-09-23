@@ -1,7 +1,6 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import android.content.Intent
-import android.net.Uri
+import com.collabsphere.app.view.openInBrowser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,6 +28,14 @@ import android.widget.Toast
 import androidx.compose.ui.text.style.TextOverflow
 import com.collabsphere.app.viewmodel.GitHubChannelOption
 import com.collabsphere.app.viewmodel.GitHubDailyCount
+import com.collabsphere.app.viewmodel.GitHubLinkedRepo
+import androidx.compose.foundation.horizontalScroll
+import com.collabsphere.app.viewmodel.GitHubContributorStats
+import com.collabsphere.app.view.UserUI.resolveAvatarUrl
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.SubcomposeAsyncImage
+import com.collabsphere.app.viewmodel.GitHubPullRequestItem
 import com.collabsphere.app.viewmodel.AvailableRepo
 import com.collabsphere.app.viewmodel.GitHubAuthEvents
 import com.collabsphere.app.viewmodel.GitHubViewModel
@@ -56,10 +63,12 @@ fun WorkspaceGitHubScreen(
     val isPickingRepo by viewModel.isPickingRepo.collectAsState()
     val error by viewModel.error.collectAsState()
     val authResult by GitHubAuthEvents.result.collectAsState()
+    val pullRequestList by viewModel.pullRequestList.collectAsState()
     var showDisconnectDialog by remember { mutableStateOf(false) }
+    var showRemoveRepoDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(workspaceId) {
-        viewModel.cancelChangeRepo()
+        viewModel.resetForWorkspace()
         viewModel.loadAnalytics(workspaceId)
     }
 
@@ -98,6 +107,27 @@ fun WorkspaceGitHubScreen(
         )
     }
 
+    if (showRemoveRepoDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveRepoDialog = false },
+            title = { Text("Remove ${analytics?.repositoryName ?: "repository"}?") },
+            text = { Text("Its synced commits, pull requests and issues will be removed from this workspace. Other linked repositories stay connected.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRemoveRepoDialog = false
+                    viewModel.removeSelectedRepo(workspaceId)
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveRepoDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -109,22 +139,33 @@ fun WorkspaceGitHubScreen(
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else if (canManage && (isPickingRepo || (!isConnected && analytics?.hasConnection == true))) {
+            val linkedNames = analytics?.repositories.orEmpty().map { it.fullName }.toSet()
             RepoPickerView(
-                repos = availableRepos,
+                repos = availableRepos.filter { it.fullName !in linkedNames },
                 isLinking = isLinking,
                 isLoadingRepos = isLoadingRepos,
                 onRepoSelected = { repo -> viewModel.linkRepo(workspaceId, repo) },
                 onRefresh = { viewModel.loadAvailableRepos(workspaceId) },
-                onCancel = if (isConnected) ({ viewModel.cancelChangeRepo() }) else null,
+                onCancel = if (isConnected) ({ viewModel.cancelAddRepo() }) else null,
                 onDisconnect = { showDisconnectDialog = true }
+            )
+        } else if (isConnected && pullRequestList != null) {
+            PullRequestListView(
+                state = pullRequestList!!,
+                onBack = { viewModel.closePullRequests() },
+                onFilterSelected = { viewModel.setPullRequestFilter(workspaceId, it) },
+                onLoadMore = { viewModel.loadMorePullRequests(workspaceId) }
             )
         } else if (isConnected) {
             ConnectedView(
                 analytics = analytics!!,
                 canManage = canManage,
-                onChangeRepo = { viewModel.startChangeRepo(workspaceId) },
+                onAddRepo = { viewModel.startAddRepo(workspaceId) },
+                onRemoveRepo = { showRemoveRepoDialog = true },
+                onRepoSelected = { viewModel.selectRepo(workspaceId, it) },
                 onSync = { viewModel.syncNow(workspaceId) },
                 onNotifyChannelSelected = { viewModel.setNotifyChannel(workspaceId, it) },
+                onViewAllPullRequests = { viewModel.openPullRequests(workspaceId) },
                 onDisconnect = { showDisconnectDialog = true }
             )
         } else if (analytics != null && !canManage) {
@@ -133,7 +174,7 @@ fun WorkspaceGitHubScreen(
             NotConnectedView(
                 onConnect = {
                     viewModel.startInstall(workspaceId) { url ->
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        openInBrowser(context, url)
                     }
                 }
             )
@@ -339,9 +380,12 @@ private fun RepoPickerView(
 private fun ConnectedView(
     analytics: com.collabsphere.app.viewmodel.GitHubAnalyticsResponse,
     canManage: Boolean,
-    onChangeRepo: () -> Unit,
+    onAddRepo: () -> Unit,
+    onRemoveRepo: () -> Unit,
+    onRepoSelected: (Int) -> Unit,
     onSync: () -> Unit,
     onNotifyChannelSelected: (Int?) -> Unit,
+    onViewAllPullRequests: () -> Unit,
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
@@ -378,10 +422,19 @@ private fun ConnectedView(
                 Text("Sync", color = Color(0xFF2C2A28))
             }
             analytics.repositoryUrl?.let { url ->
-                TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) {
+                TextButton(onClick = { openInBrowser(context, url) }) {
                     Text("Open", color = Color(0xFF2C2A28))
                 }
             }
+        }
+
+        if (analytics.repositories.size > 1) {
+            Spacer(modifier = Modifier.height(8.dp))
+            RepoSwitcher(
+                repositories = analytics.repositories,
+                selectedId = analytics.repositoryId,
+                onSelected = onRepoSelected
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -431,14 +484,27 @@ private fun ConnectedView(
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = contributor.username,
-                            modifier = Modifier.weight(1f),
-                            fontSize = 14.sp,
-                            color = Color(0xFF2C2A28),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        ContributorAvatar(contributor)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = contributor.username,
+                                fontSize = 14.sp,
+                                color = Color(0xFF2C2A28),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            val githubName = contributor.githubName
+                            if (contributor.memberUserId != null && githubName != null && githubName != contributor.username) {
+                                Text(
+                                    text = githubName,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF9E8E89),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                         Text(
                             text = "${contributor.commits} commits",
                             fontSize = 13.sp,
@@ -451,18 +517,38 @@ private fun ConnectedView(
 
         if (analytics.recentPullRequests.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
-            SectionCard(title = "Recent pull requests") {
-                analytics.recentPullRequests.forEach { pr ->
-                    val (statusLabel, statusColor) = when {
-                        pr.mergedAt != null -> "Merged" to Color(0xFF6F42C1)
-                        pr.state == "open" -> "Open" to Color(0xFF2DA44E)
-                        else -> "Closed" to Color(0xFFCF222E)
+            SectionCard(
+                title = "Recent pull requests",
+                action = {
+                    TextButton(onClick = onViewAllPullRequests) {
+                        Text("View all", color = Color(0xFF2C2A28), fontSize = 13.sp)
                     }
+                }
+            ) {
+                analytics.recentPullRequests.forEach { pr ->
+                    val (statusLabel, statusColor) = pullRequestStatus(pr)
                     ActivityRow(
                         title = "#${pr.number} ${pr.title}",
                         subtitle = "${pr.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(pr.createdAt)}",
                         badge = statusLabel,
-                        badgeColor = statusColor
+                        badgeColor = statusColor,
+                        url = pr.url,
+                        ci = pr.ciStatus
+                    )
+                }
+            }
+        }
+
+        if (analytics.recentIssues.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionCard(title = "Issues (${analytics.openIssues} open)") {
+                analytics.recentIssues.forEach { issue ->
+                    ActivityRow(
+                        title = "#${issue.number} ${issue.title}",
+                        subtitle = "${issue.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(issue.createdAt)}",
+                        badge = if (issue.state == "open") "Open" else "Closed",
+                        badgeColor = if (issue.state == "open") Color(0xFF2DA44E) else Color(0xFF6F42C1),
+                        url = issue.url
                     )
                 }
             }
@@ -476,7 +562,9 @@ private fun ConnectedView(
                         title = commit.message.ifBlank { commit.sha.take(7) },
                         subtitle = "${commit.authorName ?: "Unknown"} · ${relativeTime(commit.commitDate)}",
                         badge = commit.sha.take(7),
-                        badgeColor = Color(0xFF70625E)
+                        badgeColor = Color(0xFF70625E),
+                        url = commit.url,
+                        ci = commit.ciStatus
                     )
                 }
             }
@@ -497,23 +585,89 @@ private fun ConnectedView(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = onChangeRepo,
+                    onClick = onAddRepo,
+                    enabled = analytics.repositories.size < MAX_LINKED_REPOS,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Change Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                    Text("Add Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
                 }
                 OutlinedButton(
-                    onClick = onDisconnect,
+                    onClick = onRemoveRepo,
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Disconnect", fontSize = 13.sp)
+                    Text("Remove Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
                 }
+            }
+            TextButton(
+                onClick = onDisconnect,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("Disconnect GitHub", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+private const val MAX_LINKED_REPOS = 5
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RepoSwitcher(
+    repositories: List<GitHubLinkedRepo>,
+    selectedId: Int?,
+    onSelected: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        repositories.forEach { repo ->
+            FilterChip(
+                selected = repo.id == selectedId,
+                onClick = { onSelected(repo.id) },
+                label = { Text(repo.fullName.substringAfter('/')) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContributorAvatar(contributor: GitHubContributorStats) {
+    val avatarUrl = contributor.avatarUrl
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(Color(0xFFEDE8DF)),
+        contentAlignment = Alignment.Center
+    ) {
+        val initial: @Composable () -> Unit = {
+            Text(
+                text = contributor.username.take(1).uppercase(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF70625E)
+            )
+        }
+        if (avatarUrl != null) {
+            SubcomposeAsyncImage(
+                model = resolveAvatarUrl(avatarUrl),
+                contentDescription = contributor.username,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape),
+                loading = { initial() },
+                error = { initial() }
+            )
+        } else {
+            initial()
+        }
     }
 }
 
@@ -566,7 +720,11 @@ private fun NotifyChannelPicker(
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SectionCard(
+    title: String,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -574,17 +732,42 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
             .background(Color.White)
             .padding(16.dp)
     ) {
-        Text(title, fontWeight = FontWeight.Medium, color = Color(0xFF70625E))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontWeight = FontWeight.Medium, color = Color(0xFF70625E), modifier = Modifier.weight(1f))
+            action?.invoke()
+        }
         Spacer(modifier = Modifier.height(8.dp))
         content()
     }
 }
 
+private fun ciIndicator(ci: String?): Pair<String, Color>? = when (ci) {
+    "success" -> "✓" to Color(0xFF2DA44E)
+    "failure" -> "✗" to Color(0xFFCF222E)
+    "pending" -> "●" to Color(0xFFBF8700)
+    else -> null
+}
+
+internal fun pullRequestStatus(pr: GitHubPullRequestItem): Pair<String, Color> = when {
+    pr.mergedAt != null -> "Merged" to Color(0xFF6F42C1)
+    pr.state == "open" -> "Open" to Color(0xFF2DA44E)
+    else -> "Closed" to Color(0xFFCF222E)
+}
+
 @Composable
-private fun ActivityRow(title: String, subtitle: String, badge: String, badgeColor: Color) {
+internal fun ActivityRow(
+    title: String,
+    subtitle: String,
+    badge: String,
+    badgeColor: Color,
+    url: String? = null,
+    ci: String? = null
+) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = url != null) { url?.let { openInBrowser(context, it) } }
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -605,6 +788,10 @@ private fun ActivityRow(title: String, subtitle: String, badge: String, badgeCol
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
+        ciIndicator(ci)?.let { (symbol, color) ->
+            Text(text = symbol, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
+            Spacer(modifier = Modifier.width(6.dp))
+        }
         Text(
             text = badge,
             fontSize = 12.sp,
@@ -614,7 +801,7 @@ private fun ActivityRow(title: String, subtitle: String, badge: String, badgeCol
     }
 }
 
-private fun relativeTime(epochMillis: Long): String =
+internal fun relativeTime(epochMillis: Long): String =
     DateUtils.getRelativeTimeSpanString(epochMillis, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
 
 @Composable

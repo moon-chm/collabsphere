@@ -61,6 +61,7 @@ object GitHubService {
     private const val MAX_COMMIT_PAGES = 50
     private const val MAX_PR_PAGES = 20
     private const val INCREMENTAL_PR_PAGES = 2
+    private const val MAX_ISSUE_PAGES = 10
 
     private val httpClient = HttpClient(CIO) {
         install(ContentNegotiation) {
@@ -169,6 +170,52 @@ object GitHubService {
             null
         }
 
+    suspend fun getIssues(token: String, repoFullName: String, incremental: Boolean): List<GitHubIssueInfo>? =
+        try {
+            getPaged<GitHubIssueInfo>(
+                token,
+                "https://api.github.com/repos/$repoFullName/issues?state=all&sort=updated&direction=desc",
+                if (incremental) INCREMENTAL_PR_PAGES else MAX_ISSUE_PAGES
+            )?.filter { it.pull_request == null }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+
+    suspend fun createIssue(token: String, repoFullName: String, title: String, body: String): Pair<GitHubIssueInfo?, HttpStatusCode?> =
+        try {
+            val response = httpClient.post("https://api.github.com/repos/$repoFullName/issues") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("title" to title, "body" to body))
+            }
+            if (response.status.isSuccess()) {
+                response.body<GitHubIssueInfo>() to response.status
+            } else {
+                println("[GitHub] Creating issue in $repoFullName failed: ${response.status}")
+                null to response.status
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null to null
+        }
+
+    suspend fun setIssueState(token: String, repoFullName: String, number: Int, state: String): Boolean =
+        try {
+            val response = httpClient.patch("https://api.github.com/repos/$repoFullName/issues/$number") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("state" to state))
+            }
+            if (!response.status.isSuccess()) {
+                println("[GitHub] Setting issue #$number in $repoFullName to $state failed: ${response.status}")
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+
     suspend fun getPullRequests(token: String, repoFullName: String, incremental: Boolean): List<GitHubPullRequestInfo>? =
         try {
             getPaged<GitHubPullRequestInfo>(
@@ -181,6 +228,20 @@ object GitHubService {
             null
         }
 }
+
+@Serializable
+data class GitHubIssueInfo(
+    val id: Long,
+    val number: Int,
+    val title: String,
+    val state: String,
+    val html_url: String,
+    val user: GitHubOwner? = null,
+    val body: String? = null,
+    val created_at: String? = null,
+    val closed_at: String? = null,
+    val pull_request: kotlinx.serialization.json.JsonElement? = null
+)
 
 @Serializable
 data class GitHubCommitInfo(
@@ -210,5 +271,13 @@ data class GitHubPullRequestInfo(
     val user: GitHubOwner? = null,
     val created_at: String? = null,
     val closed_at: String? = null,
-    val merged_at: String? = null
+    val merged_at: String? = null,
+    val body: String? = null,
+    val html_url: String? = null,
+    val head: GitHubRef? = null
+)
+
+@Serializable
+data class GitHubRef(
+    val sha: String? = null
 )
