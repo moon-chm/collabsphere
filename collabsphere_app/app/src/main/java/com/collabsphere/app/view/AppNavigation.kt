@@ -59,6 +59,7 @@ import com.collabsphere.app.viewmodel.notes.NotesViewModel
 import com.collabsphere.app.viewmodel.profile.ProfileViewModel
 import com.collabsphere.app.viewmodel.task.TaskViewModel
 import com.collabsphere.app.viewmodel.workspace.WorkspaceViewModel
+import com.collabsphere.app.viewmodel.GitHubViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import com.collabsphere.app.viewmodel.message.MessageViewModel
@@ -504,6 +505,8 @@ fun AppNavigation(
                     }
                 )
 
+                val gitHubViewModel: GitHubViewModel = koinViewModel()
+
                 val invitationStatus by workspaceViewModel.invitationStatus.collectAsStateWithLifecycle()
 
                 LaunchedEffect(workspaceStatus) {
@@ -531,6 +534,7 @@ fun AppNavigation(
                     notesViewModel = notesViewModel,
                     fileViewModel = fileViewModel,
                     dmViewModel = dmViewModel,
+                    gitHubViewModel = gitHubViewModel,
                     workspaceMembers = workspaceMembers,
                     onBack = {
                         navController.popBackStack()

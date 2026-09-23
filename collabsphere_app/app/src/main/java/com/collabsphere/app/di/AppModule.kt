@@ -31,6 +31,7 @@ import com.collabsphere.app.viewmodel.channel.ChannelViewModel
 import com.collabsphere.app.viewmodel.message.MessageViewModel
 import com.collabsphere.app.viewmodel.notes.NotesViewModel
 import com.collabsphere.app.viewmodel.profile.ProfileViewModel
+import com.collabsphere.app.viewmodel.GitHubViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import com.collabsphere.app.NotificationHelper
@@ -258,6 +259,8 @@ val viewModelModule = module {
             sessionManager = get()
         )
     }
+
+    viewModel { GitHubViewModel(get(named("RegularHttpClient"))) }
 }
 
 val appModules = listOf(databaseModule, networkModule, repositoryModule, appModule, workerModule, viewModelModule)
