@@ -30,9 +30,12 @@ fun Application.configureGitHubRoutes() {
             get("/install") {
                 val workspaceId = call.request.queryParameters["workspaceId"]
                 val clientId = System.getenv("GITHUB_CLIENT_ID")
-                // Using the OAuth authorize endpoint as a reliable entry point. 
-                // Alternatively, https://github.com/apps/<app-slug>/installations/new?state=$workspaceId
-                val url = "https://github.com/login/oauth/authorize?client_id=$clientId&state=$workspaceId"
+                println("[GitHub] /install hit. workspaceId=$workspaceId, clientId=$clientId")
+                
+                // Use OAuth authorize with redirect_uri pointing back to our callback
+                val callbackUrl = "https://collabsphere-server-qtke.onrender.com/auth/github/callback"
+                val url = "https://github.com/login/oauth/authorize?client_id=$clientId&redirect_uri=$callbackUrl&state=$workspaceId"
+                println("[GitHub] Redirecting to: $url")
                 call.respondRedirect(url)
             }
 
@@ -42,69 +45,108 @@ fun Application.configureGitHubRoutes() {
                 val installationIdStr = call.request.queryParameters["installation_id"]
                 val setupAction = call.request.queryParameters["setup_action"]
                 val workspaceId = call.request.queryParameters["state"]?.toIntOrNull()
+                
+                println("[GitHub] /callback hit!")
+                println("[GitHub]   code=${code?.take(10)}...")
+                println("[GitHub]   installation_id=$installationIdStr")
+                println("[GitHub]   setup_action=$setupAction")
+                println("[GitHub]   state/workspaceId=$workspaceId")
 
                 if (code == null) {
+                    println("[GitHub] ERROR: No code parameter!")
                     call.respond(HttpStatusCode.BadRequest, "Missing authorization code")
                     return@get
                 }
 
                 // Exchange code for User Token
+                println("[GitHub] Exchanging code for user token...")
                 val tokenResponse = GitHubAuthService.exchangeCodeForUserToken(code)
                 if (tokenResponse == null) {
+                    println("[GitHub] ERROR: Token exchange failed!")
                     call.respond(HttpStatusCode.InternalServerError, "Failed to exchange token")
                     return@get
                 }
+                println("[GitHub] Token exchange SUCCESS. access_token starts with: ${tokenResponse.access_token.take(10)}...")
 
-                val installationId = installationIdStr?.toLongOrNull()
+                // Try to get installationId from the callback params first
+                var installationId = installationIdStr?.toLongOrNull()
                 
-                // If installationId is provided in callback, we can fetch repos immediately
+                // If no installationId in callback (pure OAuth flow), query user's installations
+                if (installationId == null) {
+                    println("[GitHub] No installation_id in callback, querying user installations...")
+                    val installations = GitHubService.getUserInstallations(tokenResponse.access_token)
+                    println("[GitHub] Found ${installations?.size ?: 0} installations")
+                    installationId = installations?.firstOrNull()?.id
+                    println("[GitHub] Using installationId=$installationId")
+                }
+                
                 if (installationId != null && workspaceId != null) {
+                    println("[GitHub] Fetching repos for installationId=$installationId...")
                     val repos = GitHubService.getInstallationRepositories(tokenResponse.access_token, installationId)
+                    println("[GitHub] Found ${repos?.size ?: 0} repos")
+                    
                     if (repos != null && repos.isNotEmpty()) {
                         val repo = repos.first()
+                        println("[GitHub] Linking repo: ${repo.full_name} to workspace $workspaceId")
                         
-                        dbQuery {
-                            // Find the workspace owner to link the connection
-                            val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
-                            if (workspaceRow != null) {
-                                val userId = workspaceRow[WorkspacesTable.userId]
-                                
-                                // Get or create GitHubConnection
-                                var connectionRow = GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq userId }.singleOrNull()
-                                val connectionId = if (connectionRow == null) {
-                                    GitHubConnectionsTable.insert {
-                                        it[GitHubConnectionsTable.userId] = userId
-                                        it[GitHubConnectionsTable.githubUserId] = 0L
-                                        it[GitHubConnectionsTable.githubUsername] = "connected_user"
-                                        it[GitHubConnectionsTable.installationId] = installationId
-                                        it[GitHubConnectionsTable.accessTokenEncrypted] = tokenResponse.access_token
-                                    }[GitHubConnectionsTable.id]
-                                } else {
-                                    connectionRow[GitHubConnectionsTable.id]
-                                }
-
-                                // Check if workspace already has a repo linked
-                                val existingRepo = GitHubRepositoriesTable.select { GitHubRepositoriesTable.workspaceId eq workspaceId }.singleOrNull()
-                                if (existingRepo == null) {
-                                    GitHubRepositoriesTable.insert {
-                                        it[GitHubRepositoriesTable.connectionId] = connectionId
-                                        it[GitHubRepositoriesTable.workspaceId] = workspaceId
-                                        it[GitHubRepositoriesTable.githubRepoId] = repo.id
-                                        it[GitHubRepositoriesTable.fullName] = repo.full_name
-                                        it[GitHubRepositoriesTable.owner] = repo.owner.login
-                                        it[GitHubRepositoriesTable.name] = repo.name
-                                        it[GitHubRepositoriesTable.isPrivate] = repo.private
-                                        it[GitHubRepositoriesTable.htmlUrl] = repo.html_url
-                                        it[GitHubRepositoriesTable.defaultBranch] = repo.default_branch
+                        try {
+                            dbQuery {
+                                val workspaceRow = WorkspacesTable.select { WorkspacesTable.id eq workspaceId }.singleOrNull()
+                                if (workspaceRow != null) {
+                                    val userId = workspaceRow[WorkspacesTable.userId]
+                                    println("[GitHub] Found workspace owner userId=$userId")
+                                    
+                                    var connectionRow = GitHubConnectionsTable.select { GitHubConnectionsTable.userId eq userId }.singleOrNull()
+                                    val connectionId = if (connectionRow == null) {
+                                        println("[GitHub] Creating new GitHubConnection...")
+                                        GitHubConnectionsTable.insert {
+                                            it[GitHubConnectionsTable.userId] = userId
+                                            it[GitHubConnectionsTable.githubUserId] = 0L
+                                            it[GitHubConnectionsTable.githubUsername] = "connected_user"
+                                            it[GitHubConnectionsTable.installationId] = installationId
+                                            it[GitHubConnectionsTable.accessTokenEncrypted] = tokenResponse.access_token
+                                        }[GitHubConnectionsTable.id]
+                                    } else {
+                                        println("[GitHub] Reusing existing GitHubConnection")
+                                        connectionRow[GitHubConnectionsTable.id]
                                     }
+
+                                    val existingRepo = GitHubRepositoriesTable.select { GitHubRepositoriesTable.workspaceId eq workspaceId }.singleOrNull()
+                                    if (existingRepo == null) {
+                                        println("[GitHub] Inserting repo into GitHubRepositoriesTable...")
+                                        GitHubRepositoriesTable.insert {
+                                            it[GitHubRepositoriesTable.connectionId] = connectionId
+                                            it[GitHubRepositoriesTable.workspaceId] = workspaceId
+                                            it[GitHubRepositoriesTable.githubRepoId] = repo.id
+                                            it[GitHubRepositoriesTable.fullName] = repo.full_name
+                                            it[GitHubRepositoriesTable.owner] = repo.owner.login
+                                            it[GitHubRepositoriesTable.name] = repo.name
+                                            it[GitHubRepositoriesTable.isPrivate] = repo.private
+                                            it[GitHubRepositoriesTable.htmlUrl] = repo.html_url
+                                            it[GitHubRepositoriesTable.defaultBranch] = repo.default_branch
+                                        }
+                                        println("[GitHub] SUCCESS: Repo linked!")
+                                    } else {
+                                        println("[GitHub] Repo already linked for this workspace")
+                                    }
+                                } else {
+                                    println("[GitHub] ERROR: Workspace $workspaceId not found!")
                                 }
                             }
+                        } catch (e: Exception) {
+                            println("[GitHub] DB ERROR: ${e.message}")
+                            e.printStackTrace()
                         }
+                    } else {
+                        println("[GitHub] WARNING: No repos found for this installation")
                     }
+                } else {
+                    println("[GitHub] WARNING: installationId=$installationId, workspaceId=$workspaceId — skipping DB insert")
                 }
 
                 // Redirect back to Android App via deep link
-                call.respondRedirect("collabsphere://github-auth-success?installation_id=$installationId")
+                println("[GitHub] Redirecting to deep link: collabsphere://github-auth-success")
+                call.respondRedirect("collabsphere://github-auth-success?installation_id=$installationId&workspace_id=$workspaceId")
             }
         }
 
