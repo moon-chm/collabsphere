@@ -25,6 +25,17 @@ fun Application.configureGitHubRoutes() {
         
         // Unauthenticated routes for OAuth and Webhooks
         route("/auth/github") {
+            
+            // Redirect to GitHub for App Installation & Authorization
+            get("/install") {
+                val workspaceId = call.request.queryParameters["workspaceId"]
+                val clientId = System.getenv("GITHUB_CLIENT_ID")
+                // Using the OAuth authorize endpoint as a reliable entry point. 
+                // Alternatively, https://github.com/apps/<app-slug>/installations/new?state=$workspaceId
+                val url = "https://github.com/login/oauth/authorize?client_id=$clientId&state=$workspaceId"
+                call.respondRedirect(url)
+            }
+
             // The callback when a user authorizes and installs the app
             get("/callback") {
                 val code = call.request.queryParameters["code"]
