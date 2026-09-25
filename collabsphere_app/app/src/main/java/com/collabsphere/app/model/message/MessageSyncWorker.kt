@@ -65,7 +65,8 @@ class MessageSyncWorker(
                 userName = userName,
                 content = content,
                 status = status,
-                replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 }
+                replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 },
+                mediaUrl = inputData.getString("MEDIA_URL")
             )
 
             if (actionType == "UPDATE") {

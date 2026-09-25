@@ -647,6 +647,7 @@ fun AppNavigation(
                 }
 
                 val messageRepo = koinInject<MessageRepo>()
+                val draftStoreForChannel = koinInject<com.collabsphere.app.model.DraftStore>()
                 val messageViewModel: MessageViewModel = viewModel(
                     viewModelStoreOwner = workspaceParentEntry,
                     key = "message_vm_ch_$channelId",
@@ -658,7 +659,8 @@ fun AppNavigation(
                                 loggedInUserId.toInt(),
                                 workspaceId,
                                 channelId,
-                                userName
+                                userName,
+                                draftStoreForChannel
                             ) as T
                         }
                     }

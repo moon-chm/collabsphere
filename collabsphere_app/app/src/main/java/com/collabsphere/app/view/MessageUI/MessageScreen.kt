@@ -23,6 +23,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Tag
@@ -57,6 +68,10 @@ import com.collabsphere.app.view.components.ReplyQuote
 import com.collabsphere.app.view.components.ReactionChipsRow
 import com.collabsphere.app.view.components.ReactionPickerDialog
 import com.collabsphere.app.view.components.typingLabel
+import com.collabsphere.app.view.components.PinnedMessagesBanner
+import com.collabsphere.app.view.components.PinnedMessagesDialog
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.automirrored.filled.Reply
 import kotlinx.coroutines.launch
 import com.collabsphere.app.viewmodel.message.MessageViewModel
@@ -75,8 +90,33 @@ fun MessageScreen(
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
     val typingUsers by viewModel.typingUsers.collectAsStateWithLifecycle()
     var reactionPickerFor by remember { mutableStateOf<MessageEntity?>(null) }
-    val messagesById = remember(messages) { messages.orEmpty().associateBy { it.id } }
     val coroutineScope = rememberCoroutineScope()
+    val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    var showPinnedDialog by remember { mutableStateOf(false) }
+    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.uiMessages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+    }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    bytes?.let { Triple(it, mimeType, "channel_image_${System.currentTimeMillis()}") }
+                }.getOrNull()
+            }
+            if (payload == null) {
+                Toast.makeText(context, "Couldn't read that image.", Toast.LENGTH_SHORT).show()
+            } else {
+                viewModel.onSendMedia(payload.first, payload.second, payload.third)
+            }
+        }
+    }
+    val messagesById = remember(messages) { messages.orEmpty().associateBy { it.id } }
     val currentUserId = viewModel.currentUserId
 
     var selectedMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -103,6 +143,43 @@ fun MessageScreen(
         if (wasNearBottom || isOwnMessage) {
             listState.animateScrollToItem(msgs.lastIndex + if (isLoadingOlder) 1 else 0)
         }
+    }
+
+    fullscreenImageUrl?.let { imageUrl ->
+        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { fullscreenImageUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(context).data(imageUrl).crossfade(true).build(),
+                    contentDescription = "Full screen image",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                    loading = { CircularProgressIndicator(color = CoralStart, modifier = Modifier.size(40.dp)) }
+                )
+            }
+        }
+    }
+
+    if (showPinnedDialog) {
+        PinnedMessagesDialog(
+            pinned = pinned,
+            onSelect = { target ->
+                showPinnedDialog = false
+                val index = messages.orEmpty().indexOfFirst { it.id == target.id }
+                if (index >= 0) {
+                    coroutineScope.launch { listState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0) }
+                } else {
+                    Toast.makeText(context, "Scroll up to load older messages to see this one.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onUnpin = { viewModel.togglePin(it) },
+            onDismiss = { showPinnedDialog = false }
+        )
     }
 
     reactionPickerFor?.let { target ->
@@ -255,7 +332,7 @@ fun MessageScreen(
                             onClick = {
                                 isEditing = false
                                 selectedMessage = null
-                                viewModel.onMessageContentChange("")
+                                viewModel.endEdit()
                             },
                             modifier = Modifier.size(22.dp)
                         ) {
@@ -294,6 +371,28 @@ fun MessageScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (!isEditing) {
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isUploadingMedia) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp,
+                                    color = CoralStart
+                                )
+                            } else {
+                                IconButton(onClick = { imagePicker.launch("image/*") }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Image,
+                                        contentDescription = "Attach image",
+                                        tint = IndigoStart
+                                    )
+                                }
+                            }
+                        }
+                    }
                     // Debossed text input field
                     Box(
                         modifier = Modifier
@@ -324,7 +423,7 @@ fun MessageScreen(
                                             }
                                             isEditing = false
                                             selectedMessage = null
-                                            viewModel.onMessageContentChange("")
+                                            viewModel.endEdit()
                                         } else {
                                             viewModel.onSendMessageUser()
                                         }
@@ -411,7 +510,7 @@ fun MessageScreen(
                                     }
                                     isEditing = false
                                     selectedMessage = null
-                                    viewModel.onMessageContentChange("")
+                                    viewModel.endEdit()
                                 } else {
                                     viewModel.onSendMessageUser()
                                 }
@@ -434,6 +533,16 @@ fun MessageScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            pinned.firstOrNull()?.let { latest ->
+                PinnedMessagesBanner(
+                    latest = latest,
+                    count = pinned.size,
+                    onClick = { showPinnedDialog = true },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(1f)
+                )
+            }
             when {
                 messages == null -> {
                     MessageSkeletonList()
@@ -511,7 +620,12 @@ fun MessageScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = if (pinned.isNotEmpty()) 76.dp else 12.dp,
+                        bottom = 12.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (isLoadingOlder) {
@@ -545,7 +659,8 @@ fun MessageScreen(
                             ) {
                                 // Author tag
                                 Text(
-                                    text = if (isOwnMessage) "You" else message.userName,
+                                    text = (if (isOwnMessage) "You" else message.userName) +
+                                        if (message.pinnedAt != null) " · 📌 Pinned" else "",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -659,14 +774,40 @@ fun MessageScreen(
                                                 }
                                             )
                                         }
-                                        Text(
-                                            text = message.content,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                lineHeight = 20.sp,
-                                                fontSize = 15.sp
-                                            ),
-                                            color = if (isOwnMessage) Color.White else Ink
-                                        )
+                                        message.mediaUrl?.let { mediaUrl ->
+                                            SubcomposeAsyncImage(
+                                                model = ImageRequest.Builder(context).data(mediaUrl).crossfade(true).build(),
+                                                contentDescription = "Shared image",
+                                                modifier = Modifier
+                                                    .widthIn(max = 240.dp)
+                                                    .heightIn(max = 240.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .clickable { fullscreenImageUrl = mediaUrl },
+                                                contentScale = ContentScale.Crop,
+                                                loading = {
+                                                    Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                                                        CircularProgressIndicator(
+                                                            color = if (isOwnMessage) Color.White else CoralStart,
+                                                            modifier = Modifier.size(28.dp),
+                                                            strokeWidth = 2.5.dp
+                                                        )
+                                                    }
+                                                }
+                                            )
+                                            if (message.content.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                            }
+                                        }
+                                        if (message.content.isNotBlank() || message.mediaUrl == null) {
+                                            Text(
+                                                text = message.content,
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    lineHeight = 20.sp,
+                                                    fontSize = 15.sp
+                                                ),
+                                                color = if (isOwnMessage) Color.White else Ink
+                                            )
+                                        }
                                     }
 
                                     if (selectedMessage == message && showActionMenu) {
@@ -704,13 +845,31 @@ fun MessageScreen(
                                                     leadingIcon = { Text("😊", fontSize = 18.sp) }
                                                 )
                                             }
+                                            if (message.id > 0) {
+                                                val isPinned = message.pinnedAt != null || pinned.any { it.id == message.id }
+                                                DropdownMenuItem(
+                                                    text = { Text(if (isPinned) "Unpin" else "Pin", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        viewModel.togglePin(message)
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.Default.PushPin,
+                                                            contentDescription = null,
+                                                            tint = CoralStart
+                                                        )
+                                                    }
+                                                )
+                                            }
                                             if (isOwnMessage) {
                                                 DropdownMenuItem(
                                                     text = { Text("Edit", color = Ink) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         isEditing = true
-                                                        viewModel.onMessageContentChange(message.content)
+                                                        viewModel.beginEdit(message.content)
                                                     },
                                                     leadingIcon = {
                                                         Icon(

@@ -1,5 +1,7 @@
 package com.collabsphere.app.model.notes
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -57,7 +59,8 @@ class NotesRepo(
                             userId = remote.userId,
                             workspaceId = remote.workspaceId,
                             notesName = remote.notesName,
-                            description = remote.description
+                            description = remote.description,
+                            isPinned = remote.isPinned
                         )
                     }
                     val deletes = updates.filter { it.isDeleted }.map { it.id }
@@ -181,5 +184,12 @@ class NotesRepo(
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             request
         )
+    }
+
+    suspend fun setPinned(noteId: Int, pinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            apiService.setPinned(noteId, pinned)
+            notesDao.updatePinned(noteId, pinned)
+        }
     }
 }

@@ -4,13 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.model.DraftStore
 import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.model.message.MessageRepo
 import com.collabsphere.app.model.message.MessageStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -20,12 +26,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@OptIn(FlowPreview::class)
 class MessageViewModel(
     private val repo: MessageRepo,
     private val loggedUserId: Int,
     private val loggedWorkspaceId: Int,
     private val loggedChannelId: Int,
-    private val loggedUserName: String
+    private val loggedUserName: String,
+    private val draftStore: DraftStore
 ) : ViewModel() {
 
     val currentUserId: Int = loggedUserId
@@ -35,6 +43,13 @@ class MessageViewModel(
 
     private val _typingUsers = MutableStateFlow<List<String>>(emptyList())
     val typingUsers = _typingUsers.asStateFlow()
+
+    private val _pinned = MutableStateFlow<List<MessageEntity>>(emptyList())
+    val pinned = _pinned.asStateFlow()
+
+    private val draftKey = DraftStore.channelKey(loggedWorkspaceId, loggedChannelId)
+    private var isEditingMessage = false
+    private var draftBeforeEdit = ""
 
     private val typingUntil = mutableMapOf<Int, Pair<String, Long>>()
     private var isTypingSent = false
@@ -46,6 +61,20 @@ class MessageViewModel(
         }
         viewModelScope.launch {
             refreshReactions()
+        }
+        viewModelScope.launch {
+            refreshPinned()
+        }
+        viewModelScope.launch {
+            ChannelMessageCenter.incoming
+                .filter { it.workspaceId == loggedWorkspaceId && it.channelId == loggedChannelId }
+                .collect { change ->
+                    val known = _pinned.value.firstOrNull { it.id == change.id }
+                    val nowPinned = change.pinnedAt != null && !change.isDeleted
+                    if ((known != null) != nowPinned || (known != null && known.pinnedAt != change.pinnedAt)) {
+                        refreshPinned()
+                    }
+                }
         }
         viewModelScope.launch {
             ChannelMessageCenter.reactions
@@ -97,6 +126,34 @@ class MessageViewModel(
         }
     }
 
+    private suspend fun refreshPinned() {
+        repo.fetchPinned(loggedWorkspaceId, loggedChannelId).onSuccess { _pinned.value = it }
+    }
+
+    fun togglePin(message: MessageEntity) {
+        if (message.id <= 0) return
+        val pin = message.pinnedAt == null && _pinned.value.none { it.id == message.id }
+        viewModelScope.launch {
+            repo.setPinned(message.id, pin)
+                .onSuccess { refreshPinned() }
+                .onFailure { _uiMessages.tryEmit("Couldn't update the pin. Check your connection.") }
+        }
+    }
+
+    fun beginEdit(originalText: String) {
+        if (!isEditingMessage) {
+            draftBeforeEdit = _messageContent.value
+            isEditingMessage = true
+        }
+        _messageContent.value = originalText
+    }
+
+    fun endEdit() {
+        isEditingMessage = false
+        _messageContent.value = draftBeforeEdit
+        draftBeforeEdit = ""
+    }
+
     fun toggleReaction(messageId: Int, emoji: String) {
         if (messageId <= 0) return
         val alreadyReacted = _reactions.value[messageId]?.get(emoji)?.contains(loggedUserId) == true
@@ -128,6 +185,8 @@ class MessageViewModel(
     }
 
     override fun onCleared() {
+        val finalDraft = if (isEditingMessage) draftBeforeEdit else _messageContent.value
+        CoroutineScope(Dispatchers.IO).launch { draftStore.save(draftKey, finalDraft) }
         if (isTypingSent) {
             isTypingSent = false
             CoroutineScope(Dispatchers.IO).launch { repo.sendTyping(loggedWorkspaceId, loggedChannelId, false) }
@@ -175,6 +234,61 @@ class MessageViewModel(
     private val _messageContent = MutableStateFlow("")
     val messageContent = _messageContent.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            val saved = draftStore.load(draftKey)
+            if (saved.isNotBlank() && _messageContent.value.isEmpty()) {
+                _messageContent.value = saved
+            }
+            _messageContent
+                .drop(1)
+                .debounce(DRAFT_SAVE_DEBOUNCE_MS)
+                .collect { if (!isEditingMessage) draftStore.save(draftKey, it) }
+        }
+    }
+
+    private val _isUploadingMedia = MutableStateFlow(false)
+    val isUploadingMedia = _isUploadingMedia.asStateFlow()
+
+    private val _uiMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val uiMessages = _uiMessages.asSharedFlow()
+
+    fun onSendMedia(fileBytes: ByteArray, mimeType: String, fileName: String) {
+        if (_isUploadingMedia.value) return
+        if (fileBytes.size > MAX_MEDIA_BYTES) {
+            _uiMessages.tryEmit("Images must be 10 MB or smaller.")
+            return
+        }
+        _isUploadingMedia.value = true
+        val caption = _messageContent.value.trim()
+        val replyToId = _replyingTo.value?.id?.takeIf { it > 0 }
+        viewModelScope.launch {
+            val message = MessageEntity(
+                userId = loggedUserId,
+                workspaceId = loggedWorkspaceId,
+                channelId = loggedChannelId,
+                userName = loggedUserName,
+                content = caption,
+                status = MessageStatus.Delivered,
+                replyToId = replyToId
+            )
+            repo.sendMediaMessage(message, fileBytes, mimeType, fileName)
+                .onSuccess {
+                    if (_messageContent.value.trim() == caption) {
+                        _messageContent.value = ""
+                        updateTypingState(false)
+                    }
+                    if (_replyingTo.value?.id == replyToId) {
+                        _replyingTo.value = null
+                    }
+                }
+                .onFailure {
+                    _uiMessages.tryEmit("Couldn't upload the image. Check your connection and try again.")
+                }
+            _isUploadingMedia.value = false
+        }
+    }
+
     fun onMessageContentChange(content: String) {
         _messageContent.value = content
         updateTypingState(content.isNotBlank())
@@ -217,5 +331,7 @@ class MessageViewModel(
     companion object {
         private const val TYPING_RESEND_MS = 3_000L
         private const val TYPING_VISIBLE_MS = 6_000L
+        private const val MAX_MEDIA_BYTES = 10 * 1024 * 1024
+        private const val DRAFT_SAVE_DEBOUNCE_MS = 400L
     }
 }

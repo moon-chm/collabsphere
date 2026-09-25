@@ -25,6 +25,7 @@ data class NotesResponse(
     val workspaceId: Int,
     val notesName: String,
     val description: String,
+    val isPinned: Boolean = false
 )
 
 @Serializable
@@ -35,7 +36,8 @@ data class NotesSyncResponse(
     val notesName: String,
     val description: String,
     val isDeleted: Boolean,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPinned: Boolean = false
 )
 @Serializable
 data class FileSyncResponse(

@@ -27,6 +27,16 @@ class NoteApiService(private val client: HttpClient) {
         }.body()
     }
 
+    suspend fun setPinned(noteId: Int, pinned: Boolean) {
+        val response = client.post("$baseUrl/$noteId/pin") {
+            contentType(ContentType.Application.Json)
+            setBody(com.collabsphere.app.dto.message.PinRequest(pinned))
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Pin failed (${response.status.value})")
+        }
+    }
+
     suspend fun getNotes(workspaceId: Int): List<NotesResponse> {
         return client.get("$baseUrl/workspace/$workspaceId").body()
     }

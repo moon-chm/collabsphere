@@ -17,7 +17,8 @@ data class NotesResponse(
     val userId: Int,
     val workspaceId: Int,
     val notesName: String,
-    val description: String
+    val description: String,
+    val isPinned: Boolean = false
 )
 
 @Serializable
@@ -28,5 +29,6 @@ data class NotesSyncDto(
     val notesName: String,
     val description: String,
     val isDeleted: Boolean,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPinned: Boolean = false
 )

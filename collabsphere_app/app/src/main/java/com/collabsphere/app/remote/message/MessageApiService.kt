@@ -5,6 +5,7 @@ import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionRequest
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.MessageRequest
+import com.collabsphere.app.dto.message.PinRequest
 import com.collabsphere.app.dto.message.MessageResponse
 import com.collabsphere.app.dto.message.MessageSyncDto
 import io.ktor.client.*
@@ -46,6 +47,20 @@ class MessageApiService(private val client: HttpClient) {
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
         return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()
+    }
+
+    suspend fun setPinned(messageId: Int, pinned: Boolean) {
+        val response = client.post("$baseUrl/$messageId/pin") {
+            contentType(ContentType.Application.Json)
+            setBody(PinRequest(pinned))
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Pin failed (${response.status.value})")
+        }
+    }
+
+    suspend fun getPinned(workspaceId: Int, channelId: Int): List<MessageSyncDto> {
+        return client.get("$baseUrl/pinned/$workspaceId/$channelId").body()
     }
 
     suspend fun toggleReaction(messageId: Int, emoji: String, add: Boolean): ChannelReactionSummary {

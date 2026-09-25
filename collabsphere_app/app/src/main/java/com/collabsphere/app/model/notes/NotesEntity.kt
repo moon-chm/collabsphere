@@ -1,5 +1,6 @@
 package com.collabsphere.app.model.notes
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -16,5 +17,7 @@ data class NotesEntity(
     val userId: Int,
     val workspaceId: Int,
     val notesName: String,
-    val description: String
+    val description: String,
+    @ColumnInfo(defaultValue = "0")
+    val isPinned: Boolean = false
 )

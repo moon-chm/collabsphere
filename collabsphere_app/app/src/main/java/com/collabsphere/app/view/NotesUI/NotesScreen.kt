@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
@@ -211,6 +212,7 @@ fun NotesScreen(
                             notes = note,
                             deleteNote = { noteToDelete = note },
                             updateNote = { noteToEdit = note },
+                            togglePin = { viewModel.togglePin(note) },
                             modifier = Modifier.animateItem()
                         )
                     }
@@ -359,6 +361,7 @@ fun SkeuoNotesItem(
     notes: NotesEntity,
     deleteNote: () -> Unit,
     updateNote: () -> Unit,
+    togglePin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -433,6 +436,17 @@ fun SkeuoNotesItem(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                SkeuoActionIconButton(
+                    onClick = togglePin,
+                    icon = Icons.Default.PushPin,
+                    contentDescription = if (notes.isPinned) "Unpin note" else "Pin note",
+                    tint = if (notes.isPinned) CoralStart else Muted,
+                    size = 32.dp,
+                    iconSize = 16.dp
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 SkeuoActionIconButton(
                     onClick = updateNote,
                     icon = Icons.Default.Edit,

@@ -35,7 +35,7 @@ import com.collabsphere.app.model.message.MessageEntity
         DmEntity::class,
         DmReactionEntity::class
     ],
-    version = 39,
+    version = 41,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -102,6 +102,19 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE message ADD COLUMN replyToId INTEGER")
                 database.execSQL("ALTER TABLE DM ADD COLUMN replyToId INTEGER")
+            }
+        }
+
+        val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN mediaUrl TEXT")
+            }
+        }
+
+        val MIGRATION_40_41 = object : Migration(40, 41) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN pinnedAt INTEGER")
+                database.execSQL("ALTER TABLE notes ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

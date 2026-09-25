@@ -11,7 +11,9 @@ data class MessageRequest(
     val userName: String,
     val content: String,
     val status: String,
-    val replyToId: Int? = null
+    val replyToId: Int? = null,
+    val mediaUrl: String? = null,
+    val pinnedAt: Long? = null
 )
 
 @Serializable
@@ -23,7 +25,9 @@ data class MessageResponse(
     val userName: String,
     val content: String,
     val status: String,
-    val replyToId: Int? = null
+    val replyToId: Int? = null,
+    val mediaUrl: String? = null,
+    val pinnedAt: Long? = null
 )
 
 @Serializable
@@ -37,7 +41,14 @@ data class MessageSyncResponse(
     val status: String,
     val isDeleted: Boolean,
     val updatedAt: Long,
-    val replyToId: Int? = null
+    val replyToId: Int? = null,
+    val mediaUrl: String? = null,
+    val pinnedAt: Long? = null
+)
+
+@Serializable
+data class PinRequest(
+    val pinned: Boolean
 )
 
 @Serializable

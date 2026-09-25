@@ -9,6 +9,7 @@ import androidx.work.*
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.MessageSyncDto
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.remote.dm.DmApiService
 import com.collabsphere.app.remote.dm.DmWebSocketService
@@ -53,7 +54,8 @@ class MessageRepo(
                 userName = message.userName,
                 content = message.content,
                 status = message.status.name,
-                replyToId = message.replyToId
+                replyToId = message.replyToId,
+                mediaUrl = message.mediaUrl
             )
             val remoteMessage = apiService.createMessage(request)
             val updatedMessage = message.copy(id = remoteMessage.id)
@@ -66,6 +68,7 @@ class MessageRepo(
             val syncData = workDataOf(
                 "ACTION_TYPE" to "CREATE",
                 "REPLY_TO_ID" to (message.replyToId ?: 0),
+                "MEDIA_URL" to message.mediaUrl,
                 "MESSAGE_ID" to localId.toInt(),
                 "USER_ID" to message.userId,
                 "WORKSPACE_ID" to message.workspaceId,
@@ -151,6 +154,26 @@ class MessageRepo(
         return oldestLoaded == null || remote.id >= oldestLoaded
     }
 
+    suspend fun sendMediaMessage(message: MessageEntity, fileBytes: ByteArray, mimeType: String, fileName: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val mediaUrl = dmApiService.uploadDmMedia(AppConfig.BASE_URL, fileBytes, mimeType, fileName)
+                sendMessageToUser(message.copy(mediaUrl = mediaUrl))
+                Unit
+            }
+        }
+
+    suspend fun setPinned(messageId: Int, pinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            apiService.setPinned(messageId, pinned)
+            messageDao.updatePinnedAt(messageId, if (pinned) System.currentTimeMillis() else null)
+        }
+    }
+
+    suspend fun fetchPinned(workspaceId: Int, channelId: Int): Result<List<MessageEntity>> = withContext(Dispatchers.IO) {
+        runCatching { apiService.getPinned(workspaceId, channelId).map { it.toEntity() } }
+    }
+
     suspend fun toggleReaction(messageId: Int, emoji: String, add: Boolean): Result<ChannelReactionSummary> =
         withContext(Dispatchers.IO) {
             runCatching { apiService.toggleReaction(messageId, emoji, add) }
@@ -198,7 +221,9 @@ class MessageRepo(
         userName = userName,
         content = content,
         status = MessageStatus.valueOf(status),
-        replyToId = replyToId
+        replyToId = replyToId,
+        mediaUrl = mediaUrl,
+        pinnedAt = pinnedAt
     )
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {

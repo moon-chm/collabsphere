@@ -14,8 +14,11 @@ interface NotesDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun createNotes(notes: NotesEntity): Long
 
-    @Query("SELECT * FROM notes WHERE workspaceId = :workspaceId")
+    @Query("SELECT * FROM notes WHERE workspaceId = :workspaceId ORDER BY isPinned DESC, id ASC")
     fun getallnotedbyuser(workspaceId: Int): Flow<List<NotesEntity>>
+
+    @Query("UPDATE notes SET isPinned = :pinned WHERE id = :noteId")
+    suspend fun updatePinned(noteId: Int, pinned: Boolean)
 
     @Query("DELETE FROM notes WHERE id = :noteId")
     suspend fun deleteNoteById(noteId: Int)

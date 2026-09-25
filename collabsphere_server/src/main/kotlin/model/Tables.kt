@@ -82,6 +82,9 @@ object MessageTable : Table("message") {
     val userName = varchar("user_name", 255)
     val content = text("content")
     val replyToId = integer("reply_to_id").nullable()
+    val mediaUrl = varchar("media_url", 500).nullable()
+    val pinnedAt = long("pinned_at").nullable()
+    val pinnedByUserId = integer("pinned_by_user_id").nullable()
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
@@ -95,6 +98,7 @@ object NotesTable : Table("notes") {
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val notesName = varchar("notes_name", 255)
     val notesDescription = text("description")
+    val isPinned = bool("is_pinned").default(false)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created note so a WorkManager retry after a lost (but

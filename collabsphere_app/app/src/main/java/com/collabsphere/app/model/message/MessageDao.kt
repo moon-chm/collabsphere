@@ -30,6 +30,9 @@ interface MessageDao {
     @Query("SELECT MIN(id) FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId AND id > 0")
     suspend fun oldestSyncedMessageId(workspaceId: Int, channelId: Int): Int?
 
+    @Query("UPDATE message SET pinnedAt = :pinnedAt WHERE id = :id")
+    suspend fun updatePinnedAt(id: Int, pinnedAt: Long?)
+
     @Query("SELECT COUNT(*) FROM message WHERE id = :id")
     suspend fun countById(id: Int): Int
 

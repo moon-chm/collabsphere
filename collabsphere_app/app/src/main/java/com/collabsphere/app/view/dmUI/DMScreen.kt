@@ -52,6 +52,11 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.collabsphere.app.model.DraftStore
+import org.koin.compose.koinInject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.automirrored.filled.Reply
 import com.collabsphere.app.view.components.ReplyComposerBanner
 import com.collabsphere.app.view.components.ReplyQuote
@@ -227,6 +232,36 @@ fun DMScreen(
     val isPartnerTyping = activeChatPartner?.let { it.id in typingPartnerIds } ?: false
     var replyingTo by remember { mutableStateOf<DmEntity?>(null) }
     LaunchedEffect(activeChatPartner?.id) { replyingTo = null }
+    val draftStore = koinInject<DraftStore>()
+    var draftBeforeEdit by remember { mutableStateOf("") }
+    var draftLoadedFor by remember { mutableStateOf<Int?>(null) }
+    DisposableEffect(currentPartnerId) {
+        val partnerId = currentPartnerId
+        if (partnerId != null) {
+            draftLoadedFor = null
+        }
+        onDispose {
+            if (partnerId != null && draftLoadedFor == partnerId) {
+                val finalDraft = if (editingMessage != null) draftBeforeEdit else typedText
+                CoroutineScope(Dispatchers.IO).launch {
+                    draftStore.save(DraftStore.dmKey(workspaceId, partnerId), finalDraft)
+                }
+            }
+        }
+    }
+    LaunchedEffect(currentPartnerId) {
+        val partnerId = currentPartnerId ?: return@LaunchedEffect
+        editingMessage = null
+        draftBeforeEdit = ""
+        typedText = draftStore.load(DraftStore.dmKey(workspaceId, partnerId))
+        draftLoadedFor = partnerId
+    }
+    LaunchedEffect(typedText, currentPartnerId, draftLoadedFor) {
+        val partnerId = currentPartnerId ?: return@LaunchedEffect
+        if (draftLoadedFor != partnerId || editingMessage != null) return@LaunchedEffect
+        delay(400)
+        draftStore.save(DraftStore.dmKey(workspaceId, partnerId), typedText)
+    }
     val messagesById = remember(messages) { messages.associateBy { it.id } }
     val replyScope = rememberCoroutineScope()
     val scrollToMessage: (Int) -> Unit = { targetId ->
@@ -1347,6 +1382,9 @@ fun DMScreen(
                                                             DropdownMenuItem(
                                                                 text = { Text("Edit message", color = Ink) },
                                                                 onClick = {
+                                                                    if (editingMessage == null) {
+                                                                        draftBeforeEdit = typedText
+                                                                    }
                                                                     editingMessage = message
                                                                     typedText = message.dm_content
                                                                     showActionMenu = false
@@ -1362,7 +1400,8 @@ fun DMScreen(
                                                                     selectedMessage = null
                                                                     if (editingMessage?.id == message.id) {
                                                                         editingMessage = null
-                                                                        typedText = ""
+                                                                        typedText = draftBeforeEdit
+                                                                        draftBeforeEdit = ""
                                                                     }
                                                                 },
                                                                 leadingIcon = { Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = Destructive) }
@@ -1766,7 +1805,7 @@ fun DMScreen(
                                         )
                                     }
                                 }
-                                IconButton(onClick = { editingMessage = null; typedText = "" }, modifier = Modifier.size(28.dp)) {
+                                IconButton(onClick = { editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = "" }, modifier = Modifier.size(28.dp)) {
                                     Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel Edit", tint = Muted, modifier = Modifier.size(16.dp))
                                 }
                             }
@@ -1874,7 +1913,7 @@ fun DMScreen(
                                                     val currentlyEditing = editingMessage
                                                     if (currentlyEditing != null) {
                                                         viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
-                                                        editingMessage = null; typedText = ""
+                                                        editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = ""
                                                     } else {
                                                         viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
                                                     replyingTo = null
@@ -1934,7 +1973,7 @@ fun DMScreen(
                                                 val currentlyEditing = editingMessage
                                                 if (currentlyEditing != null) {
                                                     viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
-                                                    editingMessage = null; typedText = ""
+                                                    editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = ""
                                                 } else {
                                                     viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
                                                     replyingTo = null

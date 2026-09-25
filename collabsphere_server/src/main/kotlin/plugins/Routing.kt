@@ -143,6 +143,21 @@ private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: 
     )
 }
 
+private fun ResultRow.toMessageSyncResponse() = MessageSyncResponse(
+    id = this[MessageTable.id],
+    userId = this[MessageTable.userId],
+    workspaceId = this[MessageTable.workspaceId],
+    channelId = this[MessageTable.channelId],
+    userName = this[MessageTable.userName],
+    content = this[MessageTable.content],
+    status = this[MessageTable.status],
+    isDeleted = this[MessageTable.isDeleted],
+    updatedAt = this[MessageTable.updatedAt],
+    replyToId = this[MessageTable.replyToId],
+    mediaUrl = this[MessageTable.mediaUrl],
+    pinnedAt = this[MessageTable.pinnedAt]
+)
+
 private suspend fun broadcastChannelMessageChange(messageId: Int) {
     try {
         val (snapshot, memberIds) = dbQuery {
@@ -158,7 +173,9 @@ private suspend fun broadcastChannelMessageChange(messageId: Int) {
                 status = row[MessageTable.status],
                 isDeleted = row[MessageTable.isDeleted],
                 updatedAt = row[MessageTable.updatedAt],
-                replyToId = row[MessageTable.replyToId]
+                replyToId = row[MessageTable.replyToId],
+                mediaUrl = row[MessageTable.mediaUrl],
+                pinnedAt = row[MessageTable.pinnedAt]
             )
             snapshot to workspaceMemberIds(snapshot.workspaceId)
         } ?: return
@@ -2391,7 +2408,8 @@ fun Application.configureRouting() {
                                     userId = existing[NotesTable.userIdNotes],
                                     notesName = existing[NotesTable.notesName],
                                     workspaceId = existing[NotesTable.workspaceId],
-                                    description = existing[NotesTable.notesDescription]
+                                    description = existing[NotesTable.notesDescription],
+                                    isPinned = existing[NotesTable.isPinned]
                                 )
                             }
 
@@ -2423,6 +2441,37 @@ fun Application.configureRouting() {
                             HttpStatusCode.BadRequest,
                             "Database structure mismatch or missing foreign row."
                         )
+                    }
+                }
+
+                post("/{noteId}/pin") {
+                    try {
+                        val noteIdParam = call.parameters["noteId"]?.toIntOrNull()
+                        if (noteIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, false)
+                            return@post
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<PinRequest>()
+                        val updated = dbQuery {
+                            val note = NotesTable.selectAll()
+                                .where { (NotesTable.id eq noteIdParam) and (NotesTable.isDeleted eq false) }
+                                .singleOrNull() ?: return@dbQuery -1
+                            if (!isMember(actingUserId, note[NotesTable.workspaceId])) {
+                                return@dbQuery -2
+                            }
+                            NotesTable.update({ NotesTable.id eq noteIdParam }) {
+                                it[NotesTable.isPinned] = request.pinned
+                                it[NotesTable.updatedAt] = System.currentTimeMillis()
+                            }
+                        }
+                        when {
+                            updated == -2 -> call.respond(HttpStatusCode.Forbidden, false)
+                            updated > 0 -> call.respond(HttpStatusCode.OK, true)
+                            else -> call.respond(HttpStatusCode.NotFound, false)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, false)
                     }
                 }
 
@@ -2528,7 +2577,8 @@ fun Application.configureRouting() {
                                         userId = it[NotesTable.userIdNotes],
                                         workspaceId = it[NotesTable.workspaceId],
                                         notesName = it[NotesTable.notesName],
-                                        description = it[NotesTable.notesDescription]
+                                        description = it[NotesTable.notesDescription],
+                                        isPinned = it[NotesTable.isPinned]
                                     )
                                 }
                         }
@@ -2573,7 +2623,8 @@ fun Application.configureRouting() {
                                         notesName = it[NotesTable.notesName],
                                         description = it[NotesTable.notesDescription],
                                         isDeleted = it[NotesTable.isDeleted],
-                                        updatedAt = it[NotesTable.updatedAt]
+                                        updatedAt = it[NotesTable.updatedAt],
+                                        isPinned = it[NotesTable.isPinned]
                                     )
                                 }
                         }
@@ -2608,6 +2659,7 @@ fun Application.configureRouting() {
                                             (MessageTable.channelId eq request.channelId)
                                 }.count() > 0
                             }
+                            val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
                             val insertedId = MessageTable.insert {
                                 it[MessageTable.userId] = actingUserId
                                 it[MessageTable.workspaceId] = request.workspaceId
@@ -2615,6 +2667,7 @@ fun Application.configureRouting() {
                                 it[MessageTable.userName] = request.userName
                                 it[MessageTable.content] = request.content
                                 it[MessageTable.replyToId] = validReplyToId
+                                it[MessageTable.mediaUrl] = validMediaUrl
                                 it[MessageTable.status] = request.status
                                 it[MessageTable.isDeleted] = false
                                 it[MessageTable.updatedAt] = System.currentTimeMillis()
@@ -2628,7 +2681,8 @@ fun Application.configureRouting() {
                                 userName = request.userName,
                                 content = request.content,
                                 status = request.status,
-                                replyToId = validReplyToId
+                                replyToId = validReplyToId,
+                                mediaUrl = validMediaUrl
                             )
                         }
                         if (newMessage == null) {
@@ -2642,6 +2696,7 @@ fun Application.configureRouting() {
                             }
                             val senderName = senderRow?.get(UsersTable.username) ?: "Someone"
 
+                            val notificationBody = request.content.ifBlank { if (newMessage.mediaUrl != null) "📷 Photo" else "" }.take(200)
                             // Parse @mentions from content
                             val mentionedUsernames = MENTION_REGEX.findAll(request.content)
                                 .map { it.groupValues[1].lowercase() }.toSet()
@@ -2663,7 +2718,7 @@ fun Application.configureRouting() {
                                         actorId = actingUserId,
                                         type = "MENTION",
                                         title = "$senderName mentioned you",
-                                        body = request.content.take(200),
+                                        body = notificationBody,
                                         workspaceId = request.workspaceId,
                                         referenceId = newMessage.id
                                     )
@@ -2673,7 +2728,7 @@ fun Application.configureRouting() {
                                         actorId = actingUserId,
                                         type = "CHANNEL_MESSAGE",
                                         title = "New message from $senderName",
-                                        body = request.content.take(200),
+                                        body = notificationBody,
                                         workspaceId = request.workspaceId,
                                         referenceId = newMessage.id
                                     )
@@ -2720,7 +2775,9 @@ fun Application.configureRouting() {
                                     userName = it[MessageTable.userName],
                                     content = it[MessageTable.content],
                                     status = it[MessageTable.status],
-                                    replyToId = it[MessageTable.replyToId]
+                                    replyToId = it[MessageTable.replyToId],
+                                    mediaUrl = it[MessageTable.mediaUrl],
+                                    pinnedAt = it[MessageTable.pinnedAt]
                                 )
                             }
                     }
@@ -2814,6 +2871,76 @@ fun Application.configureRouting() {
                         }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, false)
+                    }
+                }
+
+                post("/{messageId}/pin") {
+                    try {
+                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
+                        if (messageIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, false)
+                            return@post
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<PinRequest>()
+                        val updated = dbQuery {
+                            val message = MessageTable.selectAll()
+                                .where { (MessageTable.id eq messageIdParam) and (MessageTable.isDeleted eq false) }
+                                .singleOrNull() ?: return@dbQuery -1
+                            if (!isMember(actingUserId, message[MessageTable.workspaceId])) {
+                                return@dbQuery -2
+                            }
+                            val now = System.currentTimeMillis()
+                            MessageTable.update({ MessageTable.id eq messageIdParam }) {
+                                it[MessageTable.pinnedAt] = if (request.pinned) now else null
+                                it[MessageTable.pinnedByUserId] = if (request.pinned) actingUserId else null
+                                it[MessageTable.updatedAt] = now
+                            }
+                        }
+                        when {
+                            updated == -2 -> call.respond(HttpStatusCode.Forbidden, false)
+                            updated > 0 -> {
+                                call.respond(HttpStatusCode.OK, true)
+                                broadcastChannelMessageChange(messageIdParam)
+                            }
+                            else -> call.respond(HttpStatusCode.NotFound, false)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, false)
+                    }
+                }
+
+                get("/pinned/{workspaceId}/{channelId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || channelIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
+                            return@get
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val pinned = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) {
+                                return@dbQuery null
+                            }
+                            MessageTable.selectAll()
+                                .where {
+                                    (MessageTable.workspaceId eq workspaceIdParam) and
+                                            (MessageTable.channelId eq channelIdParam) and
+                                            (MessageTable.isDeleted eq false) and
+                                            MessageTable.pinnedAt.isNotNull()
+                                }
+                                .orderBy(MessageTable.pinnedAt, SortOrder.DESC)
+                                .limit(MAX_HISTORY_PAGE)
+                                .map { it.toMessageSyncResponse() }
+                        }
+                        if (pinned == null) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                        } else {
+                            call.respond(HttpStatusCode.OK, pinned)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Pinned Error")
                     }
                 }
 
@@ -2951,7 +3078,9 @@ fun Application.configureRouting() {
                                         status = it[MessageTable.status],
                                         isDeleted = it[MessageTable.isDeleted],
                                         updatedAt = it[MessageTable.updatedAt],
-                                        replyToId = it[MessageTable.replyToId]
+                                        replyToId = it[MessageTable.replyToId],
+                                        mediaUrl = it[MessageTable.mediaUrl],
+                                        pinnedAt = it[MessageTable.pinnedAt]
                                     )
                                 }
                         }
@@ -2998,7 +3127,9 @@ fun Application.configureRouting() {
                                         status = it[MessageTable.status],
                                         isDeleted = it[MessageTable.isDeleted],
                                         updatedAt = it[MessageTable.updatedAt],
-                                        replyToId = it[MessageTable.replyToId]
+                                        replyToId = it[MessageTable.replyToId],
+                                        mediaUrl = it[MessageTable.mediaUrl],
+                                        pinnedAt = it[MessageTable.pinnedAt]
                                     )
                                 }
                         }

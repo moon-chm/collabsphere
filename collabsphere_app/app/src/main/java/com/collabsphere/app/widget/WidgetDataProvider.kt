@@ -35,7 +35,7 @@ object WidgetDataProvider {
                 "app_database"
             )
                 .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-                .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39)
+                .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41)
                 .build().also { db = it }
         }
 

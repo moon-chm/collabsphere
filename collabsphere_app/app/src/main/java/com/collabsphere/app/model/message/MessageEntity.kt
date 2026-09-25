@@ -49,5 +49,7 @@ data class MessageEntity(
     val userName: String,
     val content: String,
     val status: MessageStatus = MessageStatus.Delivered,
-    val replyToId: Int? = null
+    val replyToId: Int? = null,
+    val mediaUrl: String? = null,
+    val pinnedAt: Long? = null
 )

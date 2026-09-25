@@ -111,6 +111,18 @@ class NotesViewModel(
         }
     }
 
+    fun togglePin(note: NotesEntity) {
+        if (note.id <= 0) {
+            _notesStatus.value = "This note is still syncing. Try pinning it again in a moment."
+            return
+        }
+        viewModelScope.launch {
+            repo.setPinned(note.id, !note.isPinned)
+                .onSuccess { _notesStatus.value = if (note.isPinned) "Note unpinned" else "Note pinned" }
+                .onFailure { _notesStatus.value = "Couldn't update the pin. Check your connection." }
+        }
+    }
+
     fun deleteNote(noteId: Int, name: String) {
         viewModelScope.launch {
             repo.deletenotestoscreen(noteId, name, loggedUserId, loggedWorkspaceId)
