@@ -68,7 +68,9 @@ class TaskSyncWorker(
                 assignedToUserId = if (assignedToUserId == -1) null else assignedToUserId,
                 workspaceId = workspaceId,
                 status = status,
-                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
+                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY"),
+                dueDate = if (inputData.keyValueMap.containsKey("DUE_DATE")) inputData.getLong("DUE_DATE", 0L) else null,
+                priority = inputData.getString("PRIORITY")
             )
 
             if (actionType == "UPDATE") {

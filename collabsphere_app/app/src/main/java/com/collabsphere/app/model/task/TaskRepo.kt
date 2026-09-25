@@ -89,7 +89,9 @@ class TaskRepo(
                     workspaceId = remote.workspaceId,
                     taskName = remote.taskName,
                     taskDescription = remote.taskDescription,
-                    status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO }
+                    status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
+                    dueDate = remote.dueDate,
+                    priority = TaskPriority.fromRemote(remote.priority)
                 )
             }
             entities.forEach { taskDao.insertTask(it) }
@@ -121,7 +123,9 @@ class TaskRepo(
                                 workspaceId = remote.workspaceId,
                                 taskName = remote.taskName,
                                 taskDescription = remote.taskDescription,
-                                status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO }
+                                status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
+                                dueDate = remote.dueDate,
+                                priority = TaskPriority.fromRemote(remote.priority)
                             )
                             taskDao.insertTask(entity)
                         }
@@ -153,6 +157,8 @@ class TaskRepo(
                 assignedToUserId = task.assignedToUserId,
                 workspaceId = task.workspaceId,
                 status = task.status.name,
+                dueDate = task.dueDate ?: 0L,
+                priority = task.priority.name,
                 idempotencyKey = idempotencyKey
             )
             val remoteTask = apiService.createTask(task.createdByUserId, request)
@@ -173,6 +179,8 @@ class TaskRepo(
                 "TASK_NAME" to task.taskName,
                 "TASK_DESCRIPTION" to task.taskDescription,
                 "STATUS" to task.status.name,
+                "DUE_DATE" to (task.dueDate ?: 0L),
+                "PRIORITY" to task.priority.name,
                 "IDEMPOTENCY_KEY" to idempotencyKey
             )
             enqueueSync(syncData)
@@ -188,7 +196,9 @@ class TaskRepo(
                 taskDescription = task.taskDescription,
                 assignedToUserId = task.assignedToUserId,
                 workspaceId = task.workspaceId,
-                status = task.status.name
+                status = task.status.name,
+                dueDate = task.dueDate ?: 0L,
+                priority = task.priority.name
             )
             apiService.updateTask(taskId = task.id, request = request)
             Result.success(TaskSyncOutcome.CONFIRMED)
@@ -202,7 +212,9 @@ class TaskRepo(
                 "WORKSPACE_ID" to task.workspaceId,
                 "TASK_NAME" to task.taskName,
                 "TASK_DESCRIPTION" to task.taskDescription,
-                "STATUS" to task.status.name
+                "STATUS" to task.status.name,
+                "DUE_DATE" to (task.dueDate ?: 0L),
+                "PRIORITY" to task.priority.name
             )
             enqueueSync(syncData)
             Result.success(TaskSyncOutcome.QUEUED)

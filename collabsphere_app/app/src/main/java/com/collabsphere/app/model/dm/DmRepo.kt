@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.TimeUnit
 
+private const val DM_HISTORY_PAGE_SIZE = 50
+
 class DmRepo(
     private val dmDao: DmDao,
     private val reactionDao: DmReactionDao,
@@ -27,8 +29,20 @@ class DmRepo(
     }
 
     suspend fun connectToChat(baseUrl: String, currentUserId: Long) {
-        apiService.connect(baseUrl, currentUserId)
+        val sinceId = dmDao.newestSyncedDmId() ?: 0
+        apiService.connect(baseUrl, currentUserId, sinceId)
     }
+
+    suspend fun loadOlderDms(baseUrl: String, workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Result<Boolean> =
+        try {
+            val oldestLoaded = dmDao.oldestSyncedDmId(workspaceId, currentUserId, chatPartnerId)
+            val page = apiService.getDmHistoryPage(baseUrl, workspaceId, chatPartnerId, oldestLoaded, DM_HISTORY_PAGE_SIZE)
+            page.forEach { saveIncomingDm(it, currentUserId) }
+            Result.success(page.size >= DM_HISTORY_PAGE_SIZE)
+        } catch (e: Exception) {
+            Log.e("DmRepo", "Loading older DMs failed", e)
+            Result.failure(e)
+        }
 
     suspend fun sendRealtimeDm(
         id: Int? = null,
@@ -36,7 +50,8 @@ class DmRepo(
         senderId: Int,
         receiverId: Int,
         content: String,
-        mediaUrl: String? = null
+        mediaUrl: String? = null,
+        replyToId: Int? = null
     ) {
         val timestampVal = System.currentTimeMillis()
         val tempId = if (id == null || id == 0) TempId.next() else id
@@ -49,7 +64,8 @@ class DmRepo(
             content = content,
             timestamp = timestampVal,
             id = if (tempId < 0) null else tempId,
-            mediaUrl = mediaUrl
+            mediaUrl = mediaUrl,
+            replyToId = replyToId
         )
 
         val temporaryLocalEntity = DmEntity(
@@ -60,7 +76,8 @@ class DmRepo(
             dm_content = content,
             timestamp = socketMessage.timestamp,
             mediaUrl = mediaUrl,
-            isRead = false
+            isRead = false,
+            replyToId = replyToId
         )
         dmDao.sendDm(temporaryLocalEntity)
 
@@ -74,7 +91,10 @@ class DmRepo(
                 "WORKSPACE_ID" to workspaceId,
                 "SENDER_ID" to senderId,
                 "RECEIVER_ID" to receiverId,
-                "CONTENT" to content
+                "CONTENT" to content,
+                "TIMESTAMP" to timestampVal,
+                "MEDIA_URL" to mediaUrl,
+                "REPLY_TO_ID" to (replyToId ?: 0)
             )
             enqueueSync(syncData)
         }
@@ -205,7 +225,8 @@ class DmRepo(
                     dm_content = message.content,
                     timestamp = message.timestamp,
                     mediaUrl = message.mediaUrl,
-                    isRead = false
+                    isRead = false,
+                    replyToId = message.replyToId
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp)
                 dmDao.sendDm(localEntity)
@@ -224,7 +245,8 @@ class DmRepo(
                 dm_content = message.content,
                 timestamp = message.timestamp,
                 mediaUrl = message.mediaUrl,
-                isRead = message.reactions != null // reuse reactions field to pass isRead — see server
+                isRead = message.reactions != null, // reuse reactions field to pass isRead — see server
+                replyToId = message.replyToId
             )
             dmDao.sendDm(historyEntity)
             return
@@ -240,7 +262,8 @@ class DmRepo(
                     dm_content = message.content,
                     timestamp = message.timestamp,
                     mediaUrl = message.mediaUrl,
-                    isRead = false
+                    isRead = false,
+                    replyToId = message.replyToId
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp)
                 dmDao.sendDm(localEntity)
@@ -258,7 +281,8 @@ class DmRepo(
             dm_content = message.content,
             timestamp = message.timestamp,
             mediaUrl = message.mediaUrl,
-            isRead = false
+            isRead = false,
+            replyToId = message.replyToId
         )
         dmDao.sendDm(localEntity)
     }

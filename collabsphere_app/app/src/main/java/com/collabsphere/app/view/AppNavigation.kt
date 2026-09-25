@@ -1,5 +1,8 @@
 package com.collabsphere.app.view
 
+import com.collabsphere.app.view.WorkspaceUI.WorkspaceSearchScreen
+import com.collabsphere.app.viewmodel.WorkspaceSearchViewModel
+import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import android.widget.Toast
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -276,7 +279,7 @@ fun AppNavigation(
                             val wsName = dashboardViewModel.workspaces.value
                                 ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
                             val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
-                            val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED") 1 else 0
+                            val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
                             navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=$tab")
                         }
                     },
@@ -403,7 +406,7 @@ fun AppNavigation(
             }
 
             composable(
-                route = "workspace_detailed/{workspaceId}/{workspaceName}?initialTab={initialTab}&initialPartnerId={initialPartnerId}",
+                route = WORKSPACE_DETAILED_ROUTE,
                 arguments = listOf(
                     navArgument("workspaceId") { type = NavType.IntType },
                     navArgument("workspaceName") { type = NavType.StringType },
@@ -539,6 +542,10 @@ fun AppNavigation(
                     onBack = {
                         navController.popBackStack()
                     },
+                    onSearchClick = {
+                        val encodedName = URLEncoder.encode(workspaceName, StandardCharsets.UTF_8.toString())
+                        navController.navigate("workspace_search/$workspaceId/$encodedName")
+                    },
                     onChannelClick = { channel ->
                         val encodedChannelName = URLEncoder.encode(channel.channelName, StandardCharsets.UTF_8.toString())
                         val encodedUserName = URLEncoder.encode(loggedInUsername, StandardCharsets.UTF_8.toString())
@@ -547,6 +554,58 @@ fun AppNavigation(
                     onAddMemberSubmit = { email ->
                         workspaceViewModel.onJoinWorkspace(workspaceId, email)
                     }
+                )
+            }
+
+            composable(
+                route = "workspace_search/{workspaceId}/{workspaceName}",
+                arguments = listOf(
+                    navArgument("workspaceId") { type = NavType.IntType },
+                    navArgument("workspaceName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
+                val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
+                val workspaceName = try {
+                    URLDecoder.decode(rawWorkspaceName, StandardCharsets.UTF_8.toString())
+                } catch (e: Exception) {
+                    rawWorkspaceName
+                }
+                val workspaceApiService = koinInject<WorkspaceApiService>()
+                val searchViewModel: WorkspaceSearchViewModel = viewModel(
+                    viewModelStoreOwner = backStackEntry,
+                    key = "workspace_search_$workspaceId",
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return WorkspaceSearchViewModel(workspaceApiService, workspaceId) as T
+                        }
+                    }
+                )
+                val encodedWorkspaceName = URLEncoder.encode(workspaceName, StandardCharsets.UTF_8.toString())
+                val openWorkspaceTab: (Int, Int?) -> Unit = { tab, partnerId ->
+                    navController.navigate(
+                        "workspace_detailed/$workspaceId/$encodedWorkspaceName?initialTab=$tab&initialPartnerId=${partnerId ?: -1}"
+                    ) {
+                        popUpTo(WORKSPACE_DETAILED_ROUTE) { inclusive = true }
+                    }
+                }
+
+                WorkspaceSearchScreen(
+                    viewModel = searchViewModel,
+                    workspaceName = workspaceName,
+                    onBack = { navController.popBackStack() },
+                    onMessageClick = { hit ->
+                        val encodedChannelName = URLEncoder.encode(hit.channelName, StandardCharsets.UTF_8.toString())
+                        val encodedUserName = URLEncoder.encode(loggedInUsername, StandardCharsets.UTF_8.toString())
+                        navController.navigate("channel_chat/$workspaceId/${hit.channelId}/$encodedChannelName?userName=$encodedUserName") {
+                            popUpTo("workspace_search/{workspaceId}/{workspaceName}") { inclusive = true }
+                        }
+                    },
+                    onDmClick = { hit -> openWorkspaceTab(4, hit.partnerId) },
+                    onTaskClick = { openWorkspaceTab(1, null) },
+                    onNoteClick = { openWorkspaceTab(3, null) },
+                    onFileClick = { openWorkspaceTab(2, null) }
                 )
             }
 
@@ -645,3 +704,6 @@ fun AppNavigation(
         }
     }
 }
+
+private const val WORKSPACE_DETAILED_ROUTE =
+    "workspace_detailed/{workspaceId}/{workspaceName}?initialTab={initialTab}&initialPartnerId={initialPartnerId}"

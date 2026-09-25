@@ -48,5 +48,6 @@ data class MessageEntity(
     val channelId: Int,
     val userName: String,
     val content: String,
-    val status: MessageStatus = MessageStatus.Delivered
+    val status: MessageStatus = MessageStatus.Delivered,
+    val replyToId: Int? = null
 )

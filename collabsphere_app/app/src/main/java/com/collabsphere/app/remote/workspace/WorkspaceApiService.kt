@@ -1,6 +1,7 @@
 package com.collabsphere.app.remote.workspace
 
 import com.collabsphere.app.AppConfig
+import com.collabsphere.app.dto.search.WorkspaceSearchResponse
 import com.collabsphere.app.dto.workspace.AddMemberRequest
 import com.collabsphere.app.dto.workspace.MemberResponse
 import com.collabsphere.app.dto.workspace.WorkspaceRequest
@@ -26,6 +27,16 @@ class WorkspaceApiService(
             parameter("userId", userId)
             setBody(request)
         }.body()
+    }
+
+    suspend fun searchWorkspace(workspaceId: Int, query: String): WorkspaceSearchResponse {
+        val response = client.get("$baseUrl/$workspaceId/search") {
+            parameter("q", query)
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Search failed (${response.status.value})")
+        }
+        return response.body()
     }
 
     suspend fun addMemberToWorkspace(

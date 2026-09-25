@@ -2,6 +2,8 @@ package com.collabsphere.app.remote.message
 import android.util.Log
 
 import com.collabsphere.app.AppConfig
+import com.collabsphere.app.dto.message.ChannelReactionRequest
+import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.MessageResponse
 import com.collabsphere.app.dto.message.MessageSyncDto
@@ -44,6 +46,30 @@ class MessageApiService(private val client: HttpClient) {
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
         return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()
+    }
+
+    suspend fun toggleReaction(messageId: Int, emoji: String, add: Boolean): ChannelReactionSummary {
+        val response = client.post("$baseUrl/$messageId/reactions") {
+            contentType(ContentType.Application.Json)
+            setBody(ChannelReactionRequest(emoji, add))
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Reaction failed (${response.status.value})")
+        }
+        return response.body()
+    }
+
+    suspend fun getReactions(workspaceId: Int, channelId: Int, fromId: Int): List<ChannelReactionSummary> {
+        return client.get("$baseUrl/reactions/$workspaceId/$channelId") {
+            parameter("fromId", fromId)
+        }.body()
+    }
+
+    suspend fun getMessageHistory(workspaceId: Int, channelId: Int, beforeId: Int?, limit: Int): List<MessageSyncDto> {
+        return client.get("$baseUrl/history/$workspaceId/$channelId") {
+            beforeId?.let { parameter("before", it) }
+            parameter("limit", limit)
+        }.body()
     }
 
     suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long): List<MessageSyncDto> {

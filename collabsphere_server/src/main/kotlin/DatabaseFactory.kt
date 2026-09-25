@@ -90,6 +90,7 @@ object DatabaseFactory {
                 TasksTable,
                 DirectMessagesTable,
                 DmReactionsTable,
+                ChannelReactionsTable,
                 WorkspaceMembersTable,
                 UserBlocksTable,
                 UserVerificationTable,

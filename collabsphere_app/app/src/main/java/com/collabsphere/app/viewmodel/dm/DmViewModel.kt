@@ -50,6 +50,13 @@ class DmViewModel(
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia: StateFlow<Boolean> = _isUploadingMedia.asStateFlow()
 
+    private val _isLoadingOlder = MutableStateFlow(false)
+    val isLoadingOlder: StateFlow<Boolean> = _isLoadingOlder.asStateFlow()
+
+    private var hasMoreOlder = true
+    private var olderLoadJob: Job? = null
+    private var currentBaseUrl: String? = null
+
     private var historyCollectionJob: Job? = null
     private var memberCollectionJob: Job? = null
     private var eventsCollectionJob: Job? = null
@@ -167,6 +174,10 @@ class DmViewModel(
         currentWorkspaceId = workspaceId
         currentUserId = userId
         activeChatPartnerId = chatPartnerId
+        currentBaseUrl = baseUrl
+        olderLoadJob?.cancel()
+        _isLoadingOlder.value = false
+        hasMoreOlder = true
 
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", chatPartnerId)
@@ -187,6 +198,20 @@ class DmViewModel(
             try {
                 repo.markConversationRead(workspaceId, userId, chatPartnerId)
             } catch (_: Exception) {}
+        }
+    }
+
+    fun loadOlderMessages() {
+        val workspaceId = currentWorkspaceId ?: return
+        val userId = currentUserId ?: return
+        val partnerId = activeChatPartnerId ?: return
+        val baseUrl = currentBaseUrl ?: return
+        if (_isLoadingOlder.value || !hasMoreOlder) return
+        _isLoadingOlder.value = true
+        olderLoadJob = viewModelScope.launch {
+            repo.loadOlderDms(baseUrl, workspaceId, userId, partnerId)
+                .onSuccess { hasMore -> if (activeChatPartnerId == partnerId) hasMoreOlder = hasMore }
+            _isLoadingOlder.value = false
         }
     }
 
@@ -246,11 +271,11 @@ class DmViewModel(
         context.stopService(intent)
     }
 
-    fun sendMessage(id: Int, workspaceId: Int, senderId: Int, receiverId: Int, content: String) {
+    fun sendMessage(id: Int, workspaceId: Int, senderId: Int, receiverId: Int, content: String, replyToId: Int? = null) {
         onUserStoppedTyping(workspaceId, receiverId)
         viewModelScope.launch {
             try {
-                repo.sendRealtimeDm(id, workspaceId, senderId, receiverId, content)
+                repo.sendRealtimeDm(id, workspaceId, senderId, receiverId, content, replyToId = replyToId)
             } catch (e: Exception) {
                 Log.e("DmViewModel", "Operation failed", e)
             }

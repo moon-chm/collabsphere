@@ -76,7 +76,7 @@ val databaseModule = module {
             // database and causes the UI Flow queries to stall — the main source of lag.
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37)
+            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39)
             .build()
     }
 
@@ -167,7 +167,7 @@ val repositoryModule = module {
     single { ChannelRepo(get(), get(), get(), get()) }
     single { TaskRepo(get(), get(), get(), get(), get(), get()) }
     single { NotesRepo(get(), get(), get(), get()) }
-    single { MessageRepo(get(), get(), get(), get()) }
+    single { MessageRepo(get(), get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
     single { DmRepo(get(), get(), get(), get()) }
     single { NotificationRepo(get()) }
@@ -187,7 +187,7 @@ val workerModule = module {
     worker { NotesSyncWorker(get(), get(), get(), get(), get()) }
     worker { TaskSyncWorker(get(), get(), get(), get(), get()) }
     worker { WorkspaceSyncWorker(get(), get(), get(), get()) }
-    worker { DmSyncWorker(get(), get(), get(), get()) }
+    worker { DmSyncWorker(get(), get(), get(), get(), get()) }
     worker { FileSyncWorker(get(), get(), get(), get(), get()) }
 }
 

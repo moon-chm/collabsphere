@@ -7,7 +7,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.collabsphere.app.dto.message.MessageRequest
+import com.collabsphere.app.dto.message.MessageSyncDto
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.remote.dm.DmApiService
+import com.collabsphere.app.remote.dm.DmWebSocketService
 import com.collabsphere.app.remote.message.MessageApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -22,10 +26,13 @@ class MessageRepo(
     private val messageDao: MessageDao,
     private val apiService: MessageApiService,
     private val workManager: WorkManager,
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val dmApiService: DmApiService
 ) {
     companion object {
         private const val LAST_SYNC_KEY_PREFIX = "messages_last_sync_time_"
+        private const val SOCKET_FALLBACK_POLL_MS = 30_000L
+        const val HISTORY_PAGE_SIZE = 50
     }
 
     private fun getSyncKey(workspaceId: Int, channelId: Int) =
@@ -45,7 +52,8 @@ class MessageRepo(
                 channelId = message.channelId,
                 userName = message.userName,
                 content = message.content,
-                status = message.status.name
+                status = message.status.name,
+                replyToId = message.replyToId
             )
             val remoteMessage = apiService.createMessage(request)
             val updatedMessage = message.copy(id = remoteMessage.id)
@@ -57,6 +65,7 @@ class MessageRepo(
             val localId = messageDao.sendMessage(message.copy(id = TempId.next()))
             val syncData = workDataOf(
                 "ACTION_TYPE" to "CREATE",
+                "REPLY_TO_ID" to (message.replyToId ?: 0),
                 "MESSAGE_ID" to localId.toInt(),
                 "USER_ID" to message.userId,
                 "WORKSPACE_ID" to message.workspaceId,
@@ -125,39 +134,114 @@ class MessageRepo(
         }
     }
 
+    suspend fun applyRealtimeChange(remote: MessageSyncDto) = withContext(Dispatchers.IO) {
+        try {
+            if (remote.isDeleted) {
+                messageDao.applyDelta(emptyList(), listOf(remote.id))
+            } else if (isWithinLoadedWindow(remote)) {
+                messageDao.applyDelta(listOf(remote.toEntity()), emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e("MessageRepo", "Realtime apply failed", e)
+        }
+    }
+
+    private suspend fun isWithinLoadedWindow(remote: MessageSyncDto): Boolean {
+        val oldestLoaded = messageDao.oldestSyncedMessageId(remote.workspaceId, remote.channelId)
+        return oldestLoaded == null || remote.id >= oldestLoaded
+    }
+
+    suspend fun toggleReaction(messageId: Int, emoji: String, add: Boolean): Result<ChannelReactionSummary> =
+        withContext(Dispatchers.IO) {
+            runCatching { apiService.toggleReaction(messageId, emoji, add) }
+        }
+
+    suspend fun fetchReactions(workspaceId: Int, channelId: Int): Result<List<ChannelReactionSummary>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val fromId = messageDao.oldestSyncedMessageId(workspaceId, channelId) ?: 0
+                apiService.getReactions(workspaceId, channelId, fromId)
+            }
+        }
+
+    suspend fun sendTyping(workspaceId: Int, channelId: Int, isTyping: Boolean) {
+        if (!DmWebSocketService.isWebSocketConnected) return
+        runCatching { dmApiService.sendChannelTyping(workspaceId, channelId, isTyping) }
+    }
+
+    suspend fun loadOlderMessages(workspaceId: Int, channelId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val oldestLoaded = messageDao.oldestSyncedMessageId(workspaceId, channelId)
+            val page = apiService.getMessageHistory(workspaceId, channelId, oldestLoaded, HISTORY_PAGE_SIZE)
+            messageDao.applyDelta(page.map { it.toEntity() }, emptyList())
+            Result.success(page.size >= HISTORY_PAGE_SIZE)
+        } catch (e: Exception) {
+            Log.e("MessageRepo", "Loading older messages failed", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun loadInitialPage(workspaceId: Int, channelId: Int) {
+        val page = apiService.getMessageHistory(workspaceId, channelId, null, HISTORY_PAGE_SIZE)
+        messageDao.applyDelta(page.map { it.toEntity() }, emptyList())
+        val syncKey = getSyncKey(workspaceId, channelId)
+        dataStore.edit { preferences ->
+            preferences[syncKey] = page.maxOfOrNull { it.updatedAt } ?: 1L
+        }
+    }
+
+    private fun MessageSyncDto.toEntity() = MessageEntity(
+        id = id,
+        userId = userId,
+        workspaceId = workspaceId,
+        channelId = channelId,
+        userName = userName,
+        content = content,
+        status = MessageStatus.valueOf(status),
+        replyToId = replyToId
+    )
+
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
         val loopKey = workspaceId to channelId
         if (!activeSyncLoops.add(loopKey)) return@withContext
         try {
+        var lastPollAt = 0L
+        var wasSocketConnected = false
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
-            try {
-                val syncKey = getSyncKey(workspaceId, channelId)
-                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-                val updates = apiService.getMessageUpdates(workspaceId, channelId, lastSyncTime)
-
-                if (updates.isNotEmpty()) {
-                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
-                        MessageEntity(
-                            id = remote.id,
-                            userId = remote.userId,
-                            workspaceId = remote.workspaceId,
-                            channelId = remote.channelId,
-                            userName = remote.userName,
-                            content = remote.content,
-                            status = MessageStatus.valueOf(remote.status)
-                        )
+            val socketConnected = DmWebSocketService.isWebSocketConnected
+            val justReconnected = socketConnected && !wasSocketConnected
+            wasSocketConnected = socketConnected
+            val pollDue = !socketConnected || justReconnected ||
+                System.currentTimeMillis() - lastPollAt >= SOCKET_FALLBACK_POLL_MS
+            if (pollDue) {
+                lastPollAt = System.currentTimeMillis()
+                try {
+                    val syncKey = getSyncKey(workspaceId, channelId)
+                    val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
+                    if (lastSyncTime == 0L) {
+                        loadInitialPage(workspaceId, channelId)
+                        delay(2000)
+                        continue
                     }
-                    val deletes = updates.filter { it.isDeleted }.map { it.id }
-                    messageDao.applyDelta(upserts, deletes)
+                    val updates = apiService.getMessageUpdates(workspaceId, channelId, lastSyncTime)
 
-                    val newestTimestamp = updates.maxOf { it.updatedAt }
-                    dataStore.edit { preferences ->
-                        preferences[syncKey] = newestTimestamp
+                    if (updates.isNotEmpty()) {
+                        val oldestLoaded = messageDao.oldestSyncedMessageId(workspaceId, channelId)
+                        val upserts = updates
+                            .filter { !it.isDeleted && (oldestLoaded == null || it.id >= oldestLoaded) }
+                            .map { it.toEntity() }
+                        val deletes = updates.filter { it.isDeleted }.map { it.id }
+                        messageDao.applyDelta(upserts, deletes)
+
+                        val newestTimestamp = updates.maxOf { it.updatedAt }
+                        dataStore.edit { preferences ->
+                            preferences[syncKey] = newestTimestamp
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.e("MessageRepo", "Operation failed", e)
                 }
-            } catch (e: Exception) {
-                Log.e("MessageRepo", "Operation failed", e)
             }
             delay(2000)
         }

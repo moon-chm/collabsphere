@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -540,6 +541,8 @@ fun SkeuoKanbanTaskCard(
                 )
             }
 
+            TaskPlanningBadges(task = taskUi.task)
+
             Spacer(modifier = Modifier.height(10.dp))
 
             // Assignee debossed pill
@@ -657,6 +660,8 @@ fun CreateTaskDialog(
     val name by viewModel.taskName.collectAsStateWithLifecycle()
     val description by viewModel.taskDescription.collectAsStateWithLifecycle()
     val assignedUserId by viewModel.assignedUserId.collectAsStateWithLifecycle()
+    val dueDate by viewModel.dueDate.collectAsStateWithLifecycle()
+    val priority by viewModel.priority.collectAsStateWithLifecycle()
 
     var dropdownExpanded by remember { mutableStateOf(false) }
     val selectedMemberName = members.find { it.id == assignedUserId }?.userName ?: "Unassigned"
@@ -704,7 +709,9 @@ onDrawBehind {
                 .padding(24.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -781,6 +788,10 @@ onDrawBehind {
                         }
                     )
                 }
+
+                PrioritySelector(selected = priority, onSelect = viewModel::onPriorityChange)
+
+                DueDateSelector(dueDate = dueDate, onDueDateChange = viewModel::onDueDateChange)
 
                 // Assignee selection row
                 ExposedDropdownMenuBox(
@@ -895,6 +906,9 @@ fun UpdateTaskDialog(
 ) {
     var updatedName by remember { mutableStateOf(task.taskName) }
     var updatedDescription by remember { mutableStateOf(task.taskDescription) }
+    var updatedDueDate by remember { mutableStateOf(task.dueDate) }
+    var updatedPriority by remember { mutableStateOf(task.priority) }
+    val canPlan = viewModel.canPlan(task)
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -939,7 +953,9 @@ onDrawBehind {
                 .padding(24.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -1020,6 +1036,18 @@ onDrawBehind {
                     )
                 }
 
+                PrioritySelector(
+                    selected = updatedPriority,
+                    onSelect = { updatedPriority = it },
+                    enabled = canPlan
+                )
+
+                DueDateSelector(
+                    dueDate = updatedDueDate,
+                    onDueDateChange = { updatedDueDate = it },
+                    enabled = canPlan
+                )
+
                 if (gitHubViewModel != null) {
                     TaskGitHubLinksSection(
                         workspaceId = task.workspaceId,
@@ -1074,7 +1102,7 @@ onDrawBehind {
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = canUpdate) {
                                 if (updatedName.trim().isNotEmpty()) {
-                                    viewModel.onUpdateTask(task, updatedName, updatedDescription)
+                                    viewModel.onUpdateTask(task, updatedName, updatedDescription, updatedDueDate, updatedPriority)
                                     onDismiss()
                                 }
                             },

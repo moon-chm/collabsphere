@@ -64,7 +64,8 @@ class MessageSyncWorker(
                 channelId = channelId,
                 userName = userName,
                 content = content,
-                status = status
+                status = status,
+                replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 }
             )
 
             if (actionType == "UPDATE") {
@@ -72,7 +73,7 @@ class MessageSyncWorker(
             } else {
                 val remoteResponse = apiService.createMessage(request)
                 if (messageId != remoteResponse.id) {
-                    messageDao.updateMessageId(messageId, remoteResponse.id)
+                    messageDao.replaceTempId(messageId, remoteResponse.id)
                 }
             }
             return@withContext Result.success()

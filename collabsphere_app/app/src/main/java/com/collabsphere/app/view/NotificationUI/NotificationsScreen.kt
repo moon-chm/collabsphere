@@ -159,7 +159,7 @@ fun NotificationsScreen(
 
 private fun iconFor(type: String): ImageVector = when (type) {
     "MENTION" -> Icons.Default.AlternateEmail
-    "TASK_ASSIGNED", "TASK_UPDATED" -> Icons.AutoMirrored.Filled.Assignment
+    "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE" -> Icons.AutoMirrored.Filled.Assignment
     "WORKSPACE_INVITE" -> Icons.Default.GroupAdd
     else -> Icons.AutoMirrored.Filled.Chat
 }

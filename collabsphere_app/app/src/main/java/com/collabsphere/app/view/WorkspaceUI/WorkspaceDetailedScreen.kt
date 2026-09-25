@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckBox
@@ -82,6 +83,7 @@ fun WorkspaceDetailedScreen(
     initialTab: Int = 0,
     initialPartnerId: Int? = null,
     onBack: () -> Unit,
+    onSearchClick: () -> Unit = {},
     onChannelClick: (ChannelEntity) -> Unit,
     onAddMemberSubmit: (email: String) -> Unit,
     channelViewModel: ChannelViewModel,
@@ -419,6 +421,39 @@ fun WorkspaceDetailedScreen(
                             .weight(1f)
                             .padding(horizontal = 12.dp)
                     )
+
+                    IconButton(
+                        onClick = onSearchClick,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .drawWithCache {
+                                onDrawBehind {
+                                    drawCircle(
+                                        color = ShadowDark.copy(alpha = 0.22f),
+                                        radius = size.minDimension / 2f,
+                                        center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
+                                    )
+                                    drawCircle(
+                                        color = ShadowLight.copy(alpha = 0.90f),
+                                        radius = size.minDimension / 2f,
+                                        center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
+                                    )
+                                    drawCircle(
+                                        color = Surface,
+                                        radius = size.minDimension / 2f
+                                    )
+                                }
+                            }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search workspace",
+                            tint = IndigoStart,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // Add Member Action
                     IconButton(

@@ -18,7 +18,8 @@ class DmSyncWorker(
     context: Context,
     workerParams: WorkerParameters,
     private val apiService: DmApiService,
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val dmDao: DmDao
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -42,7 +43,7 @@ class DmSyncWorker(
             val connectUserId = if (senderId != -1) senderId else savedUserId
 
             if (connectUserId != -1) {
-                apiService.connect(com.collabsphere.app.AppConfig.BASE_URL, connectUserId.toLong())
+                apiService.connect(com.collabsphere.app.AppConfig.BASE_URL, connectUserId.toLong(), dmDao.newestSyncedDmId() ?: 0)
             }
 
             when (actionType) {
@@ -71,8 +72,10 @@ class DmSyncWorker(
                         senderId = senderId,
                         receiverId = receiverId,
                         content = content,
-                        timestamp = System.currentTimeMillis(),
-                        id = if (dmId == -1 || dmId == 0 || dmId < 0) null else dmId
+                        timestamp = inputData.getLong("TIMESTAMP", System.currentTimeMillis()),
+                        id = if (dmId == -1 || dmId == 0 || dmId < 0) null else dmId,
+                        mediaUrl = inputData.getString("MEDIA_URL"),
+                        replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 }
                     )
                     apiService.sendDm(socketMessage)
                 }

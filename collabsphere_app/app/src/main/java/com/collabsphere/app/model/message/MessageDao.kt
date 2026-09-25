@@ -27,6 +27,21 @@ interface MessageDao {
     @Query("UPDATE message SET id = :newId WHERE id = :oldId")
     suspend fun updateMessageId(oldId: Int, newId: Int)
 
+    @Query("SELECT MIN(id) FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId AND id > 0")
+    suspend fun oldestSyncedMessageId(workspaceId: Int, channelId: Int): Int?
+
+    @Query("SELECT COUNT(*) FROM message WHERE id = :id")
+    suspend fun countById(id: Int): Int
+
+    @Transaction
+    suspend fun replaceTempId(oldId: Int, newId: Int) {
+        if (countById(newId) > 0) {
+            deleteByIds(listOf(oldId))
+        } else {
+            updateMessageId(oldId, newId)
+        }
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllMessage(message: List<MessageEntity>)
 

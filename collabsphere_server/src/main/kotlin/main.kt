@@ -2,6 +2,7 @@ package com.collabsphere
 
 import plugins.configureRouting
 import plugins.configureGitHubRoutes
+import plugins.startTaskReminderScheduler
 import com.collabsphere.util.JwtConfig
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -62,4 +63,5 @@ fun Application.module() {
 
     configureRouting()
     configureGitHubRoutes()
+    startTaskReminderScheduler()
 }

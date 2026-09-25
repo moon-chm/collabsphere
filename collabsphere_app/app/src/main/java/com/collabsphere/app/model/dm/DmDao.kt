@@ -21,6 +21,17 @@ interface DmDao {
     """)
     fun getDmHistory(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Flow<List<DmEntity>>
 
+    @Query("SELECT MAX(id) FROM DM WHERE id > 0")
+    suspend fun newestSyncedDmId(): Int?
+
+    @Query("""
+        SELECT MIN(id) FROM DM
+        WHERE id > 0 AND workspaceId = :workspaceId
+        AND ((senderId = :currentUserId AND receiverId = :chatPartnerId)
+        OR (senderId = :chatPartnerId AND receiverId = :currentUserId))
+    """)
+    suspend fun oldestSyncedDmId(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Int?
+
     @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
     suspend fun updateDmContent(dmId: Int, newContent: String)
 

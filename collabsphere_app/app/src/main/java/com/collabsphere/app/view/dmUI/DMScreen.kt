@@ -52,6 +52,12 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.Reply
+import com.collabsphere.app.view.components.ReplyComposerBanner
+import com.collabsphere.app.view.components.ReplyQuote
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -194,6 +200,7 @@ fun DMScreen(
 ) {
     val workspaceMembers by viewModel.workspaceMembers.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val isLoadingOlder by viewModel.isLoadingOlder.collectAsStateWithLifecycle()
     val onlineUserIds by viewModel.onlineUserIds.collectAsStateWithLifecycle()
     val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
@@ -218,6 +225,16 @@ fun DMScreen(
     val currentPartnerId = activeChatPartner?.id
     val currentMembersList = workspaceMembers
     val isPartnerTyping = activeChatPartner?.let { it.id in typingPartnerIds } ?: false
+    var replyingTo by remember { mutableStateOf<DmEntity?>(null) }
+    LaunchedEffect(activeChatPartner?.id) { replyingTo = null }
+    val messagesById = remember(messages) { messages.associateBy { it.id } }
+    val replyScope = rememberCoroutineScope()
+    val scrollToMessage: (Int) -> Unit = { targetId ->
+        val index = messages.indexOfFirst { it.id == targetId }
+        if (index >= 0) {
+            replyScope.launch { lazyListState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0) }
+        }
+    }
     val isPartnerOnline = activeChatPartner?.let { it.id in onlineUserIds } ?: false
 
     // Image/file picker
@@ -266,8 +283,16 @@ fun DMScreen(
         onDispose {}
     }
 
-    LaunchedEffect(messages.size, isPartnerTyping) {
-        val totalCount = messages.size + if (isPartnerTyping) 1 else 0
+    LaunchedEffect(lazyListState, activeChatPartner?.id) {
+        if (activeChatPartner == null) return@LaunchedEffect
+        snapshotFlow { lazyListState.firstVisibleItemIndex <= 2 && lazyListState.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect { viewModel.loadOlderMessages() }
+    }
+
+    LaunchedEffect(messages.lastOrNull()?.id, isPartnerTyping) {
+        val totalCount = messages.size + (if (isPartnerTyping) 1 else 0) + (if (isLoadingOlder) 1 else 0)
         if (totalCount <= 0) return@LaunchedEffect
 
         val lastVisibleIndex = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
@@ -1087,6 +1112,22 @@ fun DMScreen(
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                if (isLoadingOlder) {
+                                    item(key = "loading_older") {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                                color = CoralStart
+                                            )
+                                        }
+                                    }
+                                }
                                 itemsIndexed(messages, key = { _, it -> it.id }) { index, message ->
                                     val isOwnMessage = message.senderId.toLong() == currentUserId
                                     val msgReactions = reactions[message.id] ?: emptyMap()
@@ -1201,6 +1242,15 @@ fun DMScreen(
                                                         modifier = Modifier.wrapContentSize(),
                                                         horizontalAlignment = Alignment.End
                                                     ) {
+                                                        message.replyToId?.let { targetId ->
+                                                            val target = messagesById[targetId]
+                                                            ReplyQuote(
+                                                                authorName = target?.let { if (it.senderId.toLong() == currentUserId) "You" else partner.userName },
+                                                                snippet = target?.dm_content,
+                                                                onDarkBubble = true,
+                                                                onClick = target?.let { { scrollToMessage(targetId) } }
+                                                            )
+                                                        }
                                                         // Media image
                                                         if (hasMedia) {
                                                             SubcomposeAsyncImage(
@@ -1273,6 +1323,18 @@ fun DMScreen(
                                                             },
                                                             modifier = Modifier.background(SurfaceRaised)
                                                         ) {
+                                                            if (message.id > 0) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Reply", color = Ink) },
+                                                                    onClick = {
+                                                                        replyingTo = message
+                                                                        editingMessage = null
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = IndigoStart) }
+                                                                )
+                                                            }
                                                             DropdownMenuItem(
                                                                 text = { Text("React", color = Ink) },
                                                                 onClick = {
@@ -1470,7 +1532,8 @@ fun DMScreen(
                                                         .combinedClickable(
                                                             onClick = {},
                                                             onLongClick = {
-                                                                showReactionPickerFor = message
+                                                                selectedMessage = message
+                                                                showActionMenu = true
                                                             }
                                                         )
                                                         .padding(horizontal = 14.dp, vertical = 9.dp)
@@ -1479,6 +1542,15 @@ fun DMScreen(
                                                         modifier = Modifier.wrapContentSize(),
                                                         horizontalAlignment = Alignment.Start
                                                     ) {
+                                                        message.replyToId?.let { targetId ->
+                                                            val target = messagesById[targetId]
+                                                            ReplyQuote(
+                                                                authorName = target?.let { if (it.senderId.toLong() == currentUserId) "You" else partner.userName },
+                                                                snippet = target?.dm_content,
+                                                                onDarkBubble = false,
+                                                                onClick = target?.let { { scrollToMessage(targetId) } }
+                                                            )
+                                                        }
                                                         // Media image
                                                         if (hasMedia) {
                                                             SubcomposeAsyncImage(
@@ -1530,6 +1602,39 @@ fun DMScreen(
                                                                 text = formatDmTime(message.timestamp),
                                                                 fontSize = 10.sp,
                                                                 color = Muted
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (showActionMenu && selectedMessage?.id == message.id) {
+                                                        DropdownMenu(
+                                                            expanded = showActionMenu,
+                                                            onDismissRequest = {
+                                                                showActionMenu = false
+                                                                selectedMessage = null
+                                                            },
+                                                            modifier = Modifier.background(SurfaceRaised)
+                                                        ) {
+                                                            if (message.id > 0) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Reply", color = Ink) },
+                                                                    onClick = {
+                                                                        replyingTo = message
+                                                                        editingMessage = null
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = IndigoStart) }
+                                                                )
+                                                            }
+                                                            DropdownMenuItem(
+                                                                text = { Text("React", color = Ink) },
+                                                                onClick = {
+                                                                    showReactionPickerFor = message
+                                                                    showActionMenu = false
+                                                                    selectedMessage = null
+                                                                },
+                                                                leadingIcon = { Text("😊", fontSize = 18.sp) }
                                                             )
                                                         }
                                                     }
@@ -1667,6 +1772,16 @@ fun DMScreen(
                             }
                         }
 
+                        val replyTarget = replyingTo
+                        if (replyTarget != null && editingMessage == null) {
+                            ReplyComposerBanner(
+                                authorName = if (replyTarget.senderId.toLong() == currentUserId) "yourself" else partner.userName,
+                                snippet = replyTarget.dm_content,
+                                onCancel = { replyingTo = null },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+
                         // Media upload progress bar
                         AnimatedVisibility(
                             visible = isUploadingMedia,
@@ -1761,7 +1876,8 @@ fun DMScreen(
                                                         viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
                                                         editingMessage = null; typedText = ""
                                                     } else {
-                                                        viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend)
+                                                        viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
+                                                    replyingTo = null
                                                         typedText = ""
                                                     }
                                                 }
@@ -1820,7 +1936,8 @@ fun DMScreen(
                                                     viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
                                                     editingMessage = null; typedText = ""
                                                 } else {
-                                                    viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend)
+                                                    viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
+                                                    replyingTo = null
                                                     typedText = ""
                                                 }
                                             }

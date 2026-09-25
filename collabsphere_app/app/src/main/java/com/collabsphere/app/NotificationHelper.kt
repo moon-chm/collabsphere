@@ -92,7 +92,7 @@ class NotificationHelper(
     fun showGenericNotification(notification: NotificationResponse) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
 
-        val targetTab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED") 1 else 0
+        val targetTab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
         val clickIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("from_notification", true)

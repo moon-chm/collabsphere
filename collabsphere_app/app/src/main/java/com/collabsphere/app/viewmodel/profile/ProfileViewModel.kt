@@ -276,7 +276,7 @@ class ProfileViewModel(
     }
 
     fun onVerificationTokenChanged(value: String) {
-        _verificationToken.value = value
+        _verificationToken.value = value.filter { it.isDigit() }.take(6)
     }
 
     fun onResendVerification() {
@@ -284,7 +284,7 @@ class ProfileViewModel(
             repo.sendVerificationEmail()
                 .onSuccess {
                     _awaitingVerification.value = true
-                    _profileStatus.value = "Verification code sent (check server logs)"
+                    _profileStatus.value = "Verification code sent to your email"
                 }
                 .onFailure {
                     _profileStatus.value = it.message ?: "Failed to send verification code"

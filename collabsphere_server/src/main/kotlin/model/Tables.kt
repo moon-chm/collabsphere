@@ -81,6 +81,7 @@ object MessageTable : Table("message") {
     val channelId = integer("channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.CASCADE).index()
     val userName = varchar("user_name", 255)
     val content = text("content")
+    val replyToId = integer("reply_to_id").nullable()
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
@@ -111,6 +112,9 @@ object TasksTable : Table("task") {
     val taskName = varchar("task_name", 255)
     val taskDescription = text("task_description")
     val status = varchar("status", 50)
+    val dueDate = long("due_date").nullable()
+    val priority = varchar("priority", 10).default("MEDIUM")
+    val reminderSentAt = long("reminder_sent_at").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created task so a WorkManager retry after a lost (but
@@ -127,10 +131,19 @@ object DirectMessagesTable : Table("direct_messages") {
     val receiverId = integer("receiver_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val content = text("content")
     val mediaUrl = varchar("media_url", 500).nullable()
+    val replyToId = integer("reply_to_id").nullable()
     val isRead = bool("is_read").default(false)
     val timestamp = long("timestamp")
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object ChannelReactionsTable : Table("channel_reactions") {
+    val messageId = integer("message_id").references(MessageTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val emoji = varchar("emoji", 16)
+
+    override val primaryKey = PrimaryKey(messageId, userId, emoji)
 }
 
 object DmReactionsTable : Table("dm_reactions") {

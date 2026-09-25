@@ -89,7 +89,7 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
                         }
                     }
 
-                    "TASK_ASSIGNED", "TASK_UPDATED", "MENTION", "CHANNEL_MESSAGE" -> {
+                    "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE", "MENTION", "CHANNEL_MESSAGE" -> {
                         val notifId = data["notification_id"]?.toIntOrNull() ?: (System.currentTimeMillis() % 100000).toInt()
                         val recipientId = data["recipient_id"]?.toIntOrNull() ?: currentUserId
                         val title = data["title"] ?: "CollabSphere"

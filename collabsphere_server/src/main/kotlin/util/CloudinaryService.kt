@@ -108,6 +108,78 @@ object CloudinaryService {
         }
     }
 
+    val isConfigured: Boolean
+        get() = listOf("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")
+            .all { !System.getenv(it).isNullOrBlank() }
+
+    suspend fun uploadRawFile(bytes: ByteArray, folder: String, publicId: String, fileName: String, contentType: String): String =
+        withContext(Dispatchers.IO) {
+            val timestamp = (System.currentTimeMillis() / 1000).toString()
+            val signature = sha1Hex("folder=$folder&public_id=$publicId&timestamp=$timestamp$apiSecret")
+
+            val boundary = "Boundary-" + System.currentTimeMillis()
+            val conn = (URL("https://api.cloudinary.com/v1_1/$cloudName/raw/upload").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                doInput = true
+                useCaches = false
+                connectTimeout = 30_000
+                readTimeout = 120_000
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            }
+
+            conn.outputStream.use { os ->
+                writeFormField(os, boundary, "api_key", apiKey)
+                writeFormField(os, boundary, "timestamp", timestamp)
+                writeFormField(os, boundary, "public_id", publicId)
+                writeFormField(os, boundary, "folder", folder)
+                writeFormField(os, boundary, "signature", signature)
+                writeFileField(os, boundary, "file", fileName.replace("\"", ""), contentType, bytes)
+                os.write(("\r\n--$boundary--\r\n").toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
+
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
+                jsonParser.parseToJsonElement(responseBody).jsonObject["secure_url"]?.jsonPrimitive?.content
+                    ?: error("Cloudinary response missing secure_url: $responseBody")
+            } else {
+                val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+                error("Cloudinary raw upload failed (HTTP $responseCode): $errorBody")
+            }
+        }
+
+    suspend fun deleteRawFile(secureUrl: String): Unit = withContext(Dispatchers.IO) {
+        runCatching {
+            val fullPublicId = rawPublicIdFromUrl(secureUrl) ?: return@runCatching
+            val timestamp = (System.currentTimeMillis() / 1000).toString()
+            val signature = sha1Hex("public_id=$fullPublicId&timestamp=$timestamp$apiSecret")
+
+            val conn = (URL("https://api.cloudinary.com/v1_1/$cloudName/raw/destroy").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            }
+            val formParams = "public_id=" + URLEncoder.encode(fullPublicId, "UTF-8") +
+                    "&timestamp=" + URLEncoder.encode(timestamp, "UTF-8") +
+                    "&api_key=" + URLEncoder.encode(apiKey, "UTF-8") +
+                    "&signature=" + URLEncoder.encode(signature, "UTF-8")
+            conn.outputStream.use { it.write(formParams.toByteArray(Charsets.UTF_8)) }
+            conn.responseCode
+        }
+    }
+
+    fun isCloudinaryUrl(location: String): Boolean =
+        location.startsWith("https://res.cloudinary.com/")
+
+    internal fun rawPublicIdFromUrl(secureUrl: String): String? {
+        val afterUpload = secureUrl.substringAfter("/raw/upload/", "")
+        if (afterUpload.isEmpty()) return null
+        val path = if (Regex("^v\\d+/").containsMatchIn(afterUpload)) afterUpload.substringAfter("/") else afterUpload
+        return java.net.URLDecoder.decode(path, "UTF-8").ifBlank { null }
+    }
+
     private fun sha1Hex(input: String): String {
         val md = MessageDigest.getInstance("SHA-1")
         val digest = md.digest(input.toByteArray(Charsets.UTF_8))

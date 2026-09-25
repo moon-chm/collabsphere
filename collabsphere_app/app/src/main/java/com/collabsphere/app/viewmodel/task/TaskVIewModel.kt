@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.task.TaskEntity
+import com.collabsphere.app.model.task.TaskPriority
 import com.collabsphere.app.model.task.TaskRepo
 import com.collabsphere.app.model.task.TaskStatus
 import com.collabsphere.app.model.task.TaskSyncOutcome
@@ -22,7 +23,8 @@ import kotlinx.coroutines.withContext
 data class TaskUiModel(
     val task: TaskEntity,
     val assigneeName: String,
-    val isEditableByMe: Boolean
+    val isEditableByMe: Boolean,
+    val canPlanByMe: Boolean
 )
 
 sealed class TaskUiEvent {
@@ -53,7 +55,11 @@ class TaskViewModel(
         workspaceMembers
     ) { taskList, memberList ->
         val memberMap = memberList.associate { it.id to it.userName }
-        taskList.map { task ->
+        taskList.sortedWith(
+            compareByDescending<TaskEntity> { it.priority.ordinal }
+                .thenBy { it.dueDate ?: Long.MAX_VALUE }
+                .thenBy { it.id }
+        ).map { task ->
             val name = if (task.assignedToUserId == null) {
                 "Unassigned"
             } else {
@@ -62,7 +68,8 @@ class TaskViewModel(
             TaskUiModel(
                 task = task,
                 assigneeName = name,
-                isEditableByMe = task.assignedToUserId == loggedUserId
+                isEditableByMe = task.assignedToUserId == loggedUserId,
+                canPlanByMe = task.assignedToUserId == loggedUserId || task.createdByUserId == loggedUserId
             )
         }
     }.stateIn(
@@ -79,6 +86,12 @@ class TaskViewModel(
 
     private val _assignedUserId = MutableStateFlow<Int?>(null)
     val assignedUserId = _assignedUserId.asStateFlow()
+
+    private val _dueDate = MutableStateFlow<Long?>(null)
+    val dueDate = _dueDate.asStateFlow()
+
+    private val _priority = MutableStateFlow(TaskPriority.MEDIUM)
+    val priority = _priority.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing = _isSyncing.asStateFlow()
@@ -111,6 +124,17 @@ class TaskViewModel(
         _assignedUserId.value = userId
     }
 
+    fun canPlan(task: TaskEntity): Boolean =
+        task.assignedToUserId == loggedUserId || task.createdByUserId == loggedUserId
+
+    fun onDueDateChange(dueDate: Long?) {
+        _dueDate.value = dueDate
+    }
+
+    fun onPriorityChange(priority: TaskPriority) {
+        _priority.value = priority
+    }
+
     fun onCreateTask() {
         val name = _taskName.value.trim()
         val desc = _taskDescription.value.trim()
@@ -125,7 +149,9 @@ class TaskViewModel(
                 workspaceId = loggedWorkspaceId,
                 taskName = name,
                 taskDescription = desc,
-                status = TaskStatus.TO_DO
+                status = TaskStatus.TO_DO,
+                dueDate = _dueDate.value,
+                priority = _priority.value
             )
             withContext(Dispatchers.IO) {
                 repo.addTask(task)
@@ -133,6 +159,8 @@ class TaskViewModel(
             _taskName.value = ""
             _taskDescription.value = ""
             _assignedUserId.value = null
+            _dueDate.value = null
+            _priority.value = TaskPriority.MEDIUM
         }
     }
 
@@ -179,21 +207,41 @@ class TaskViewModel(
         }
     }
 
-    fun onUpdateTask(oldTask: TaskEntity, newName: String, newDescription: String) {
+    fun onUpdateTask(
+        oldTask: TaskEntity,
+        newName: String,
+        newDescription: String,
+        newDueDate: Long?,
+        newPriority: TaskPriority
+    ) {
         val updatedTaskName = newName.trim()
         val updatedTaskDescription = newDescription.trim()
 
         if (updatedTaskName.isEmpty()) return
 
-        if (oldTask.assignedToUserId != loggedUserId) {
+        val isAssignee = oldTask.assignedToUserId == loggedUserId
+        val isCreator = oldTask.createdByUserId == loggedUserId
+        val contentChanged = updatedTaskName != oldTask.taskName || updatedTaskDescription != oldTask.taskDescription
+        val planningChanged = newDueDate != oldTask.dueDate || newPriority != oldTask.priority
+
+        if (!contentChanged && !planningChanged) return
+
+        if (contentChanged && !isAssignee) {
             sendUiEvent("You can only edit details of tasks assigned to you.")
+            return
+        }
+
+        if (planningChanged && !isAssignee && !isCreator) {
+            sendUiEvent("Only the creator or assignee can change the due date or priority.")
             return
         }
 
         viewModelScope.launch {
             val updatedTask = oldTask.copy(
                 taskName = updatedTaskName,
-                taskDescription = updatedTaskDescription
+                taskDescription = updatedTaskDescription,
+                dueDate = newDueDate,
+                priority = newPriority
             )
             val outcome = withContext(Dispatchers.IO) {
                 repo.updateTask(updatedTask)

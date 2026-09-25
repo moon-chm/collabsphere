@@ -2,14 +2,19 @@ package com.collabsphere.app.remote.dm
 
 import android.util.Log
 import com.collabsphere.app.AuthTokenHolder
+import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.NotificationCenter
 import com.collabsphere.app.dto.dm.DmDto
+import com.collabsphere.app.dto.message.ChannelMessageEvent
+import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.dto.message.ChannelTypingEvent
 import com.collabsphere.app.dto.notification.NotificationPushFrame
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
@@ -37,7 +42,7 @@ class DmApiService(
     private var session: WebSocketSession? = null
     private val sessionMutex = Mutex()
 
-    suspend fun connect(baseUrl: String, userId: Long) = sessionMutex.withLock {
+    suspend fun connect(baseUrl: String, userId: Long, sinceId: Int) = sessionMutex.withLock {
         if (userId <= 0L) return
 
         try {
@@ -56,7 +61,7 @@ class DmApiService(
 
         try {
             val newSession = client.webSocketSession {
-                url("$wsUrl/ws/dm")
+                url("$wsUrl/ws/dm?sinceId=$sinceId&caps=channel")
                 AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
             session = newSession
@@ -64,6 +69,16 @@ class DmApiService(
             session = null
             throw e
         }
+    }
+
+    suspend fun sendChannelTyping(workspaceId: Int, channelId: Int, isTyping: Boolean) {
+        sendDm(
+            DmDto(
+                action = if (isTyping) "CHANNEL_TYPING_START" else "CHANNEL_TYPING_STOP",
+                workspaceId = workspaceId,
+                channelId = channelId
+            )
+        )
     }
 
     suspend fun sendDm(message: DmDto) {
@@ -113,6 +128,34 @@ class DmApiService(
                             continue
                         }
 
+                        if (actionField == "CHANNEL_REACTION") {
+                            try {
+                                ChannelMessageCenter.pushReaction(lenientJson.decodeFromString(ChannelReactionSummary.serializer(), textPayload))
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode channel reaction event", e)
+                            }
+                            continue
+                        }
+
+                        if (actionField == "CHANNEL_TYPING") {
+                            try {
+                                ChannelMessageCenter.pushTyping(lenientJson.decodeFromString(ChannelTypingEvent.serializer(), textPayload))
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode channel typing event", e)
+                            }
+                            continue
+                        }
+
+                        if (actionField == "CHANNEL_MESSAGE_EVENT") {
+                            try {
+                                val event = lenientJson.decodeFromString(ChannelMessageEvent.serializer(), textPayload)
+                                ChannelMessageCenter.push(event.message)
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode channel message event", e)
+                            }
+                            continue
+                        }
+
                         val dto = lenientJson.decodeFromString(DmDto.serializer(), textPayload)
                         emit(dto)
                     }
@@ -125,6 +168,14 @@ class DmApiService(
                 throw e
             }
         }
+    }
+
+    suspend fun getDmHistoryPage(baseUrl: String, workspaceId: Int, partnerId: Int, beforeId: Int?, limit: Int): List<DmDto> {
+        val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
+        return client.get("$cleanBaseUrl/api/dm/history/$workspaceId/$partnerId") {
+            beforeId?.let { parameter("before", it) }
+            parameter("limit", limit)
+        }.body()
     }
 
     suspend fun getOnlineUsers(baseUrl: String, workspaceId: Int): List<Int> {

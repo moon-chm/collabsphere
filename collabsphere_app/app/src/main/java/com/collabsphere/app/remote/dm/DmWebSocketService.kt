@@ -11,10 +11,12 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.MyApplication
 import com.collabsphere.app.NotificationCenter
 import com.collabsphere.app.NotificationHelper
 import com.collabsphere.app.model.dm.DmRepo
+import com.collabsphere.app.model.message.MessageRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,7 @@ class DmWebSocketService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val repo: DmRepo by inject()
+    private val messageRepo: MessageRepo by inject()
     private val notificationHelper: NotificationHelper by inject()
     private lateinit var notificationManager: NotificationManager
 
@@ -73,6 +76,12 @@ class DmWebSocketService : Service() {
         serviceScope.launch {
             NotificationCenter.incoming.collect { notification ->
                 notificationHelper.showGenericNotification(notification)
+            }
+        }
+
+        serviceScope.launch {
+            ChannelMessageCenter.incoming.collect { message ->
+                messageRepo.applyRealtimeChange(message)
             }
         }
     }

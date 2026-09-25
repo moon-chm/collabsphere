@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import com.collabsphere.app.view.components.MessageSkeletonList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +52,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.view.components.ReplyComposerBanner
+import com.collabsphere.app.view.components.ReplyQuote
+import com.collabsphere.app.view.components.ReactionChipsRow
+import com.collabsphere.app.view.components.ReactionPickerDialog
+import com.collabsphere.app.view.components.typingLabel
+import androidx.compose.material.icons.automirrored.filled.Reply
+import kotlinx.coroutines.launch
 import com.collabsphere.app.viewmodel.message.MessageViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -61,6 +70,13 @@ fun MessageScreen(
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val messageContent by viewModel.messageContent.collectAsStateWithLifecycle()
+    val isLoadingOlder by viewModel.isLoadingOlder.collectAsStateWithLifecycle()
+    val replyingTo by viewModel.replyingTo.collectAsStateWithLifecycle()
+    val reactions by viewModel.reactions.collectAsStateWithLifecycle()
+    val typingUsers by viewModel.typingUsers.collectAsStateWithLifecycle()
+    var reactionPickerFor by remember { mutableStateOf<MessageEntity?>(null) }
+    val messagesById = remember(messages) { messages.orEmpty().associateBy { it.id } }
+    val coroutineScope = rememberCoroutineScope()
     val currentUserId = viewModel.currentUserId
 
     var selectedMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -68,7 +84,13 @@ fun MessageScreen(
     var isEditing by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(messages?.size) {
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex <= 2 && listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect { viewModel.loadOlder() }
+    }
+    LaunchedEffect(messages?.lastOrNull()?.id) {
         val msgs = messages ?: return@LaunchedEffect
         if (msgs.isEmpty()) return@LaunchedEffect
 
@@ -79,8 +101,16 @@ fun MessageScreen(
         // Only yank the view to the newest message if the user was already reading near the
         // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
         if (wasNearBottom || isOwnMessage) {
-            listState.animateScrollToItem(msgs.lastIndex)
+            listState.animateScrollToItem(msgs.lastIndex + if (isLoadingOlder) 1 else 0)
         }
+    }
+
+    reactionPickerFor?.let { target ->
+        ReactionPickerDialog(
+            selectedEmojis = reactions[target.id].orEmpty().filterValues { currentUserId in it }.keys,
+            onPick = { emoji -> viewModel.toggleReaction(target.id, emoji) },
+            onDismiss = { reactionPickerFor = null }
+        )
     }
 
     Scaffold(
@@ -236,6 +266,26 @@ fun MessageScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
+                    }
+                }
+
+                typingLabel(typingUsers)?.let { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = Muted,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+                    )
+                }
+
+                if (!isEditing) {
+                    replyingTo?.let { target ->
+                        ReplyComposerBanner(
+                            authorName = if (target.userId == currentUserId) "yourself" else target.userName,
+                            snippet = target.content,
+                            onCancel = viewModel::cancelReply,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
                     }
                 }
 
@@ -464,6 +514,22 @@ fun MessageScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (isLoadingOlder) {
+                        item(key = "loading_older") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = CoralStart
+                                )
+                            }
+                        }
+                    }
                     items(messages ?: emptyList(), key = { it.id ?: it.hashCode() }) { message ->
                         val isOwnMessage = message.userId == currentUserId
 
@@ -566,7 +632,7 @@ fun MessageScreen(
                                         .combinedClickable(
                                             onClick = {},
                                             onLongClick = {
-                                                if (isOwnMessage) {
+                                                if (isOwnMessage || message.id > 0) {
                                                     selectedMessage = message
                                                     showActionMenu = true
                                                 }
@@ -574,14 +640,34 @@ fun MessageScreen(
                                         )
                                         .padding(horizontal = 14.dp, vertical = 10.dp)
                                 ) {
-                                    Text(
-                                        text = message.content,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            lineHeight = 20.sp,
-                                            fontSize = 15.sp
-                                        ),
-                                        color = if (isOwnMessage) Color.White else Ink
-                                    )
+                                    Column {
+                                        message.replyToId?.let { targetId ->
+                                            val target = messagesById[targetId]
+                                            ReplyQuote(
+                                                authorName = target?.let { if (it.userId == currentUserId) "You" else it.userName },
+                                                snippet = target?.content,
+                                                onDarkBubble = isOwnMessage,
+                                                onClick = target?.let {
+                                                    {
+                                                        val index = messages.orEmpty().indexOfFirst { m -> m.id == targetId }
+                                                        if (index >= 0) {
+                                                            coroutineScope.launch {
+                                                                listState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                        Text(
+                                            text = message.content,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                lineHeight = 20.sp,
+                                                fontSize = 15.sp
+                                            ),
+                                            color = if (isOwnMessage) Color.White else Ink
+                                        )
+                                    }
 
                                     if (selectedMessage == message && showActionMenu) {
                                         DropdownMenu(
@@ -589,39 +675,76 @@ fun MessageScreen(
                                             onDismissRequest = { showActionMenu = false },
                                             modifier = Modifier.background(SurfaceRaised)
                                         ) {
-                                            DropdownMenuItem(
-                                                text = { Text("Edit", color = Ink) },
-                                                onClick = {
-                                                    showActionMenu = false
-                                                    isEditing = true
-                                                    viewModel.onMessageContentChange(message.content)
-                                                },
-                                                leadingIcon = {
-                                                    Icon(
-                                                        Icons.Default.Edit,
-                                                        contentDescription = null,
-                                                        tint = IndigoStart
-                                                    )
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("Delete", color = Destructive) },
-                                                onClick = {
-                                                    showActionMenu = false
-                                                    message.id?.let { viewModel.onDeleteMessage(it) }
-                                                    selectedMessage = null
-                                                },
-                                                leadingIcon = {
-                                                    Icon(
-                                                        Icons.Default.Delete,
-                                                        contentDescription = null,
-                                                        tint = Destructive
-                                                    )
-                                                }
-                                            )
+                                            if (message.id > 0) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Reply", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        isEditing = false
+                                                        viewModel.startReply(message)
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.AutoMirrored.Filled.Reply,
+                                                            contentDescription = null,
+                                                            tint = IndigoStart
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                            if (message.id > 0) {
+                                                DropdownMenuItem(
+                                                    text = { Text("React", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        reactionPickerFor = message
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = { Text("😊", fontSize = 18.sp) }
+                                                )
+                                            }
+                                            if (isOwnMessage) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Edit", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        isEditing = true
+                                                        viewModel.onMessageContentChange(message.content)
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.Default.Edit,
+                                                            contentDescription = null,
+                                                            tint = IndigoStart
+                                                        )
+                                                    }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Delete", color = Destructive) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        message.id?.let { viewModel.onDeleteMessage(it) }
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.Default.Delete,
+                                                            contentDescription = null,
+                                                            tint = Destructive
+                                                        )
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
+
+                                ReactionChipsRow(
+                                    reactions = reactions[message.id].orEmpty(),
+                                    currentUserId = currentUserId,
+                                    onToggle = { emoji -> viewModel.toggleReaction(message.id, emoji) }
+                                )
                             }
                         }
                     }

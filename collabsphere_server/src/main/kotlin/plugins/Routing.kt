@@ -18,6 +18,7 @@ import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspacesTable
 import com.collabsphere.model.DirectMessagesTable
 import com.collabsphere.model.DmReactionsTable
+import com.collabsphere.model.ChannelReactionsTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UserBlocksTable
@@ -109,7 +110,103 @@ private suspend fun sendToUser(userId: Long, text: String) {
     }
 }
 
+private val channelCapableSessions: MutableSet<WebSocketServerSession> = ConcurrentHashMap.newKeySet()
+
+private suspend fun sendToChannelCapableUser(userId: Long, text: String) {
+    activeDmSessions[userId]?.forEach { session ->
+        if (session in channelCapableSessions && session.isActive) {
+            try {
+                session.send(Frame.Text(text))
+            } catch (e: Exception) {
+                removeDmSession(userId, session)
+                channelCapableSessions.remove(session)
+            }
+        }
+    }
+}
+
+private fun workspaceMemberIds(workspaceId: Int): List<Int> =
+    WorkspaceMembersTable
+        .select(WorkspaceMembersTable.userId)
+        .where { WorkspaceMembersTable.workspaceId eq workspaceId }
+        .map { it[WorkspaceMembersTable.userId] }
+
+private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: Int): ChannelReactionSummary {
+    val reactors = ChannelReactionsTable.selectAll()
+        .where { ChannelReactionsTable.messageId eq messageId }
+        .groupBy({ it[ChannelReactionsTable.emoji] }, { it[ChannelReactionsTable.userId] })
+    return ChannelReactionSummary(
+        messageId = messageId,
+        channelId = channelId,
+        workspaceId = workspaceId,
+        reactors = reactors
+    )
+}
+
+private suspend fun broadcastChannelMessageChange(messageId: Int) {
+    try {
+        val (snapshot, memberIds) = dbQuery {
+            val row = MessageTable.selectAll().where { MessageTable.id eq messageId }.singleOrNull()
+                ?: return@dbQuery null
+            val snapshot = MessageSyncResponse(
+                id = row[MessageTable.id],
+                userId = row[MessageTable.userId],
+                workspaceId = row[MessageTable.workspaceId],
+                channelId = row[MessageTable.channelId],
+                userName = row[MessageTable.userName],
+                content = row[MessageTable.content],
+                status = row[MessageTable.status],
+                isDeleted = row[MessageTable.isDeleted],
+                updatedAt = row[MessageTable.updatedAt],
+                replyToId = row[MessageTable.replyToId]
+            )
+            snapshot to workspaceMemberIds(snapshot.workspaceId)
+        } ?: return
+        val json = Json.encodeToString(ChannelMessageEvent(message = snapshot))
+        memberIds.forEach { sendToChannelCapableUser(it.toLong(), json) }
+    } catch (e: Exception) {
+        println("[broadcastChannelMessageChange] Failed for messageId=$messageId: ${e.message}")
+    }
+}
+
 private const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
+private const val DEFAULT_HISTORY_PAGE = 50
+private const val MAX_HISTORY_PAGE = 100
+
+private fun ResultRow.toDmHistoryDto(): DmDto {
+    val rawId = this[DirectMessagesTable.id]
+    val resolvedId = when (rawId) {
+        is EntityID<*> -> (rawId.value as Number).toInt()
+        is Number -> rawId.toInt()
+        else -> rawId.toString().toInt()
+    }
+    return DmDto(
+        action = "HISTORY",
+        id = resolvedId,
+        workspaceId = this[DirectMessagesTable.workspaceId],
+        senderId = this[DirectMessagesTable.senderId],
+        receiverId = this[DirectMessagesTable.receiverId],
+        content = this[DirectMessagesTable.content],
+        timestamp = this[DirectMessagesTable.timestamp],
+        mediaUrl = this[DirectMessagesTable.mediaUrl],
+        replyToId = this[DirectMessagesTable.replyToId]
+    )
+}
+
+internal fun selectInitialDmHistory(rowsNewestFirst: List<DmDto>, userId: Int, perConversation: Int): List<DmDto> {
+    val counts = HashMap<Pair<Int, Int>, Int>()
+    return rowsNewestFirst.filter { dto ->
+        val partnerId = if (dto.senderId == userId) dto.receiverId else dto.senderId
+        val key = dto.workspaceId to partnerId
+        val seen = counts.getOrDefault(key, 0)
+        if (seen < perConversation) {
+            counts[key] = seen + 1
+            true
+        } else {
+            false
+        }
+    }.reversed()
+}
 private class UploadTooLargeException :
     Exception("File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB upload limit")
 
@@ -886,24 +983,39 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── SEND email verification (stubbed — token logged, not emailed) ──
+            // ── SEND email verification ────────────────────────────────────────
             post("/api/user/verify-email/send") {
                 try {
                     val actingUserId = call.authenticatedUserId()
-                    val token = UUID.randomUUID().toString()
-                    val expiresAt = System.currentTimeMillis() + 24 * 60 * 60 * 1000L // 24 hours
+                    val userRow = dbQuery {
+                        UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                    }
+                    if (userRow == null) {
+                        call.respond(HttpStatusCode.NotFound, "Account not found")
+                        return@post
+                    }
+                    if (userRow[UsersTable.isEmailVerified]) {
+                        call.respond(HttpStatusCode.Conflict, "Email is already verified")
+                        return@post
+                    }
+
+                    val otp = String.format("%06d", (100000..999999).random())
+                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
 
                     dbQuery {
                         UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
                         UserVerificationTable.insert {
                             it[userId] = actingUserId
-                            it[UserVerificationTable.token] = token
+                            it[UserVerificationTable.token] = otp
                             it[UserVerificationTable.expiresAt] = expiresAt
                         }
                     }
-                    // STUB: log token instead of emailing
-                    println("[EMAIL VERIFICATION STUB] userId=$actingUserId token=$token")
-                    call.respond(HttpStatusCode.OK, "Verification token sent (check server logs)")
+
+                    if (EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)) {
+                        call.respond(HttpStatusCode.OK, "A 6-digit verification code has been sent to your email")
+                    } else {
+                        call.respond(HttpStatusCode.BadGateway, "Couldn't send the verification email. Please try again.")
+                    }
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.InternalServerError, "Failed to send verification")
                 }
@@ -1072,6 +1184,123 @@ fun Application.configureRouting() {
             }
 
             route("/api/workspace") {
+
+                get("/{workspaceId}/search") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        if (workspaceIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
+                            return@get
+                        }
+                        val query = call.request.queryParameters["q"].orEmpty().trim().take(SearchText.MAX_QUERY_LENGTH)
+                        if (query.length < SearchText.MIN_QUERY_LENGTH) {
+                            call.respond(HttpStatusCode.OK, WorkspaceSearchResponse(query = query))
+                            return@get
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val pattern = "%${escapeLikeLiteral(query.lowercase())}%"
+                        val perTypeLimit = 20
+
+                        val result = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) {
+                                return@dbQuery null
+                            }
+
+                            val messages = (MessageTable innerJoin ChannelsTable)
+                                .selectAll()
+                                .where {
+                                    (MessageTable.workspaceId eq workspaceIdParam) and
+                                            (MessageTable.isDeleted eq false) and
+                                            (ChannelsTable.isDeleted eq false) and
+                                            (MessageTable.content.lowerCase() like pattern)
+                                }
+                                .orderBy(MessageTable.id, SortOrder.DESC)
+                                .limit(perTypeLimit)
+                                .map {
+                                    SearchMessageHit(
+                                        id = it[MessageTable.id],
+                                        channelId = it[MessageTable.channelId],
+                                        channelName = it[ChannelsTable.channelName],
+                                        userName = it[MessageTable.userName],
+                                        content = SearchText.snippet(it[MessageTable.content], query)
+                                    )
+                                }
+
+                            val dmRows = DirectMessagesTable.selectAll()
+                                .where {
+                                    (DirectMessagesTable.workspaceId eq workspaceIdParam) and
+                                            ((DirectMessagesTable.senderId eq actingUserId) or (DirectMessagesTable.receiverId eq actingUserId)) and
+                                            (DirectMessagesTable.content.lowerCase() like pattern)
+                                }
+                                .orderBy(DirectMessagesTable.id, SortOrder.DESC)
+                                .limit(perTypeLimit)
+                                .toList()
+                            val partnerIds = dmRows.map {
+                                if (it[DirectMessagesTable.senderId] == actingUserId) it[DirectMessagesTable.receiverId] else it[DirectMessagesTable.senderId]
+                            }.toSet()
+                            val partnerNames = if (partnerIds.isEmpty()) emptyMap() else UsersTable.selectAll()
+                                .where { UsersTable.id inList partnerIds }
+                                .associate { it[UsersTable.id] to it[UsersTable.username] }
+                            val directMessages = dmRows.map { row ->
+                                val partnerId = if (row[DirectMessagesTable.senderId] == actingUserId) row[DirectMessagesTable.receiverId] else row[DirectMessagesTable.senderId]
+                                SearchDmHit(
+                                    id = row.toDmHistoryDto().id ?: 0,
+                                    partnerId = partnerId,
+                                    partnerName = partnerNames[partnerId] ?: "User $partnerId",
+                                    content = SearchText.snippet(row[DirectMessagesTable.content], query),
+                                    timestamp = row[DirectMessagesTable.timestamp]
+                                )
+                            }
+
+                            val tasks = TasksTable.selectAll()
+                                .where {
+                                    (TasksTable.workspaceId eq workspaceIdParam) and
+                                            (TasksTable.isDeleted eq false) and
+                                            ((TasksTable.taskName.lowerCase() like pattern) or (TasksTable.taskDescription.lowerCase() like pattern))
+                                }
+                                .orderBy(TasksTable.id, SortOrder.DESC)
+                                .limit(perTypeLimit)
+                                .map { SearchTaskHit(it[TasksTable.id], it[TasksTable.taskName], it[TasksTable.status]) }
+
+                            val notes = NotesTable.selectAll()
+                                .where {
+                                    (NotesTable.workspaceId eq workspaceIdParam) and
+                                            (NotesTable.isDeleted eq false) and
+                                            ((NotesTable.notesName.lowerCase() like pattern) or (NotesTable.notesDescription.lowerCase() like pattern))
+                                }
+                                .orderBy(NotesTable.id, SortOrder.DESC)
+                                .limit(perTypeLimit)
+                                .map {
+                                    SearchNoteHit(
+                                        id = it[NotesTable.id],
+                                        notesName = it[NotesTable.notesName],
+                                        snippet = SearchText.snippet(it[NotesTable.notesDescription], query)
+                                    )
+                                }
+
+                            val files = LocalFilesTable.selectAll()
+                                .where {
+                                    (LocalFilesTable.workspaceId eq workspaceIdParam) and
+                                            (LocalFilesTable.isDeleted eq false) and
+                                            (LocalFilesTable.fileName.lowerCase() like pattern)
+                                }
+                                .orderBy(LocalFilesTable.id, SortOrder.DESC)
+                                .limit(perTypeLimit)
+                                .map { SearchFileHit(it[LocalFilesTable.id], it[LocalFilesTable.fileName], it[LocalFilesTable.mimeType]) }
+
+                            WorkspaceSearchResponse(query, messages, directMessages, tasks, notes, files)
+                        }
+
+                        if (result == null) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                        } else {
+                            call.respond(HttpStatusCode.OK, result)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        call.respond(HttpStatusCode.InternalServerError, "Search failed")
+                    }
+                }
 
                 post("/create") {
                     try {
@@ -1775,10 +2004,14 @@ fun Application.configureRouting() {
                                     workspaceId = existing[TasksTable.workspaceId],
                                     taskName = existing[TasksTable.taskName],
                                     taskDescription = existing[TasksTable.taskDescription],
-                                    status = existing[TasksTable.status]
+                                    status = existing[TasksTable.status],
+                                    dueDate = existing[TasksTable.dueDate],
+                                    priority = existing[TasksTable.priority]
                                 )
                             }
 
+                            val newDueDate = request.dueDate?.takeIf { it > 0 }
+                            val newPriority = TaskPriorities.normalize(request.priority) ?: "MEDIUM"
                             val insertedId = TasksTable.insert {
                                 it[createdByUserId] = actingUserId
                                 it[assignedToUserId] = request.assignedToUserId
@@ -1786,6 +2019,8 @@ fun Application.configureRouting() {
                                 it[taskName] = request.taskName
                                 it[taskDescription] = request.taskDescription
                                 it[status] = request.status
+                                it[dueDate] = newDueDate
+                                it[priority] = newPriority
                                 it[isDeleted] = false
                                 it[updatedAt] = System.currentTimeMillis()
                                 it[idempotencyKey] = request.idempotencyKey
@@ -1798,7 +2033,9 @@ fun Application.configureRouting() {
                                 workspaceId = request.workspaceId,
                                 taskName = request.taskName,
                                 taskDescription = request.taskDescription,
-                                status = request.status
+                                status = request.status,
+                                dueDate = newDueDate,
+                                priority = newPriority
                             )
                         }
                         if (newTask == null) {
@@ -1865,7 +2102,9 @@ fun Application.configureRouting() {
                                             workspaceId = it[TasksTable.workspaceId],
                                             taskName = it[TasksTable.taskName],
                                             taskDescription = it[TasksTable.taskDescription],
-                                            status = it[TasksTable.status]
+                                            status = it[TasksTable.status],
+                                            dueDate = it[TasksTable.dueDate],
+                                            priority = it[TasksTable.priority]
                                         )
                                     }
                             }
@@ -1943,10 +2182,25 @@ fun Application.configureRouting() {
                                 request.taskDescription != existingTask[TasksTable.taskDescription] ||
                                 request.status != existingTask[TasksTable.status]
 
+                        val currentDueDate = existingTask[TasksTable.dueDate]
+                        val currentPriority = existingTask[TasksTable.priority]
+                        val nextDueDate = when (val requested = request.dueDate) {
+                            null -> currentDueDate
+                            else -> requested.takeIf { it > 0 }
+                        }
+                        val nextPriority = TaskPriorities.normalize(request.priority) ?: currentPriority
+                        val editingPlanning = nextDueDate != currentDueDate || nextPriority != currentPriority
+
                         if (reassigning && actingUserId != existingTask[TasksTable.createdByUserId]) {
                             return@dbQuery -3
                         }
                         if (editingContentOrStatus && actingUserId != existingTask[TasksTable.assignedToUserId]) {
+                            return@dbQuery -3
+                        }
+                        if (editingPlanning &&
+                            actingUserId != existingTask[TasksTable.assignedToUserId] &&
+                            actingUserId != existingTask[TasksTable.createdByUserId]
+                        ) {
                             return@dbQuery -3
                         }
 
@@ -1956,6 +2210,11 @@ fun Application.configureRouting() {
                             it[assignedToUserId] = request.assignedToUserId
                             it[workspaceId] = request.workspaceId
                             it[status] = request.status
+                            it[dueDate] = nextDueDate
+                            it[priority] = nextPriority
+                            if (nextDueDate != currentDueDate) {
+                                it[reminderSentAt] = null
+                            }
                             it[updatedAt] = System.currentTimeMillis()
                         }
                     }
@@ -1969,7 +2228,7 @@ fun Application.configureRouting() {
                         return@put
                     }
                     if (updateResult == -3) {
-                        call.respond(HttpStatusCode.Forbidden, "Only the assignee can edit or move this task; only the creator can reassign it")
+                        call.respond(HttpStatusCode.Forbidden, "Only the assignee can edit or move this task; only the creator can reassign it; due date and priority can be changed by the creator or assignee")
                         return@put
                     }
 
@@ -1984,7 +2243,9 @@ fun Application.configureRouting() {
                                     workspaceId = it[TasksTable.workspaceId],
                                     taskName = it[TasksTable.taskName],
                                     taskDescription = it[TasksTable.taskDescription],
-                                    status = it[TasksTable.status]
+                                    status = it[TasksTable.status],
+                                    dueDate = it[TasksTable.dueDate],
+                                    priority = it[TasksTable.priority]
                                 )
                             }.singleOrNull()
                     }
@@ -2040,7 +2301,9 @@ fun Application.configureRouting() {
                                         workspaceId = it[TasksTable.workspaceId],
                                         taskName = it[TasksTable.taskName],
                                         taskDescription = it[TasksTable.taskDescription],
-                                        status = it[TasksTable.status]
+                                        status = it[TasksTable.status],
+                                        dueDate = it[TasksTable.dueDate],
+                                        priority = it[TasksTable.priority]
                                     )
                                 }
                         }
@@ -2087,7 +2350,9 @@ fun Application.configureRouting() {
                                         taskDescription = it[TasksTable.taskDescription],
                                         status = it[TasksTable.status],
                                         isDeleted = it[TasksTable.isDeleted],
-                                        updatedAt = it[TasksTable.updatedAt]
+                                        updatedAt = it[TasksTable.updatedAt],
+                                        dueDate = it[TasksTable.dueDate],
+                                        priority = it[TasksTable.priority]
                                     )
                                 }
                         }
@@ -2336,12 +2601,20 @@ fun Application.configureRouting() {
                             if (!isMember(actingUserId, request.workspaceId)) {
                                 return@dbQuery null
                             }
+                            val validReplyToId = request.replyToId?.takeIf { targetId ->
+                                MessageTable.selectAll().where {
+                                    (MessageTable.id eq targetId) and
+                                            (MessageTable.workspaceId eq request.workspaceId) and
+                                            (MessageTable.channelId eq request.channelId)
+                                }.count() > 0
+                            }
                             val insertedId = MessageTable.insert {
                                 it[MessageTable.userId] = actingUserId
                                 it[MessageTable.workspaceId] = request.workspaceId
                                 it[MessageTable.channelId] = request.channelId
                                 it[MessageTable.userName] = request.userName
                                 it[MessageTable.content] = request.content
+                                it[MessageTable.replyToId] = validReplyToId
                                 it[MessageTable.status] = request.status
                                 it[MessageTable.isDeleted] = false
                                 it[MessageTable.updatedAt] = System.currentTimeMillis()
@@ -2354,13 +2627,15 @@ fun Application.configureRouting() {
                                 channelId = request.channelId,
                                 userName = request.userName,
                                 content = request.content,
-                                status = request.status
+                                status = request.status,
+                                replyToId = validReplyToId
                             )
                         }
                         if (newMessage == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
                             call.respond(HttpStatusCode.Created, newMessage)
+                            broadcastChannelMessageChange(newMessage.id)
                             // ── Notification hooks ────────────────────────────────────────────
                             val senderRow = dbQuery {
                                 UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
@@ -2444,7 +2719,8 @@ fun Application.configureRouting() {
                                     channelId = it[MessageTable.channelId],
                                     userName = it[MessageTable.userName],
                                     content = it[MessageTable.content],
-                                    status = it[MessageTable.status]
+                                    status = it[MessageTable.status],
+                                    replyToId = it[MessageTable.replyToId]
                                 )
                             }
                     }
@@ -2484,18 +2760,21 @@ fun Application.configureRouting() {
                         when {
                             updateResult == -1 -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
                             updateResult == -2 -> call.respond(HttpStatusCode.Forbidden, "Only the sender can edit this message")
-                            updateResult > 0 -> call.respond(
-                                HttpStatusCode.OK,
-                                MessageResponse(
-                                    id = messageIdParam,
-                                    userId = actingUserId,
-                                    workspaceId = request.workspaceId,
-                                    channelId = request.channelId,
-                                    userName = request.userName,
-                                    content = request.content,
-                                    status = request.status
+                            updateResult > 0 -> {
+                                call.respond(
+                                    HttpStatusCode.OK,
+                                    MessageResponse(
+                                        id = messageIdParam,
+                                        userId = actingUserId,
+                                        workspaceId = request.workspaceId,
+                                        channelId = request.channelId,
+                                        userName = request.userName,
+                                        content = request.content,
+                                        status = request.status
+                                    )
                                 )
-                            )
+                                broadcastChannelMessageChange(messageIdParam)
+                            }
                             else -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
                         }
                     } catch (e: Exception) {
@@ -2529,11 +2808,160 @@ fun Application.configureRouting() {
 
                         if (updatedRows > 0) {
                             call.respond(HttpStatusCode.OK, true)
+                            broadcastChannelMessageChange(messageIdParam)
                         } else {
                             call.respond(HttpStatusCode.NotFound, false)
                         }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, false)
+                    }
+                }
+
+                post("/{messageId}/reactions") {
+                    try {
+                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
+                        if (messageIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid messageId")
+                            return@post
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<ChannelReactionRequest>()
+                        val emoji = request.emoji.trim()
+                        if (emoji.isEmpty() || emoji.length > 16) {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid emoji")
+                            return@post
+                        }
+
+                        val summary = dbQuery {
+                            val message = MessageTable.selectAll()
+                                .where { (MessageTable.id eq messageIdParam) and (MessageTable.isDeleted eq false) }
+                                .singleOrNull() ?: return@dbQuery null
+                            val workspaceId = message[MessageTable.workspaceId]
+                            if (!isMember(actingUserId, workspaceId)) {
+                                return@dbQuery null
+                            }
+                            if (request.add) {
+                                ChannelReactionsTable.insertIgnore {
+                                    it[ChannelReactionsTable.messageId] = messageIdParam
+                                    it[ChannelReactionsTable.userId] = actingUserId
+                                    it[ChannelReactionsTable.emoji] = emoji
+                                }
+                            } else {
+                                ChannelReactionsTable.deleteWhere {
+                                    (ChannelReactionsTable.messageId eq messageIdParam) and
+                                            (ChannelReactionsTable.userId eq actingUserId) and
+                                            (ChannelReactionsTable.emoji eq emoji)
+                                }
+                            }
+                            channelReactionSummary(messageIdParam, message[MessageTable.channelId], workspaceId) to
+                                    workspaceMemberIds(workspaceId)
+                        }
+
+                        if (summary == null) {
+                            call.respond(HttpStatusCode.NotFound, "Message not found")
+                            return@post
+                        }
+                        call.respond(HttpStatusCode.OK, summary.first)
+                        val json = Json.encodeToString(summary.first)
+                        summary.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Reaction failed")
+                    }
+                }
+
+                get("/reactions/{workspaceId}/{channelId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || channelIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
+                            return@get
+                        }
+                        val fromId = call.request.queryParameters["fromId"]?.toIntOrNull() ?: 0
+                        val actingUserId = call.authenticatedUserId()
+
+                        val summaries = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) {
+                                return@dbQuery null
+                            }
+                            (ChannelReactionsTable innerJoin MessageTable)
+                                .selectAll()
+                                .where {
+                                    (MessageTable.workspaceId eq workspaceIdParam) and
+                                            (MessageTable.channelId eq channelIdParam) and
+                                            (MessageTable.isDeleted eq false) and
+                                            (MessageTable.id greaterEq fromId)
+                                }
+                                .groupBy { it[ChannelReactionsTable.messageId] }
+                                .map { (messageId, rows) ->
+                                    ChannelReactionSummary(
+                                        messageId = messageId,
+                                        channelId = channelIdParam,
+                                        workspaceId = workspaceIdParam,
+                                        reactors = rows.groupBy({ it[ChannelReactionsTable.emoji] }, { it[ChannelReactionsTable.userId] })
+                                    )
+                                }
+                        }
+                        if (summaries == null) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                        } else {
+                            call.respond(HttpStatusCode.OK, summaries)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Reactions Error")
+                    }
+                }
+
+                get("/history/{workspaceId}/{channelId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || channelIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
+                            return@get
+                        }
+                        val beforeId = call.request.queryParameters["before"]?.toIntOrNull()
+                        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, MAX_HISTORY_PAGE) ?: DEFAULT_HISTORY_PAGE
+                        val actingUserId = call.authenticatedUserId()
+
+                        val page = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) {
+                                return@dbQuery null
+                            }
+                            MessageTable.selectAll()
+                                .where {
+                                    var condition = (MessageTable.workspaceId eq workspaceIdParam) and
+                                            (MessageTable.channelId eq channelIdParam) and
+                                            (MessageTable.isDeleted eq false)
+                                    if (beforeId != null) {
+                                        condition = condition and (MessageTable.id less beforeId)
+                                    }
+                                    condition
+                                }
+                                .orderBy(MessageTable.id, SortOrder.DESC)
+                                .limit(limit)
+                                .map {
+                                    MessageSyncResponse(
+                                        id = it[MessageTable.id],
+                                        userId = it[MessageTable.userId],
+                                        workspaceId = it[MessageTable.workspaceId],
+                                        channelId = it[MessageTable.channelId],
+                                        userName = it[MessageTable.userName],
+                                        content = it[MessageTable.content],
+                                        status = it[MessageTable.status],
+                                        isDeleted = it[MessageTable.isDeleted],
+                                        updatedAt = it[MessageTable.updatedAt],
+                                        replyToId = it[MessageTable.replyToId]
+                                    )
+                                }
+                        }
+                        if (page == null) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                        } else {
+                            call.respond(HttpStatusCode.OK, page)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "History Error")
                     }
                 }
 
@@ -2569,7 +2997,8 @@ fun Application.configureRouting() {
                                         content = it[MessageTable.content],
                                         status = it[MessageTable.status],
                                         isDeleted = it[MessageTable.isDeleted],
-                                        updatedAt = it[MessageTable.updatedAt]
+                                        updatedAt = it[MessageTable.updatedAt],
+                                        replyToId = it[MessageTable.replyToId]
                                     )
                                 }
                         }
@@ -2665,21 +3094,40 @@ fun Application.configureRouting() {
                             return@post
                         }
 
-                        val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
-                        if (!uploadDir.exists()) {
-                            uploadDir.mkdirs()
+                        val uniqueFileName = "${UUID.randomUUID()}_$fileName"
+                        val finalMimeType = contentType ?: "application/octet-stream"
+                        val fileSize = fileBytes!!.size.toLong()
+
+                        val cloudLocation = if (CloudinaryService.isConfigured) {
+                            try {
+                                CloudinaryService.uploadRawFile(
+                                    bytes = fileBytes!!,
+                                    folder = "workspace_files/$workspaceId",
+                                    publicId = uniqueFileName.replace(Regex("[^A-Za-z0-9._-]"), "_"),
+                                    fileName = fileName!!,
+                                    contentType = finalMimeType
+                                )
+                            } catch (e: Exception) {
+                                println("[FileUpload] Cloudinary upload failed, storing on local disk: ${e.message}")
+                                null
+                            }
+                        } else {
+                            null
                         }
 
-                        val uniqueFileName = "${UUID.randomUUID()}_$fileName"
-                        val physicalFile = File(uploadDir, uniqueFileName)
-                        physicalFile.writeBytes(fileBytes!!)
+                        val generatedFileLocation = cloudLocation ?: run {
+                            val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
+                            if (!uploadDir.exists()) {
+                                uploadDir.mkdirs()
+                            }
+                            val physicalFile = File(uploadDir, uniqueFileName)
+                            physicalFile.writeBytes(fileBytes!!)
+                            physicalFile.absolutePath
+                        }
 
-                        val generatedFileLocation = physicalFile.absolutePath
                         val scheme = call.request.headers["X-Forwarded-Proto"] ?: "http"
                         val host = call.request.headers["Host"] ?: "127.0.0.1:8080"
                         val generatedUrl = "$scheme://$host/api/file/download/$uniqueFileName"
-                        val fileSize = physicalFile.length()
-                        val finalMimeType = contentType ?: "application/octet-stream"
                         val currentTimeMil = System.currentTimeMillis()
 
                         val insertedId = dbQuery {
@@ -2832,6 +3280,36 @@ fun Application.configureRouting() {
                             return@get
                         }
 
+                        val storedLocation = fileRow[LocalFilesTable.fileLocation]
+                        if (CloudinaryService.isCloudinaryUrl(storedLocation)) {
+                            val connection = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                                (java.net.URL(storedLocation).openConnection() as java.net.HttpURLConnection).apply {
+                                    connectTimeout = 30_000
+                                    readTimeout = 120_000
+                                }.also { it.connect() }
+                            }
+                            val remoteStatus = kotlinx.coroutines.withContext(Dispatchers.IO) { connection.responseCode }
+                            if (remoteStatus !in 200..299) {
+                                connection.disconnect()
+                                call.respond(HttpStatusCode.NotFound, "File not found on server")
+                                return@get
+                            }
+                            val responseType = runCatching { ContentType.parse(fileRow[LocalFilesTable.mimeType]) }
+                                .getOrDefault(ContentType.Application.OctetStream)
+                            try {
+                                call.respondOutputStream(
+                                    contentType = responseType,
+                                    status = HttpStatusCode.OK,
+                                    contentLength = connection.contentLengthLong.takeIf { it >= 0 }
+                                ) {
+                                    connection.inputStream.use { it.copyTo(this) }
+                                }
+                            } finally {
+                                connection.disconnect()
+                            }
+                            return@get
+                        }
+
                         val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload").canonicalFile
                         val file = File(uploadDir, fileNameParam).canonicalFile
                         if (!file.path.startsWith(uploadDir.path + File.separator)) {
@@ -2874,8 +3352,14 @@ fun Application.configureRouting() {
                             updatedRows == -2 -> call.respond(HttpStatusCode.Forbidden, false)
                             updatedRows > 0 -> {
                                 // Best-effort physical cleanup — the row is already soft-deleted either way.
-                                fileLocation?.let { runCatching { File(it).delete() } }
                                 call.respond(HttpStatusCode.OK, true)
+                                fileLocation?.let { location ->
+                                    if (CloudinaryService.isCloudinaryUrl(location)) {
+                                        CloudinaryService.deleteRawFile(location)
+                                    } else {
+                                        runCatching { File(location).delete() }
+                                    }
+                                }
                             }
                             else -> call.respond(HttpStatusCode.NotFound, false)
                         }
@@ -2887,6 +3371,40 @@ fun Application.configureRouting() {
             }
 
             // ── DM Media Upload ────────────────────────────────────────────────────────
+            get("/api/dm/history/{workspaceId}/{partnerId}") {
+                try {
+                    val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                    val partnerIdParam = call.parameters["partnerId"]?.toIntOrNull()
+                    if (workspaceIdParam == null || partnerIdParam == null) {
+                        call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or partnerId")
+                        return@get
+                    }
+                    val beforeId = call.request.queryParameters["before"]?.toIntOrNull()
+                    val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, MAX_HISTORY_PAGE) ?: DEFAULT_HISTORY_PAGE
+                    val actingUserId = call.authenticatedUserId()
+
+                    val page = dbQuery {
+                        DirectMessagesTable.selectAll()
+                            .where {
+                                var condition = (DirectMessagesTable.workspaceId eq workspaceIdParam) and (
+                                    ((DirectMessagesTable.senderId eq actingUserId) and (DirectMessagesTable.receiverId eq partnerIdParam)) or
+                                        ((DirectMessagesTable.senderId eq partnerIdParam) and (DirectMessagesTable.receiverId eq actingUserId))
+                                    )
+                                if (beforeId != null) {
+                                    condition = condition and (DirectMessagesTable.id less beforeId)
+                                }
+                                condition
+                            }
+                            .orderBy(DirectMessagesTable.id, SortOrder.DESC)
+                            .limit(limit)
+                            .map { it.toDmHistoryDto() }
+                    }
+                    call.respond(HttpStatusCode.OK, page)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, "History Error")
+                }
+            }
+
             post("/api/dm/upload-media") {
                 val actingUserId = call.authenticatedUserId()
                 try {
@@ -2923,8 +3441,15 @@ fun Application.configureRouting() {
             route("/ws") {
                 webSocket("/dm") {
                     val userIdParam = call.authenticatedUserId().toLong()
+                    val supportsChannelEvents = call.request.queryParameters["caps"]
+                        ?.split(",")
+                        ?.any { it.trim() == "channel" } == true
 
                     addDmSession(userIdParam, this)
+                    if (supportsChannelEvents) {
+                        channelCapableSessions.add(this)
+                    }
+                    var cachedUsername: String? = null
 
                     // Mark user online on WS connect
                     dbQuery {
@@ -2957,26 +3482,25 @@ fun Application.configureRouting() {
                     } catch (_: Exception) {}
 
                     try {
+                        val sinceIdParam = call.request.queryParameters["sinceId"]?.toIntOrNull()
                         val initialHistoryPayloads = dbQuery {
-                            DirectMessagesTable.selectAll().where {
-                                (DirectMessagesTable.senderId eq userIdParam.toInt()) or
-                                        (DirectMessagesTable.receiverId eq userIdParam.toInt())
-                            }.map { row ->
-                                val rawId = row[DirectMessagesTable.id]
-                                val resolvedId = when (rawId) {
-                                    is org.jetbrains.exposed.dao.id.EntityID<*> -> (rawId.value as Number).toInt()
-                                    is Number -> rawId.toInt()
-                                    else -> rawId.toString().toInt()
-                                }
-
-                                DmDto(
-                                    action = "HISTORY",
-                                    id = resolvedId,
-                                    workspaceId = row[DirectMessagesTable.workspaceId],
-                                    senderId = row[DirectMessagesTable.senderId],
-                                    receiverId = row[DirectMessagesTable.receiverId],
-                                    content = row[DirectMessagesTable.content],
-                                    timestamp = row[DirectMessagesTable.timestamp]
+                            val involvesUser = (DirectMessagesTable.senderId eq userIdParam.toInt()) or
+                                    (DirectMessagesTable.receiverId eq userIdParam.toInt())
+                            when {
+                                sinceIdParam == null -> DirectMessagesTable.selectAll()
+                                    .where { involvesUser }
+                                    .map { it.toDmHistoryDto() }
+                                sinceIdParam > 0 -> DirectMessagesTable.selectAll()
+                                    .where { involvesUser and (DirectMessagesTable.id greater sinceIdParam) }
+                                    .orderBy(DirectMessagesTable.id, SortOrder.ASC)
+                                    .map { it.toDmHistoryDto() }
+                                else -> selectInitialDmHistory(
+                                    DirectMessagesTable.selectAll()
+                                        .where { involvesUser }
+                                        .orderBy(DirectMessagesTable.id, SortOrder.DESC)
+                                        .map { it.toDmHistoryDto() },
+                                    userIdParam.toInt(),
+                                    DEFAULT_HISTORY_PAGE
                                 )
                             }
                         }
@@ -2996,14 +3520,26 @@ fun Application.configureRouting() {
 
                                     if (dmDto.action == "SEND_MESSAGE") {
                                         // Only the authenticated connection owner may send as themselves.
-                                        val outgoingDto = dmDto.copy(senderId = userIdParam.toInt())
+                                        val requestedDto = dmDto.copy(senderId = userIdParam.toInt())
                                         val savedMessageDto = dbQuery {
+                                            val validReplyToId = requestedDto.replyToId?.takeIf { targetId ->
+                                                DirectMessagesTable.selectAll().where {
+                                                    (DirectMessagesTable.id eq targetId) and
+                                                            (DirectMessagesTable.workspaceId eq requestedDto.workspaceId) and (
+                                                            ((DirectMessagesTable.senderId eq requestedDto.senderId) and (DirectMessagesTable.receiverId eq requestedDto.receiverId)) or
+                                                                    ((DirectMessagesTable.senderId eq requestedDto.receiverId) and (DirectMessagesTable.receiverId eq requestedDto.senderId))
+                                                            )
+                                                }.count() > 0
+                                            }
+                                            val outgoingDto = requestedDto.copy(replyToId = validReplyToId)
                                             val insertedStatement = DirectMessagesTable.insert {
                                                 it[workspaceId] = outgoingDto.workspaceId
                                                 it[senderId] = outgoingDto.senderId
                                                 it[receiverId] = outgoingDto.receiverId
                                                 it[content] = outgoingDto.content
                                                 it[timestamp] = outgoingDto.timestamp
+                                                it[mediaUrl] = outgoingDto.mediaUrl
+                                                it[replyToId] = outgoingDto.replyToId
                                             }
 
                                             val rawId = insertedStatement[DirectMessagesTable.id]
@@ -3096,6 +3632,29 @@ fun Application.configureRouting() {
                                                 this.send(Frame.Text(deleteJson))
                                             }
                                         }
+                                    } else if (dmDto.action == "CHANNEL_TYPING_START" || dmDto.action == "CHANNEL_TYPING_STOP") {
+                                        val typingChannelId = dmDto.channelId
+                                        if (typingChannelId != null && typingChannelId > 0) {
+                                            val recipients = dbQuery {
+                                                if (!isMember(userIdParam.toInt(), dmDto.workspaceId)) return@dbQuery emptyList()
+                                                if (cachedUsername == null) {
+                                                    cachedUsername = UsersTable.selectAll()
+                                                        .where { UsersTable.id eq userIdParam.toInt() }
+                                                        .singleOrNull()?.get(UsersTable.username)
+                                                }
+                                                workspaceMemberIds(dmDto.workspaceId).filter { it != userIdParam.toInt() }
+                                            }
+                                            val typingJson = Json.encodeToString(
+                                                ChannelTypingEvent(
+                                                    workspaceId = dmDto.workspaceId,
+                                                    channelId = typingChannelId,
+                                                    userId = userIdParam.toInt(),
+                                                    userName = cachedUsername ?: "Someone",
+                                                    isTyping = dmDto.action == "CHANNEL_TYPING_START"
+                                                )
+                                            )
+                                            recipients.forEach { sendToChannelCapableUser(it.toLong(), typingJson) }
+                                        }
                                     } else if (dmDto.action == "TYPING_START" || dmDto.action == "TYPING_STOP") {
                                         // Forward typing status in real time to the intended chat partner
                                         val typingPayload = dmDto.copy(senderId = userIdParam.toInt())
@@ -3173,6 +3732,7 @@ fun Application.configureRouting() {
                     } catch (_: Exception) {
                     } finally {
                         removeDmSession(userIdParam, this)
+                        channelCapableSessions.remove(this)
 
                         // If no other live sessions remain for this user, broadcast USER_OFFLINE to teammates
                         val remainingSessions = activeDmSessions[userIdParam]

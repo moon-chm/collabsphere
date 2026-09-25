@@ -35,7 +35,7 @@ import com.collabsphere.app.model.message.MessageEntity
         DmEntity::class,
         DmReactionEntity::class
     ],
-    version = 37,
+    version = 39,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -88,6 +88,20 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_ws_sender_receiver` ON `DM` (`workspaceId`, `senderId`, `receiverId`)")
                 database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_ws_receiver_sender` ON `DM` (`workspaceId`, `receiverId`, `senderId`)")
                 database.execSQL("CREATE INDEX IF NOT EXISTS `idx_dm_timestamp_sender` ON `DM` (`timestamp`, `senderId`)")
+            }
+        }
+
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE task ADD COLUMN dueDate INTEGER")
+                database.execSQL("ALTER TABLE task ADD COLUMN priority TEXT NOT NULL DEFAULT 'MEDIUM'")
+            }
+        }
+
+        val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN replyToId INTEGER")
+                database.execSQL("ALTER TABLE DM ADD COLUMN replyToId INTEGER")
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.collabsphere.app.model.task
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -9,6 +10,15 @@ import com.collabsphere.app.model.workspace.WorkspaceEntity
 
 enum class TaskStatus {
     TO_DO, IN_PROGRESS, DONE
+}
+
+enum class TaskPriority {
+    LOW, MEDIUM, HIGH;
+
+    companion object {
+        fun fromRemote(value: String?): TaskPriority =
+            entries.firstOrNull { it.name == value?.uppercase() } ?: MEDIUM
+    }
 }
 
 /** Whether a mutation reached the server, or only got queued locally for a background retry. */
@@ -54,5 +64,8 @@ data class TaskEntity(
     val workspaceId: Int,
     val taskName: String,
     val taskDescription: String,
-    val status: TaskStatus = TaskStatus.TO_DO
+    val status: TaskStatus = TaskStatus.TO_DO,
+    val dueDate: Long? = null,
+    @ColumnInfo(defaultValue = "MEDIUM")
+    val priority: TaskPriority = TaskPriority.MEDIUM
 )

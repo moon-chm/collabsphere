@@ -1140,7 +1140,7 @@ onDrawBehind {
                         AnimatedVisibility(visible = awaitingVerification && !isEmailVerified) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "Enter the verification code (check server logs) to confirm this email",
+                                    text = "Enter the 6-digit code we emailed you to confirm this email",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Muted
                                 )
@@ -1163,6 +1163,7 @@ onDrawBehind {
                                                 .fillMaxWidth()
                                                 .padding(horizontal = 12.dp),
                                             singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
                                             cursorBrush = SolidColor(CoralStart),
                                             decorationBox = { inner ->
