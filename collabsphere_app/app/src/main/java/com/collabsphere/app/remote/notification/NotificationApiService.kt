@@ -2,6 +2,8 @@ package com.collabsphere.app.remote.notification
 
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.notification.MarkReadRequest
+import com.collabsphere.app.dto.notification.MuteRequest
+import com.collabsphere.app.dto.notification.MuteSetting
 import com.collabsphere.app.dto.notification.NotificationCountResponse
 import com.collabsphere.app.dto.notification.NotificationResponse
 import io.ktor.client.*
@@ -23,6 +25,17 @@ class NotificationApiService(private val client: HttpClient) {
                 parameter("offset", offset)
             }.body()
         }
+
+    suspend fun getMutes(): List<MuteSetting> = withContext(Dispatchers.IO) {
+        client.get("$baseUrl/mutes").body()
+    }
+
+    suspend fun setMute(request: MuteRequest): Boolean = withContext(Dispatchers.IO) {
+        client.put("$baseUrl/mutes") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.status.isSuccess()
+    }
 
     suspend fun getCount(): NotificationCountResponse = withContext(Dispatchers.IO) {
         client.get("$baseUrl/count").body()

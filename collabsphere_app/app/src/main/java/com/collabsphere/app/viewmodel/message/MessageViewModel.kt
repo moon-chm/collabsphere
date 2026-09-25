@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.model.DraftStore
 import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.model.message.MessageRepo
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +39,8 @@ class MessageViewModel(
 ) : ViewModel() {
 
     val currentUserId: Int = loggedUserId
+    val currentWorkspaceId: Int = loggedWorkspaceId
+    val currentChannelId: Int = loggedChannelId
 
     private val _reactions = MutableStateFlow<Map<Int, Map<String, Set<Int>>>>(emptyMap())
     val reactions = _reactions.asStateFlow()
@@ -234,6 +238,10 @@ class MessageViewModel(
     private val _messageContent = MutableStateFlow("")
     val messageContent = _messageContent.asStateFlow()
 
+    private val _readStates = MutableStateFlow<Map<Int, ChannelReadState>>(emptyMap())
+    val readStates = _readStates.asStateFlow()
+    private var lastMarkedReadId = 0
+
     init {
         viewModelScope.launch {
             val saved = draftStore.load(draftKey)
@@ -244,6 +252,33 @@ class MessageViewModel(
                 .drop(1)
                 .debounce(DRAFT_SAVE_DEBOUNCE_MS)
                 .collect { if (!isEditingMessage) draftStore.save(draftKey, it) }
+        }
+        viewModelScope.launch {
+            repo.fetchReadStates(loggedWorkspaceId, loggedChannelId).onSuccess { states ->
+                _readStates.update { current -> current + states.associateBy { it.userId } }
+            }
+        }
+        viewModelScope.launch {
+            ChannelMessageCenter.reads
+                .filter { it.workspaceId == loggedWorkspaceId && it.channelId == loggedChannelId }
+                .collect { state ->
+                    _readStates.update { current ->
+                        val previous = current[state.userId]?.lastReadMessageId ?: 0
+                        if (state.lastReadMessageId > previous) current + (state.userId to state) else current
+                    }
+                }
+        }
+        viewModelScope.launch {
+            repo.getMessage(loggedWorkspaceId, loggedChannelId)
+                .map { list -> list.maxOfOrNull { it.id }?.takeIf { it > 0 } ?: 0 }
+                .filter { it > lastMarkedReadId }
+                .debounce(READ_MARK_DEBOUNCE_MS)
+                .collect { newestId ->
+                    if (newestId > lastMarkedReadId) {
+                        repo.markRead(loggedWorkspaceId, loggedChannelId, newestId)
+                            .onSuccess { lastMarkedReadId = newestId }
+                    }
+                }
         }
     }
 
@@ -333,5 +368,6 @@ class MessageViewModel(
         private const val TYPING_VISIBLE_MS = 6_000L
         private const val MAX_MEDIA_BYTES = 10 * 1024 * 1024
         private const val DRAFT_SAVE_DEBOUNCE_MS = 400L
+        private const val READ_MARK_DEBOUNCE_MS = 1_000L
     }
 }

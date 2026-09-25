@@ -3,6 +3,8 @@ import android.util.Log
 
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionRequest
+import com.collabsphere.app.dto.message.ChannelReadRequest
+import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.PinRequest
@@ -47,6 +49,17 @@ class MessageApiService(private val client: HttpClient) {
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
         return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()
+    }
+
+    suspend fun markRead(workspaceId: Int, channelId: Int, lastReadMessageId: Int) {
+        client.post("$baseUrl/read/$workspaceId/$channelId") {
+            contentType(ContentType.Application.Json)
+            setBody(ChannelReadRequest(lastReadMessageId))
+        }
+    }
+
+    suspend fun getReadStates(workspaceId: Int, channelId: Int): List<ChannelReadState> {
+        return client.get("$baseUrl/read/$workspaceId/$channelId").body()
     }
 
     suspend fun setPinned(messageId: Int, pinned: Boolean) {

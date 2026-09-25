@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PushPin
+import com.collabsphere.app.view.components.MarkdownText
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
@@ -418,15 +419,15 @@ fun SkeuoNotesItem(
                     )
                     if (notes.description.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(
+                        MarkdownText(
                             text = notes.description,
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 13.5.sp,
                                 lineHeight = 18.sp
                             ),
                             color = Color(0xFF6E635C),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            linkColor = IndigoStart,
+                            maxLines = 1
                         )
                     }
                 }

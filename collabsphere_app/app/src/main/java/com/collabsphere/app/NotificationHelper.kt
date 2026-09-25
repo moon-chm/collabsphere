@@ -28,7 +28,8 @@ import kotlin.math.abs
 
 class NotificationHelper(
     private val context: Context,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val quietHoursStore: com.collabsphere.app.model.QuietHoursStore
 ) {
 
     private val channelId = "collabsphere_dm_channel_v3"
@@ -91,6 +92,7 @@ class NotificationHelper(
      */
     fun showGenericNotification(notification: NotificationResponse) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (quietHoursStore.isQuietNow()) return
 
         val targetTab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
         val clickIntent = Intent(context, MainActivity::class.java).apply {
@@ -135,6 +137,7 @@ class NotificationHelper(
             Log.w("NotificationHelper", "Notifications disabled in system settings or missing permission")
             return
         }
+        if (quietHoursStore.isQuietNow()) return
 
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 

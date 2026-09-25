@@ -47,6 +47,30 @@ data class MessageSyncResponse(
 )
 
 @Serializable
+data class ChannelReadRequest(
+    val lastReadMessageId: Int
+)
+
+@Serializable
+data class ChannelReadState(
+    val action: String = "CHANNEL_READ",
+    val workspaceId: Int,
+    val channelId: Int,
+    val userId: Int,
+    val userName: String,
+    val lastReadMessageId: Int
+)
+
+@Serializable
+data class LinkPreview(
+    val url: String,
+    val title: String? = null,
+    val description: String? = null,
+    val imageUrl: String? = null,
+    val siteName: String? = null
+)
+
+@Serializable
 data class PinRequest(
     val pinned: Boolean
 )

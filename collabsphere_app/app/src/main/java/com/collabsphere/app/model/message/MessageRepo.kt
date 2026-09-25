@@ -11,6 +11,7 @@ import com.collabsphere.app.dto.message.MessageSyncDto
 import com.collabsphere.app.model.TempId
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.remote.dm.DmApiService
 import com.collabsphere.app.remote.dm.DmWebSocketService
 import com.collabsphere.app.remote.message.MessageApiService
@@ -162,6 +163,14 @@ class MessageRepo(
                 Unit
             }
         }
+
+    suspend fun markRead(workspaceId: Int, channelId: Int, lastReadMessageId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { apiService.markRead(workspaceId, channelId, lastReadMessageId) }
+    }
+
+    suspend fun fetchReadStates(workspaceId: Int, channelId: Int): Result<List<ChannelReadState>> = withContext(Dispatchers.IO) {
+        runCatching { apiService.getReadStates(workspaceId, channelId) }
+    }
 
     suspend fun setPinned(messageId: Int, pinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {

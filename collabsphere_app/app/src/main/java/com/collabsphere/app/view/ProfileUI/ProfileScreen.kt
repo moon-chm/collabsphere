@@ -1204,6 +1204,8 @@ onDrawBehind {
                     }
                 }
 
+                com.collabsphere.app.view.components.NotificationSettingsCard()
+
                 // ── Privacy card ────────────────────────────────────────────────
                 Box(
                     modifier = Modifier

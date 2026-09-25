@@ -257,7 +257,7 @@ fun TaskPlanningBadges(task: TaskEntity) {
 }
 
 @Composable
-private fun PlanningPill(text: String, color: Color, icon: @Composable (Color) -> Unit) {
+internal fun PlanningPill(text: String, color: Color, icon: @Composable (Color) -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))

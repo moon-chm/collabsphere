@@ -70,7 +70,9 @@ class TaskSyncWorker(
                 status = status,
                 idempotencyKey = inputData.getString("IDEMPOTENCY_KEY"),
                 dueDate = if (inputData.keyValueMap.containsKey("DUE_DATE")) inputData.getLong("DUE_DATE", 0L) else null,
-                priority = inputData.getString("PRIORITY")
+                priority = inputData.getString("PRIORITY"),
+                checklist = inputData.getString("CHECKLIST")?.let { TaskListCodec.decodeChecklist(it) },
+                labels = inputData.getString("LABELS")?.let { TaskListCodec.decodeLabels(it) }
             )
 
             if (actionType == "UPDATE") {

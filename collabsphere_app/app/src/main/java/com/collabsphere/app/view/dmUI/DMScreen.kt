@@ -60,6 +60,8 @@ import kotlinx.coroutines.delay
 import androidx.compose.material.icons.automirrored.filled.Reply
 import com.collabsphere.app.view.components.ReplyComposerBanner
 import com.collabsphere.app.view.components.ReplyQuote
+import com.collabsphere.app.view.components.MarkdownText
+import com.collabsphere.app.view.components.LinkPreviewCard
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -1320,11 +1322,13 @@ fun DMScreen(
 
                                                         // Text content
                                                         if (message.dm_content.isNotBlank()) {
-                                                            Text(
+                                                            MarkdownText(
                                                                 text = message.dm_content,
                                                                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
-                                                                color = Color.White
+                                                                color = Color.White,
+                                                                linkColor = Color.White
                                                             )
+                                                            LinkPreviewCard(text = message.dm_content, onDarkBubble = true)
                                                         }
 
                                                         // Timestamp + Read receipt row
@@ -1624,11 +1628,13 @@ fun DMScreen(
 
                                                         // Text content
                                                         if (message.dm_content.isNotBlank()) {
-                                                            Text(
+                                                            MarkdownText(
                                                                 text = message.dm_content,
                                                                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
-                                                                color = Ink
+                                                                color = Ink,
+                                                                linkColor = IndigoStart
                                                             )
+                                                            LinkPreviewCard(text = message.dm_content, onDarkBubble = false)
                                                         }
 
                                                         // Timestamp row

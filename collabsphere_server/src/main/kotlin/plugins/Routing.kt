@@ -19,6 +19,8 @@ import com.collabsphere.model.WorkspacesTable
 import com.collabsphere.model.DirectMessagesTable
 import com.collabsphere.model.DmReactionsTable
 import com.collabsphere.model.ChannelReactionsTable
+import com.collabsphere.model.NotificationMutesTable
+import com.collabsphere.model.ChannelReadStateTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UserBlocksTable
@@ -1122,6 +1124,57 @@ fun Application.configureRouting() {
                     }
                 }
 
+                get("/mutes") {
+                    try {
+                        val actingUserId = call.authenticatedUserId()
+                        val mutes = dbQuery {
+                            NotificationMutesTable.selectAll()
+                                .where { NotificationMutesTable.userId eq actingUserId }
+                                .map {
+                                    MuteSetting(
+                                        workspaceId = it[NotificationMutesTable.workspaceId],
+                                        channelId = it[NotificationMutesTable.channelId].takeIf { id -> id > 0 }
+                                    )
+                                }
+                        }
+                        call.respond(HttpStatusCode.OK, mutes)
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to load mute settings")
+                    }
+                }
+
+                put("/mutes") {
+                    try {
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<MuteRequest>()
+                        val channelKey = request.channelId?.takeIf { it > 0 } ?: 0
+                        val allowed = dbQuery {
+                            if (!isMember(actingUserId, request.workspaceId)) return@dbQuery false
+                            if (request.muted) {
+                                NotificationMutesTable.insertIgnore {
+                                    it[NotificationMutesTable.userId] = actingUserId
+                                    it[NotificationMutesTable.workspaceId] = request.workspaceId
+                                    it[NotificationMutesTable.channelId] = channelKey
+                                }
+                            } else {
+                                NotificationMutesTable.deleteWhere {
+                                    (NotificationMutesTable.userId eq actingUserId) and
+                                            (NotificationMutesTable.workspaceId eq request.workspaceId) and
+                                            (NotificationMutesTable.channelId eq channelKey)
+                                }
+                            }
+                            true
+                        }
+                        if (allowed) {
+                            call.respond(HttpStatusCode.OK, true)
+                        } else {
+                            call.respond(HttpStatusCode.Forbidden, false)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, false)
+                    }
+                }
+
                 // ── COUNT: GET /api/notifications/count ───────────────────────
                 get("/count") {
                     try {
@@ -2023,12 +2076,16 @@ fun Application.configureRouting() {
                                     taskDescription = existing[TasksTable.taskDescription],
                                     status = existing[TasksTable.status],
                                     dueDate = existing[TasksTable.dueDate],
-                                    priority = existing[TasksTable.priority]
+                                    priority = existing[TasksTable.priority],
+                                    checklist = TaskExtras.decodeChecklist(existing[TasksTable.checklist]),
+                                    labels = TaskExtras.decodeLabels(existing[TasksTable.labels])
                                 )
                             }
 
                             val newDueDate = request.dueDate?.takeIf { it > 0 }
                             val newPriority = TaskPriorities.normalize(request.priority) ?: "MEDIUM"
+                            val newChecklist = TaskExtras.normalizeChecklist(request.checklist.orEmpty())
+                            val newLabels = TaskExtras.normalizeLabels(request.labels.orEmpty())
                             val insertedId = TasksTable.insert {
                                 it[createdByUserId] = actingUserId
                                 it[assignedToUserId] = request.assignedToUserId
@@ -2038,6 +2095,8 @@ fun Application.configureRouting() {
                                 it[status] = request.status
                                 it[dueDate] = newDueDate
                                 it[priority] = newPriority
+                                it[checklist] = TaskExtras.encodeChecklist(newChecklist)
+                                it[labels] = TaskExtras.encodeLabels(newLabels)
                                 it[isDeleted] = false
                                 it[updatedAt] = System.currentTimeMillis()
                                 it[idempotencyKey] = request.idempotencyKey
@@ -2052,7 +2111,9 @@ fun Application.configureRouting() {
                                 taskDescription = request.taskDescription,
                                 status = request.status,
                                 dueDate = newDueDate,
-                                priority = newPriority
+                                priority = newPriority,
+                                checklist = newChecklist,
+                                labels = newLabels
                             )
                         }
                         if (newTask == null) {
@@ -2121,7 +2182,9 @@ fun Application.configureRouting() {
                                             taskDescription = it[TasksTable.taskDescription],
                                             status = it[TasksTable.status],
                                             dueDate = it[TasksTable.dueDate],
-                                            priority = it[TasksTable.priority]
+                                            priority = it[TasksTable.priority],
+                                            checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
+                                            labels = TaskExtras.decodeLabels(it[TasksTable.labels])
                                         )
                                     }
                             }
@@ -2206,7 +2269,12 @@ fun Application.configureRouting() {
                             else -> requested.takeIf { it > 0 }
                         }
                         val nextPriority = TaskPriorities.normalize(request.priority) ?: currentPriority
-                        val editingPlanning = nextDueDate != currentDueDate || nextPriority != currentPriority
+                        val currentChecklist = TaskExtras.decodeChecklist(existingTask[TasksTable.checklist])
+                        val currentLabels = TaskExtras.decodeLabels(existingTask[TasksTable.labels])
+                        val nextChecklist = request.checklist?.let { TaskExtras.normalizeChecklist(it) } ?: currentChecklist
+                        val nextLabels = request.labels?.let { TaskExtras.normalizeLabels(it) } ?: currentLabels
+                        val editingPlanning = nextDueDate != currentDueDate || nextPriority != currentPriority ||
+                                nextChecklist != currentChecklist || nextLabels != currentLabels
 
                         if (reassigning && actingUserId != existingTask[TasksTable.createdByUserId]) {
                             return@dbQuery -3
@@ -2229,6 +2297,8 @@ fun Application.configureRouting() {
                             it[status] = request.status
                             it[dueDate] = nextDueDate
                             it[priority] = nextPriority
+                            it[checklist] = TaskExtras.encodeChecklist(nextChecklist)
+                            it[labels] = TaskExtras.encodeLabels(nextLabels)
                             if (nextDueDate != currentDueDate) {
                                 it[reminderSentAt] = null
                             }
@@ -2262,7 +2332,9 @@ fun Application.configureRouting() {
                                     taskDescription = it[TasksTable.taskDescription],
                                     status = it[TasksTable.status],
                                     dueDate = it[TasksTable.dueDate],
-                                    priority = it[TasksTable.priority]
+                                    priority = it[TasksTable.priority],
+                                    checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
+                                    labels = TaskExtras.decodeLabels(it[TasksTable.labels])
                                 )
                             }.singleOrNull()
                     }
@@ -2320,7 +2392,9 @@ fun Application.configureRouting() {
                                         taskDescription = it[TasksTable.taskDescription],
                                         status = it[TasksTable.status],
                                         dueDate = it[TasksTable.dueDate],
-                                        priority = it[TasksTable.priority]
+                                        priority = it[TasksTable.priority],
+                                        checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
+                                        labels = TaskExtras.decodeLabels(it[TasksTable.labels])
                                     )
                                 }
                         }
@@ -2369,7 +2443,9 @@ fun Application.configureRouting() {
                                         isDeleted = it[TasksTable.isDeleted],
                                         updatedAt = it[TasksTable.updatedAt],
                                         dueDate = it[TasksTable.dueDate],
-                                        priority = it[TasksTable.priority]
+                                        priority = it[TasksTable.priority],
+                                        checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
+                                        labels = TaskExtras.decodeLabels(it[TasksTable.labels])
                                     )
                                 }
                         }
@@ -2710,8 +2786,20 @@ fun Application.configureRouting() {
                                     .map { it[UsersTable.id] to it[UsersTable.username].lowercase() }
                             }
 
+                            val mutedMemberIds = dbQuery {
+                                NotificationMutesTable
+                                    .select(NotificationMutesTable.userId)
+                                    .where {
+                                        (NotificationMutesTable.workspaceId eq request.workspaceId) and
+                                                ((NotificationMutesTable.channelId eq 0) or (NotificationMutesTable.channelId eq request.channelId))
+                                    }
+                                    .map { it[NotificationMutesTable.userId] }
+                                    .toSet()
+                            }
+
                             channelMembers.forEach { (memberId, memberUsername) ->
                                 val isMentioned = memberUsername in mentionedUsernames
+                                if (!isMentioned && memberId in mutedMemberIds) return@forEach
                                 if (isMentioned) {
                                     createAndPushNotification(
                                         recipientId = memberId,
@@ -2907,6 +2995,101 @@ fun Application.configureRouting() {
                         }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, false)
+                    }
+                }
+
+                post("/read/{workspaceId}/{channelId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || channelIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, false)
+                            return@post
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val request = call.receive<ChannelReadRequest>()
+
+                        val event = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
+                            val messageExists = MessageTable.selectAll().where {
+                                (MessageTable.id eq request.lastReadMessageId) and
+                                        (MessageTable.workspaceId eq workspaceIdParam) and
+                                        (MessageTable.channelId eq channelIdParam)
+                            }.count() > 0
+                            if (!messageExists) return@dbQuery null
+                            val existing = ChannelReadStateTable.selectAll().where {
+                                (ChannelReadStateTable.userId eq actingUserId) and (ChannelReadStateTable.channelId eq channelIdParam)
+                            }.singleOrNull()
+                            val previous = existing?.get(ChannelReadStateTable.lastReadMessageId) ?: 0
+                            if (request.lastReadMessageId <= previous) return@dbQuery null
+                            val now = System.currentTimeMillis()
+                            if (existing == null) {
+                                ChannelReadStateTable.insert {
+                                    it[ChannelReadStateTable.userId] = actingUserId
+                                    it[ChannelReadStateTable.channelId] = channelIdParam
+                                    it[ChannelReadStateTable.lastReadMessageId] = request.lastReadMessageId
+                                    it[ChannelReadStateTable.updatedAt] = now
+                                }
+                            } else {
+                                ChannelReadStateTable.update({
+                                    (ChannelReadStateTable.userId eq actingUserId) and (ChannelReadStateTable.channelId eq channelIdParam)
+                                }) {
+                                    it[ChannelReadStateTable.lastReadMessageId] = request.lastReadMessageId
+                                    it[ChannelReadStateTable.updatedAt] = now
+                                }
+                            }
+                            val userName = UsersTable.selectAll().where { UsersTable.id eq actingUserId }
+                                .singleOrNull()?.get(UsersTable.username) ?: "Someone"
+                            ChannelReadState(
+                                workspaceId = workspaceIdParam,
+                                channelId = channelIdParam,
+                                userId = actingUserId,
+                                userName = userName,
+                                lastReadMessageId = request.lastReadMessageId
+                            ) to workspaceMemberIds(workspaceIdParam)
+                        }
+
+                        call.respond(HttpStatusCode.OK, true)
+                        if (event != null) {
+                            val json = Json.encodeToString(event.first)
+                            event.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, false)
+                    }
+                }
+
+                get("/read/{workspaceId}/{channelId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || channelIdParam == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
+                            return@get
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val states = dbQuery {
+                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
+                            (ChannelReadStateTable innerJoin UsersTable)
+                                .selectAll()
+                                .where { ChannelReadStateTable.channelId eq channelIdParam }
+                                .map {
+                                    ChannelReadState(
+                                        workspaceId = workspaceIdParam,
+                                        channelId = channelIdParam,
+                                        userId = it[ChannelReadStateTable.userId],
+                                        userName = it[UsersTable.username],
+                                        lastReadMessageId = it[ChannelReadStateTable.lastReadMessageId]
+                                    )
+                                }
+                        }
+                        if (states == null) {
+                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                        } else {
+                            call.respond(HttpStatusCode.OK, states)
+                        }
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Read state error")
                     }
                 }
 
@@ -3502,6 +3685,20 @@ fun Application.configureRouting() {
             }
 
             // ── DM Media Upload ────────────────────────────────────────────────────────
+            get("/api/link-preview") {
+                val url = call.request.queryParameters["url"]?.trim()
+                if (url.isNullOrEmpty() || url.length > 2048) {
+                    call.respond(HttpStatusCode.BadRequest, "Missing or invalid url")
+                    return@get
+                }
+                val preview = com.collabsphere.util.LinkPreviewService.preview(url)
+                if (preview == null) {
+                    call.respond(HttpStatusCode.NoContent)
+                } else {
+                    call.respond(HttpStatusCode.OK, preview)
+                }
+            }
+
             get("/api/dm/history/{workspaceId}/{partnerId}") {
                 try {
                     val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()

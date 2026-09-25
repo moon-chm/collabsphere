@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.collabsphere.app.dto.message.ChannelReadState
+import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.ui.theme.CoralStart
 import com.collabsphere.app.ui.theme.Ink
 import com.collabsphere.app.ui.theme.Muted
@@ -107,6 +109,22 @@ fun ReactionChipsRow(
                     )
                 }
             }
+    }
+}
+
+fun seenByLabel(
+    states: Collection<ChannelReadState>,
+    message: MessageEntity,
+    currentUserId: Int
+): String? {
+    val readers = states
+        .filter { it.userId != currentUserId && it.userId != message.userId && it.lastReadMessageId >= message.id }
+        .map { it.userName }
+        .sorted()
+    return when {
+        readers.isEmpty() -> null
+        readers.size <= 3 -> "Seen by ${readers.joinToString(", ")}"
+        else -> "Seen by ${readers.take(2).joinToString(", ")} +${readers.size - 2}"
     }
 }
 

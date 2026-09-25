@@ -45,6 +45,11 @@ class TaskRepo(
         return taskDao.getTasksForWorkspace(workspaceId)
     }
 
+    fun getMyOpenTasks(userId: Int): Flow<List<TaskEntity>> =
+        taskDao.getTasksByUserAllWorkspaces(userId).map { tasks ->
+            tasks.filter { it.assignedToUserId == userId && it.status != TaskStatus.DONE }
+        }
+
     suspend fun syncWorkspaceMembers(workspaceId: Int) = withContext(Dispatchers.IO) {
         try {
             val members = workspaceApiService.getWorkspaceMembers(workspaceId)
@@ -91,7 +96,9 @@ class TaskRepo(
                     taskDescription = remote.taskDescription,
                     status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
                     dueDate = remote.dueDate,
-                    priority = TaskPriority.fromRemote(remote.priority)
+                    priority = TaskPriority.fromRemote(remote.priority),
+                    checklist = remote.checklist,
+                    labels = remote.labels
                 )
             }
             entities.forEach { taskDao.insertTask(it) }
@@ -125,7 +132,9 @@ class TaskRepo(
                                 taskDescription = remote.taskDescription,
                                 status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
                                 dueDate = remote.dueDate,
-                                priority = TaskPriority.fromRemote(remote.priority)
+                                priority = TaskPriority.fromRemote(remote.priority),
+                                checklist = remote.checklist,
+                                labels = remote.labels
                             )
                             taskDao.insertTask(entity)
                         }
@@ -159,6 +168,8 @@ class TaskRepo(
                 status = task.status.name,
                 dueDate = task.dueDate ?: 0L,
                 priority = task.priority.name,
+                checklist = task.checklist,
+                labels = task.labels,
                 idempotencyKey = idempotencyKey
             )
             val remoteTask = apiService.createTask(task.createdByUserId, request)
@@ -181,6 +192,8 @@ class TaskRepo(
                 "STATUS" to task.status.name,
                 "DUE_DATE" to (task.dueDate ?: 0L),
                 "PRIORITY" to task.priority.name,
+                "CHECKLIST" to TaskListCodec.encodeChecklist(task.checklist),
+                "LABELS" to TaskListCodec.encodeLabels(task.labels),
                 "IDEMPOTENCY_KEY" to idempotencyKey
             )
             enqueueSync(syncData)
@@ -198,7 +211,9 @@ class TaskRepo(
                 workspaceId = task.workspaceId,
                 status = task.status.name,
                 dueDate = task.dueDate ?: 0L,
-                priority = task.priority.name
+                priority = task.priority.name,
+                checklist = task.checklist,
+                labels = task.labels
             )
             apiService.updateTask(taskId = task.id, request = request)
             Result.success(TaskSyncOutcome.CONFIRMED)
@@ -214,7 +229,9 @@ class TaskRepo(
                 "TASK_DESCRIPTION" to task.taskDescription,
                 "STATUS" to task.status.name,
                 "DUE_DATE" to (task.dueDate ?: 0L),
-                "PRIORITY" to task.priority.name
+                "PRIORITY" to task.priority.name,
+                "CHECKLIST" to TaskListCodec.encodeChecklist(task.checklist),
+                "LABELS" to TaskListCodec.encodeLabels(task.labels)
             )
             enqueueSync(syncData)
             Result.success(TaskSyncOutcome.QUEUED)

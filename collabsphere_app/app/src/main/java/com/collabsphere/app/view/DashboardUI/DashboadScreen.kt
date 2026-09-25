@@ -75,10 +75,12 @@ fun DashboardScreen(
     unreadNotificationCount: Int = 0,
     onJoinByCode          : ((String) -> Unit)? = null,
     joinByCodeStatus      : String? = null,
-    onClearJoinByCodeStatus: (() -> Unit)? = null
+    onClearJoinByCodeStatus: (() -> Unit)? = null,
+    onOpenWorkspaceTasks  : (WorkspaceEntity) -> Unit = {}
 ) {
     // ── All original state preserved ──
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
+    val myDayUserId by viewModel.userIdState.collectAsStateWithLifecycle()
     var showJoinByCodeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -430,6 +432,16 @@ fun DashboardScreen(
 
             // ── Summary banner ──
             DashboardSummaryBanner(count = workspaces?.size ?: 0)
+
+            Spacer(Modifier.height(16.dp))
+
+            MyDayCard(
+                userId = myDayUserId,
+                workspaces = workspaces.orEmpty(),
+                unreadCount = unreadNotificationCount,
+                onOpenTasks = onOpenWorkspaceTasks,
+                onNotificationsClick = onNotificationsClick
+            )
 
             Spacer(Modifier.height(20.dp))
 

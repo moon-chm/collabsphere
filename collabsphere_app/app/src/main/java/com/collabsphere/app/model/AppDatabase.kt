@@ -1,6 +1,8 @@
 package com.collabsphere.app.model
 
 import androidx.room.Database
+import androidx.room.TypeConverters
+import com.collabsphere.app.model.task.TaskListConverters
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -35,9 +37,10 @@ import com.collabsphere.app.model.message.MessageEntity
         DmEntity::class,
         DmReactionEntity::class
     ],
-    version = 41,
+    version = 42,
     exportSchema = false
 )
+@TypeConverters(TaskListConverters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun userDao(): UserDao
@@ -115,6 +118,13 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE message ADD COLUMN pinnedAt INTEGER")
                 database.execSQL("ALTER TABLE notes ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE task ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]'")
+                database.execSQL("ALTER TABLE task ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'")
             }
         }
     }

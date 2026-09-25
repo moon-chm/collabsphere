@@ -91,6 +91,8 @@ object DatabaseFactory {
                 DirectMessagesTable,
                 DmReactionsTable,
                 ChannelReactionsTable,
+                NotificationMutesTable,
+                ChannelReadStateTable,
                 WorkspaceMembersTable,
                 UserBlocksTable,
                 UserVerificationTable,

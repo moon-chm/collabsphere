@@ -68,8 +68,15 @@ import com.collabsphere.app.view.components.ReplyQuote
 import com.collabsphere.app.view.components.ReactionChipsRow
 import com.collabsphere.app.view.components.ReactionPickerDialog
 import com.collabsphere.app.view.components.typingLabel
+import com.collabsphere.app.view.components.MarkdownText
+import com.collabsphere.app.view.components.LinkPreviewCard
+import com.collabsphere.app.view.components.seenByLabel
 import com.collabsphere.app.view.components.PinnedMessagesBanner
 import com.collabsphere.app.view.components.PinnedMessagesDialog
+import com.collabsphere.app.model.MuteRepo
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
+import org.koin.compose.koinInject
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -93,7 +100,12 @@ fun MessageScreen(
     val coroutineScope = rememberCoroutineScope()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    val readStates by viewModel.readStates.collectAsStateWithLifecycle()
     var showPinnedDialog by remember { mutableStateOf(false) }
+    val muteRepo = koinInject<MuteRepo>()
+    val mutes by muteRepo.mutes.collectAsStateWithLifecycle()
+    val isChannelMuted = MuteRepo.isChannelMuted(mutes, viewModel.currentWorkspaceId, viewModel.currentChannelId)
+    LaunchedEffect(Unit) { muteRepo.refresh() }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -276,6 +288,30 @@ fun MessageScreen(
                             color = Ink,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                muteRepo.setMuted(viewModel.currentWorkspaceId, viewModel.currentChannelId, !isChannelMuted)
+                                    .onSuccess {
+                                        Toast.makeText(
+                                            context,
+                                            if (isChannelMuted) "Channel unmuted" else "Channel muted — you'll still get @mentions",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    .onFailure {
+                                        Toast.makeText(context, "Couldn't update mute. Check your connection.", Toast.LENGTH_SHORT).show()
+                                    }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isChannelMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                            contentDescription = if (isChannelMuted) "Unmute channel" else "Mute channel",
+                            tint = if (isChannelMuted) Muted else IndigoStart
                         )
                     }
 
@@ -799,14 +835,16 @@ fun MessageScreen(
                                             }
                                         }
                                         if (message.content.isNotBlank() || message.mediaUrl == null) {
-                                            Text(
+                                            MarkdownText(
                                                 text = message.content,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
                                                     lineHeight = 20.sp,
                                                     fontSize = 15.sp
                                                 ),
-                                                color = if (isOwnMessage) Color.White else Ink
+                                                color = if (isOwnMessage) Color.White else Ink,
+                                                linkColor = if (isOwnMessage) Color.White else IndigoStart
                                             )
+                                            LinkPreviewCard(text = message.content, onDarkBubble = isOwnMessage)
                                         }
                                     }
 
@@ -904,6 +942,17 @@ fun MessageScreen(
                                     currentUserId = currentUserId,
                                     onToggle = { emoji -> viewModel.toggleReaction(message.id, emoji) }
                                 )
+
+                                if (message.id > 0 && message.id == messages?.lastOrNull()?.id) {
+                                    seenByLabel(readStates.values, message, currentUserId)?.let { label ->
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Muted,
+                                            modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 3.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

@@ -3,6 +3,7 @@ package com.collabsphere.app.viewmodel.task
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.model.UserEntity
+import com.collabsphere.app.dto.task.ChecklistItem
 import com.collabsphere.app.model.task.TaskEntity
 import com.collabsphere.app.model.task.TaskPriority
 import com.collabsphere.app.model.task.TaskRepo
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,12 +52,34 @@ class TaskViewModel(
             initialValue = emptyList()
         )
 
+    private val _labelFilter = MutableStateFlow<String?>(null)
+    val labelFilter = _labelFilter.asStateFlow()
+
+    val availableLabels: StateFlow<List<String>> = rawTasksFlow
+        .map { taskList ->
+            taskList.flatMap { it.labels }
+                .distinctBy { it.lowercase() }
+                .sortedBy { it.lowercase() }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun onLabelFilterChange(label: String?) {
+        _labelFilter.value = label
+    }
+
     val tasks: StateFlow<List<TaskUiModel>> = combine(
         rawTasksFlow,
-        workspaceMembers
-    ) { taskList, memberList ->
+        workspaceMembers,
+        _labelFilter
+    ) { taskList, memberList, filter ->
         val memberMap = memberList.associate { it.id to it.userName }
-        taskList.sortedWith(
+        taskList.filter { task ->
+            filter == null || task.labels.any { it.equals(filter, ignoreCase = true) }
+        }.sortedWith(
             compareByDescending<TaskEntity> { it.priority.ordinal }
                 .thenBy { it.dueDate ?: Long.MAX_VALUE }
                 .thenBy { it.id }
@@ -92,6 +116,9 @@ class TaskViewModel(
 
     private val _priority = MutableStateFlow(TaskPriority.MEDIUM)
     val priority = _priority.asStateFlow()
+
+    private val _labels = MutableStateFlow<List<String>>(emptyList())
+    val labels = _labels.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing = _isSyncing.asStateFlow()
@@ -135,6 +162,10 @@ class TaskViewModel(
         _priority.value = priority
     }
 
+    fun onLabelsChange(labels: List<String>) {
+        _labels.value = labels
+    }
+
     fun onCreateTask() {
         val name = _taskName.value.trim()
         val desc = _taskDescription.value.trim()
@@ -151,7 +182,8 @@ class TaskViewModel(
                 taskDescription = desc,
                 status = TaskStatus.TO_DO,
                 dueDate = _dueDate.value,
-                priority = _priority.value
+                priority = _priority.value,
+                labels = _labels.value
             )
             withContext(Dispatchers.IO) {
                 repo.addTask(task)
@@ -161,6 +193,7 @@ class TaskViewModel(
             _assignedUserId.value = null
             _dueDate.value = null
             _priority.value = TaskPriority.MEDIUM
+            _labels.value = emptyList()
         }
     }
 
@@ -212,7 +245,9 @@ class TaskViewModel(
         newName: String,
         newDescription: String,
         newDueDate: Long?,
-        newPriority: TaskPriority
+        newPriority: TaskPriority,
+        newChecklist: List<ChecklistItem>,
+        newLabels: List<String>
     ) {
         val updatedTaskName = newName.trim()
         val updatedTaskDescription = newDescription.trim()
@@ -222,7 +257,8 @@ class TaskViewModel(
         val isAssignee = oldTask.assignedToUserId == loggedUserId
         val isCreator = oldTask.createdByUserId == loggedUserId
         val contentChanged = updatedTaskName != oldTask.taskName || updatedTaskDescription != oldTask.taskDescription
-        val planningChanged = newDueDate != oldTask.dueDate || newPriority != oldTask.priority
+        val planningChanged = newDueDate != oldTask.dueDate || newPriority != oldTask.priority ||
+            newChecklist != oldTask.checklist || newLabels != oldTask.labels
 
         if (!contentChanged && !planningChanged) return
 
@@ -232,7 +268,7 @@ class TaskViewModel(
         }
 
         if (planningChanged && !isAssignee && !isCreator) {
-            sendUiEvent("Only the creator or assignee can change the due date or priority.")
+            sendUiEvent("Only the creator or assignee can change the due date, priority, checklist or labels.")
             return
         }
 
@@ -241,7 +277,9 @@ class TaskViewModel(
                 taskName = updatedTaskName,
                 taskDescription = updatedTaskDescription,
                 dueDate = newDueDate,
-                priority = newPriority
+                priority = newPriority,
+                checklist = newChecklist,
+                labels = newLabels
             )
             val outcome = withContext(Dispatchers.IO) {
                 repo.updateTask(updatedTask)

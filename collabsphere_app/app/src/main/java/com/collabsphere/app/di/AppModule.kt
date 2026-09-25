@@ -76,7 +76,7 @@ val databaseModule = module {
             // database and causes the UI Flow queries to stall — the main source of lag.
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41)
+            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42)
             .build()
     }
 
@@ -177,9 +177,12 @@ val appModule = module {
     single { androidContext().dataStore }
     single { UserPreferences(get()) }
     single { SessionManager(androidContext(), get(), get()) }
-    single { NotificationHelper(androidContext(), get()) }
+    single { NotificationHelper(androidContext(), get(), get()) }
     single { WorkManager.getInstance(androidContext()) }
     single { com.collabsphere.app.model.DraftStore(get()) }
+    single { com.collabsphere.app.model.QuietHoursStore(get()) }
+    single { com.collabsphere.app.model.MuteRepo(get()) }
+    single { com.collabsphere.app.model.LinkPreviewRepo(get(named("RegularHttpClient"))) }
 }
 
 val workerModule = module {

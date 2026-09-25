@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.collabsphere.app.dto.task.ChecklistItem
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.workspace.WorkspaceEntity
 
@@ -67,5 +68,9 @@ data class TaskEntity(
     val status: TaskStatus = TaskStatus.TO_DO,
     val dueDate: Long? = null,
     @ColumnInfo(defaultValue = "MEDIUM")
-    val priority: TaskPriority = TaskPriority.MEDIUM
+    val priority: TaskPriority = TaskPriority.MEDIUM,
+    @ColumnInfo(defaultValue = "[]")
+    val checklist: List<ChecklistItem> = emptyList(),
+    @ColumnInfo(defaultValue = "[]")
+    val labels: List<String> = emptyList()
 )

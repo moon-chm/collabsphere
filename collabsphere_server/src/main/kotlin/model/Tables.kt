@@ -118,6 +118,8 @@ object TasksTable : Table("task") {
     val status = varchar("status", 50)
     val dueDate = long("due_date").nullable()
     val priority = varchar("priority", 10).default("MEDIUM")
+    val checklist = text("checklist").nullable()
+    val labels = text("labels").nullable()
     val reminderSentAt = long("reminder_sent_at").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
@@ -140,6 +142,23 @@ object DirectMessagesTable : Table("direct_messages") {
     val timestamp = long("timestamp")
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object ChannelReadStateTable : Table("channel_read_state") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val channelId = integer("channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val lastReadMessageId = integer("last_read_message_id")
+    val updatedAt = long("updated_at")
+
+    override val primaryKey = PrimaryKey(userId, channelId)
+}
+
+object NotificationMutesTable : Table("notification_mutes") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val channelId = integer("channel_id").default(0)
+
+    override val primaryKey = PrimaryKey(userId, workspaceId, channelId)
 }
 
 object ChannelReactionsTable : Table("channel_reactions") {

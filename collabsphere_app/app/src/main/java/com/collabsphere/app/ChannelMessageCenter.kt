@@ -1,6 +1,7 @@
 package com.collabsphere.app
 
 import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.dto.message.ChannelTypingEvent
 import com.collabsphere.app.dto.message.MessageSyncDto
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,5 +28,12 @@ object ChannelMessageCenter {
 
     suspend fun pushTyping(event: ChannelTypingEvent) {
         _typing.emit(event)
+    }
+
+    private val _reads = MutableSharedFlow<ChannelReadState>(extraBufferCapacity = 64)
+    val reads: SharedFlow<ChannelReadState> = _reads.asSharedFlow()
+
+    suspend fun pushRead(state: ChannelReadState) {
+        _reads.emit(state)
     }
 }

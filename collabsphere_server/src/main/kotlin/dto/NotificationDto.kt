@@ -42,3 +42,16 @@ data class NotificationPushFrame(
     val action: String = "NOTIFICATION",
     val notification: NotificationResponse
 )
+
+@Serializable
+data class MuteSetting(
+    val workspaceId: Int,
+    val channelId: Int? = null
+)
+
+@Serializable
+data class MuteRequest(
+    val workspaceId: Int,
+    val channelId: Int? = null,
+    val muted: Boolean
+)

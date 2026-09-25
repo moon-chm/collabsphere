@@ -31,6 +31,12 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
+import com.collabsphere.app.model.MuteRepo
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckBox
@@ -95,6 +101,12 @@ fun WorkspaceDetailedScreen(
     workspaceMembers: List<UserEntity>
 ) {
     var selectedTab by remember(initialTab) { mutableStateOf(initialTab) }
+    val muteRepo = koinInject<MuteRepo>()
+    val mutes by muteRepo.mutes.collectAsStateWithLifecycle()
+    val isWorkspaceMuted = MuteRepo.isWorkspaceMuted(mutes, workspaceId)
+    val muteScope = rememberCoroutineScope()
+    val muteContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(workspaceId) { muteRepo.refresh() }
     var isDmInConversation by remember { mutableStateOf(false) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var memberEmailInput by remember { mutableStateOf("") }
@@ -421,6 +433,32 @@ fun WorkspaceDetailedScreen(
                             .weight(1f)
                             .padding(horizontal = 12.dp)
                     )
+
+                    IconButton(
+                        onClick = {
+                            muteScope.launch {
+                                muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
+                                    .onSuccess {
+                                        android.widget.Toast.makeText(
+                                            muteContext,
+                                            if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    .onFailure {
+                                        android.widget.Toast.makeText(muteContext, "Couldn't update mute. Check your connection.", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                            }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                            contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
+                            tint = if (isWorkspaceMuted) Muted else IndigoStart,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
                     IconButton(
                         onClick = onSearchClick,

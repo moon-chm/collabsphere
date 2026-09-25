@@ -88,6 +88,8 @@ fun TaskScreen(
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val members by viewModel.workspaceMembers.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val availableLabels by viewModel.availableLabels.collectAsStateWithLifecycle()
+    val labelFilter by viewModel.labelFilter.collectAsStateWithLifecycle()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
@@ -156,6 +158,13 @@ onDrawBehind {
                     )
                 }
             }
+
+            LabelFilterRow(
+                labels = availableLabels,
+                selected = labelFilter,
+                onSelect = viewModel::onLabelFilterChange,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+            )
 
             // Kanban Horizontal Scroll Columns
             Row(
@@ -542,6 +551,7 @@ fun SkeuoKanbanTaskCard(
             }
 
             TaskPlanningBadges(task = taskUi.task)
+            TaskLabelsAndProgress(task = taskUi.task)
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -662,6 +672,7 @@ fun CreateTaskDialog(
     val assignedUserId by viewModel.assignedUserId.collectAsStateWithLifecycle()
     val dueDate by viewModel.dueDate.collectAsStateWithLifecycle()
     val priority by viewModel.priority.collectAsStateWithLifecycle()
+    val labels by viewModel.labels.collectAsStateWithLifecycle()
 
     var dropdownExpanded by remember { mutableStateOf(false) }
     val selectedMemberName = members.find { it.id == assignedUserId }?.userName ?: "Unassigned"
@@ -793,6 +804,8 @@ onDrawBehind {
 
                 DueDateSelector(dueDate = dueDate, onDueDateChange = viewModel::onDueDateChange)
 
+                LabelEditor(labels = labels, onLabelsChange = viewModel::onLabelsChange)
+
                 // Assignee selection row
                 ExposedDropdownMenuBox(
                     expanded = dropdownExpanded,
@@ -908,6 +921,8 @@ fun UpdateTaskDialog(
     var updatedDescription by remember { mutableStateOf(task.taskDescription) }
     var updatedDueDate by remember { mutableStateOf(task.dueDate) }
     var updatedPriority by remember { mutableStateOf(task.priority) }
+    var updatedChecklist by remember { mutableStateOf(task.checklist) }
+    var updatedLabels by remember { mutableStateOf(task.labels) }
     val canPlan = viewModel.canPlan(task)
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1048,6 +1063,18 @@ onDrawBehind {
                     enabled = canPlan
                 )
 
+                LabelEditor(
+                    labels = updatedLabels,
+                    onLabelsChange = { updatedLabels = it },
+                    enabled = canPlan
+                )
+
+                ChecklistEditor(
+                    items = updatedChecklist,
+                    onItemsChange = { updatedChecklist = it },
+                    enabled = canPlan
+                )
+
                 if (gitHubViewModel != null) {
                     TaskGitHubLinksSection(
                         workspaceId = task.workspaceId,
@@ -1102,7 +1129,7 @@ onDrawBehind {
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = canUpdate) {
                                 if (updatedName.trim().isNotEmpty()) {
-                                    viewModel.onUpdateTask(task, updatedName, updatedDescription, updatedDueDate, updatedPriority)
+                                    viewModel.onUpdateTask(task, updatedName, updatedDescription, updatedDueDate, updatedPriority, updatedChecklist, updatedLabels)
                                     onDismiss()
                                 }
                             },

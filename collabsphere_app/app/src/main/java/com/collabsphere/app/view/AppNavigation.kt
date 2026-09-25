@@ -234,6 +234,12 @@ fun AppNavigation(
                             navController.navigate("workspace_detailed/${workspace.id}/$encodedName")
                         }
                     },
+                    onOpenWorkspaceTasks = { workspace ->
+                        if (navController.currentDestination?.route == "dashboard") {
+                            val encodedName = URLEncoder.encode(workspace.workspaceName, StandardCharsets.UTF_8.toString())
+                            navController.navigate("workspace_detailed/${workspace.id}/$encodedName?initialTab=1")
+                        }
+                    },
                     onDeleteWorkspaceClick = { workspace ->
                         if (navController.currentDestination?.route == "dashboard") {
                             val encodedName = URLEncoder.encode(workspace.workspaceName, StandardCharsets.UTF_8.toString())

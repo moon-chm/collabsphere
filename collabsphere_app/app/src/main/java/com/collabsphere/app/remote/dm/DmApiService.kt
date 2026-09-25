@@ -7,6 +7,7 @@ import com.collabsphere.app.NotificationCenter
 import com.collabsphere.app.dto.dm.DmDto
 import com.collabsphere.app.dto.message.ChannelMessageEvent
 import com.collabsphere.app.dto.message.ChannelReactionSummary
+import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.dto.message.ChannelTypingEvent
 import com.collabsphere.app.dto.notification.NotificationPushFrame
 import io.ktor.client.HttpClient
@@ -133,6 +134,15 @@ class DmApiService(
                                 ChannelMessageCenter.pushReaction(lenientJson.decodeFromString(ChannelReactionSummary.serializer(), textPayload))
                             } catch (e: Exception) {
                                 Log.w("DM_DEBUG", "Failed to decode channel reaction event", e)
+                            }
+                            continue
+                        }
+
+                        if (actionField == "CHANNEL_READ") {
+                            try {
+                                ChannelMessageCenter.pushRead(lenientJson.decodeFromString(ChannelReadState.serializer(), textPayload))
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode channel read event", e)
                             }
                             continue
                         }
