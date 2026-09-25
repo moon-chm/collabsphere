@@ -1845,6 +1845,7 @@ fun Application.configureRouting() {
                                         workspaceOwner = it[WorkspacesTable.workspaceOwner]
                                     )
                                 }
+                                .distinctBy { it.id }
                         }
 
                         call.respond(HttpStatusCode.OK, workspaces)

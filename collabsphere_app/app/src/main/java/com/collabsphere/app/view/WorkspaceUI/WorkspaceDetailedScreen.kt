@@ -452,95 +452,120 @@ fun WorkspaceDetailedScreen(
                             .padding(horizontal = 12.dp)
                     )
 
-                    IconButton(
-                        onClick = {
-                            muteScope.launch {
-                                muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
-                                    .onSuccess {
-                                        android.widget.Toast.makeText(
-                                            muteContext,
-                                            if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                    .onFailure {
-                                        android.widget.Toast.makeText(muteContext, "Couldn't update mute. Check your connection.", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                            }
-                        },
-                        modifier = Modifier.size(40.dp)
+                    // Trailing action icons with consistent spacing
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                            contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
-                            tint = if (isWorkspaceMuted) Muted else IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onSearchClick,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                    drawCircle(
-                                        color = ShadowDark.copy(alpha = 0.22f),
-                                        radius = size.minDimension / 2f,
-                                        center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                    )
-                                    drawCircle(
-                                        color = ShadowLight.copy(alpha = 0.90f),
-                                        radius = size.minDimension / 2f,
-                                        center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                    )
-                                    drawCircle(
-                                        color = Surface,
-                                        radius = size.minDimension / 2f
-                                    )
+                        // Mute / Unmute
+                        IconButton(
+                            onClick = {
+                                muteScope.launch {
+                                    muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
+                                        .onSuccess {
+                                            android.widget.Toast.makeText(
+                                                muteContext,
+                                                if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                        .onFailure {
+                                            android.widget.Toast.makeText(muteContext, "Couldn't update mute. Check your connection.", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
                                 }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search workspace",
-                            tint = IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .drawWithCache {
+                                    onDrawBehind {
+                                        drawCircle(
+                                            color = ShadowDark.copy(alpha = 0.22f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = ShadowLight.copy(alpha = 0.90f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = Surface,
+                                            radius = size.minDimension / 2f
+                                        )
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                                contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
+                                tint = if (isWorkspaceMuted) Muted else IndigoStart,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        // Search
+                        IconButton(
+                            onClick = onSearchClick,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .drawWithCache {
+                                    onDrawBehind {
+                                        drawCircle(
+                                            color = ShadowDark.copy(alpha = 0.22f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = ShadowLight.copy(alpha = 0.90f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = Surface,
+                                            radius = size.minDimension / 2f
+                                        )
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search workspace",
+                                tint = IndigoStart,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                    // Add Member Action
-                    IconButton(
-                        onClick = { showMembersDialog = true },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.90f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = Surface,
-                                    radius = size.minDimension / 2f
-                                )
-                                                            }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GroupAdd,
-                            contentDescription = "Add Member",
-                            tint = CoralStart,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        // Members / Add Member
+                        IconButton(
+                            onClick = { showMembersDialog = true },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .drawWithCache {
+                                    onDrawBehind {
+                                        drawCircle(
+                                            color = ShadowDark.copy(alpha = 0.22f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = ShadowLight.copy(alpha = 0.90f),
+                                            radius = size.minDimension / 2f,
+                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
+                                        )
+                                        drawCircle(
+                                            color = Surface,
+                                            radius = size.minDimension / 2f
+                                        )
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GroupAdd,
+                                contentDescription = "Add Member",
+                                tint = CoralStart,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
