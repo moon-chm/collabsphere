@@ -67,6 +67,77 @@ private val matteGrainBrush: ShaderBrush by lazy {
 }
 
 /**
+ * Neumorphic Wave Background.
+ * Draws a raised surface covering the left and bottom, with a curved cutout at the top-right.
+ * Used for the Auth screens to match the specific reference design.
+ */
+fun Modifier.skeuoWaveBackground(): Modifier = this.drawBehind {
+    val cr = 48.dp.toPx()
+    val el = 12.dp.toPx() // Increased elevation for deeper skeuomorphic feel
+    
+    val path = androidx.compose.ui.graphics.Path().apply {
+        moveTo(cr, 0f)
+        lineTo(size.width * 0.45f, 0f)
+        cubicTo(
+            size.width * 0.60f, 0f,
+            size.width * 0.55f, size.height * 0.35f,
+            size.width, size.height * 0.35f
+        )
+        lineTo(size.width, size.height - cr)
+        quadraticTo(size.width, size.height, size.width - cr, size.height)
+        lineTo(cr, size.height)
+        quadraticTo(0f, size.height, 0f, size.height - cr)
+        lineTo(0f, cr)
+        quadraticTo(0f, 0f, cr, 0f)
+        close()
+    }
+    
+    // Stronger shadows for "real" skeuomorphic look
+    val darkColor = Color(0xFF2C201A).copy(alpha = 0.22f) 
+    val lightColor = Color.White.copy(alpha = 0.95f)
+    
+    drawIntoCanvas { canvas ->
+        // Ambient drop shadow (dark, bottom-right)
+        val darkPaint = Paint().apply {
+            asFrameworkPaint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.TRANSPARENT
+                setShadowLayer(el * 3f, el * 1.5f, el * 1.8f, darkColor.toArgb())
+            }
+        }
+        // Specular highlight (light, top-left)
+        val lightPaint = Paint().apply {
+            asFrameworkPaint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.TRANSPARENT
+                setShadowLayer(el * 2.5f, -el * 1.2f, -el * 1.4f, lightColor.toArgb())
+            }
+        }
+        canvas.drawPath(path, darkPaint)
+        canvas.drawPath(path, lightPaint)
+    }
+    
+    // Fill the surface
+    drawPath(path, color = SurfaceRaised)
+    
+    // Add a sharp specular edge rim hugging the top-left contours (Classic Skeuomorphism)
+    val rimBrush = Brush.verticalGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.85f),
+            Color.White.copy(alpha = 0.15f),
+            Color.Transparent
+        ),
+        startY = 0f,
+        endY = size.height * 0.4f
+    )
+    drawPath(
+        path = path,
+        brush = rimBrush,
+        style = Stroke(width = 1.dp.toPx())
+    )
+}
+
+/**
  * Raised / Extruded Skeuomorphic Surface.
  * Simulates a card or button lifted off the canvas with dual soft shadows.
  * Uses real ARGB values via toArgb() for hardware paint rendering.

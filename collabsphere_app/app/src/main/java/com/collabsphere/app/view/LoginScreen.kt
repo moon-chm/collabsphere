@@ -28,6 +28,9 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.collabsphere.app.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -140,7 +143,7 @@ fun LoginScreen(
         }
     }
 
-    // ── Skeuomorphic shell ──
+    // ── Neumorphic Wave Shell ──
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -148,134 +151,173 @@ fun LoginScreen(
             .systemBarsPadding()
             .imePadding()
     ) {
+        // Inner wave shape
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 100.dp) // Leave space at bottom for social/footer
+                .skeuoWaveBackground()
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp, vertical = 24.dp),
+                .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(Modifier.height(32.dp))
+            
+            // ── Brand mark (CollabSphere Identity) ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.collabsphere),
+                    contentDescription = "CollabSphere Logo",
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+            
             Spacer(Modifier.height(24.dp))
 
-            // ── Brand mark ──
-            SkeuoBrandMark(letter = "C", accentColor = CoralStart)
-
-            Spacer(Modifier.height(20.dp))
-
             // ── Headline ──
-            Text(
-                text = "Welcome back",
-                style = MaterialTheme.typography.displaySmall,
-                color = Ink,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Sign in to access your workspaces",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Muted,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(36.dp))
-
-            // ── Form Card ──
-            SkeuoFormCard {
-                // Email field
-                SkeuoTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = "Email address",
-                    placeholder = "name@example.com",
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next,
-                    onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.Email, null,
-                            tint = CoralStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
-                            IconButton(onClick = { email = "" }) {
-                                Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Welcome",
+                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
                 )
-
-                Spacer(Modifier.height(14.dp))
-
-                // Password field
-                SkeuoTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = "Password",
-                    placeholder = "••••••••",
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                    onImeAction = { handleLogin() },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None
-                                           else PasswordVisualTransformation(),
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.Lock, null,
-                            tint = CoralStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = if (passwordVisible) Icons.Outlined.Visibility
-                                              else Icons.Outlined.VisibilityOff,
-                                contentDescription = if (passwordVisible) "Hide" else "Show",
-                                tint = Muted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                // Forgot password link
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Text(
-                        text = "Forgot password?",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = CoralStart,
-                        modifier = Modifier
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                showForgotPasswordDialog = true
-                            }
-                            .padding(4.dp)
-                    )
-                }
-
-                Spacer(Modifier.height(14.dp))
-
-                // CTA Button
-                SkeuoPrimaryButton(
-                    text = "Sign in",
-                    isLoading = isLoading,
-                    enabled = isFormValid && !isLoading,
-                    accentColor = CoralStart,
-                    onClick = { handleLogin() }
+                Text(
+                    text = "Back.",
+                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
                 )
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(48.dp))
+
+            // ── Form Fields (Directly on Wave Background) ──
+            // Email field
+            SkeuoTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "Email address",
+                placeholder = "",
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next,
+                onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                leadingIcon = null,
+                trailingIcon = {
+                    AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                        IconButton(onClick = { email = "" }) {
+                            Icon(Icons.Outlined.Clear, "Clear", tint = Muted, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // Password field
+            SkeuoTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = "Password",
+                placeholder = "••••••••",
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+                onImeAction = { handleLogin() },
+                visualTransformation = if (passwordVisible) VisualTransformation.None
+                                       else PasswordVisualTransformation(),
+                leadingIcon = null,
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Outlined.Visibility
+                                          else Icons.Outlined.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide" else "Show",
+                            tint = Muted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Checkbox and Forgot Password Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Simple skeuo checkbox (visual only for now)
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .skeuoInset(cornerRadius = 6.dp, depth = 2.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(SurfaceRaised),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Could add a checkmark icon here if state was true
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Remember Me",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted
+                    )
+                }
+                
+                Text(
+                    text = "Forgot password?",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = CoralStart,
+                    modifier = Modifier
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            showForgotPasswordDialog = true
+                        }
+                        .padding(4.dp)
+                )
+            }
+
+            Spacer(Modifier.height(36.dp))
+
+            // CTA Button
+            SkeuoPrimaryButton(
+                text = "Login",
+                isLoading = isLoading,
+                enabled = isFormValid && !isLoading,
+                accentColor = CoralStart,
+                onClick = { handleLogin() }
+            )
+
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(48.dp))
 
             // ── Footer ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = Muted.copy(alpha = 0.2f))
+                Text("or", style = MaterialTheme.typography.bodySmall, color = Muted)
+                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = Muted.copy(alpha = 0.2f))
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -393,7 +435,7 @@ fun ForgotPasswordDialog(
                         value = emailInput,
                         onValueChange = { emailInput = it },
                         label = "Email address",
-                        placeholder = "name@example.com",
+                        placeholder = "",
                         keyboardType = KeyboardType.Email,
                         leadingIcon = {
                             Icon(Icons.Outlined.Email, null, tint = CoralStart, modifier = Modifier.size(20.dp))
@@ -682,21 +724,22 @@ internal fun SkeuoTextField(
         Text(
             text  = label,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = Ink.copy(alpha = 0.75f)
+            color = Ink.copy(alpha = 0.75f),
+            modifier = Modifier.padding(start = 12.dp)
         )
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp)
-                .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                .clip(RoundedCornerShape(14.dp)),
+                .skeuoInset(cornerRadius = 27.dp, depth = 3.dp)
+                .clip(RoundedCornerShape(27.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
                 modifier          = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (leadingIcon != null) {
@@ -764,7 +807,7 @@ private fun BasicTextField_Compat(
     )
 }
 
-/** Skeuomorphic primary CTA button — Rich Coral gradient with dual shadow & spring press scale */
+/** Skeuomorphic primary CTA button — Neumorphic pill shape with accent text */
 @Composable
 internal fun SkeuoPrimaryButton(
     text       : String,
@@ -792,74 +835,16 @@ internal fun SkeuoPrimaryButton(
         label         = "btnScale"
     )
 
-    // True Coral (or Indigo) gradient tokens matching DESIGN.md
-    val isCoral = (accentColor == CoralStart)
-    val gradientStart = if (isCoral) CoralStart else IndigoStart
-    val gradientEnd   = if (isCoral) CoralEnd else IndigoEnd
-
-    val shadowColor  = gradientStart
-    val shadowAlpha  = if (isPressed) 0.15f else if (enabled) 0.38f else 0.20f
-    val shadowOffset = if (isPressed) 2.dp else 5.dp
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .drawWithCache {
-                val cr = CornerRadius(16.dp.toPx())
-                onDrawBehind {
-                // 1. Colored ambient drop shadow underneath button
-                drawRoundRect(
-                    color        = shadowColor.copy(alpha = shadowAlpha),
-                    topLeft      = Offset(0f, shadowOffset.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = cr
-                )
-                // 2. Top-left specular halo
-                drawRoundRect(
-                    color        = Color.White.copy(alpha = 0.35f),
-                    topLeft      = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = cr
-                )
-                // 3. True Coral (or Indigo) gradient fill — always vibrant brand tone
-                drawRoundRect(
-                    brush = Brush.linearGradient(
-                        colors = if (enabled) {
-                            listOf(gradientStart, gradientEnd)
-                        } else {
-                            listOf(
-                                gradientStart.copy(alpha = 0.72f),
-                                gradientEnd.copy(alpha = 0.72f)
-                            )
-                        },
-                        start  = Offset(0f, 0f),
-                        end    = Offset(size.width, size.height)
-                    ),
-                    cornerRadius = cr
-                )
-                // 4. Top hairline highlight hugging rounded contour
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.45f),
-                            Color.White.copy(alpha = 0.12f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 16.dp.toPx()
-                    ),
-                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = cr,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                }
-            }
-            .clip(RoundedCornerShape(16.dp))
+            .skeuoRaised(cornerRadius = 28.dp, elevation = if (isPressed) 2.dp else 6.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(SurfaceRaised)
             .clickable(
-                enabled           = !isLoading,
+                enabled           = enabled && !isLoading,
                 interactionSource = interactionSource,
                 indication        = null,
                 onClick           = onClick
@@ -869,17 +854,17 @@ internal fun SkeuoPrimaryButton(
         if (isLoading) {
             CircularProgressIndicator(
                 modifier    = Modifier.size(22.dp),
-                color       = Color.White,
+                color       = accentColor,
                 strokeWidth = 2.5.dp
             )
         } else {
             Text(
                 text  = text,
                 style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
                 ),
-                color = Color.White
+                color = if (enabled) accentColor else Muted
             )
         }
     }
