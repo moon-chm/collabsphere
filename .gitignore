@@ -25,10 +25,11 @@ test_download.docx
 !**/local_files_upload/.gitkeep
 *.sql
 
-# Firebase service account credentials - NEVER commit these
+# Firebase service account & client credentials - NEVER commit these
 *firebase-adminsdk*.json
 service-account.json
 firebase-service-account.json
+*google-services.json
 
 # Google API OAuth credentials & tokens - NEVER commit these
 *client_secret*.json

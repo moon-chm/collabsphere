@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "873093831959",
-    "project_id": "collabsphere-66131",
-    "storage_bucket": "collabsphere-66131.firebasestorage.app"
+    "project_number": "000000000000",
+    "project_id": "collabsphere-demo",
+    "storage_bucket": "collabsphere-demo.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:873093831959:android:da67e95d73e80f3b77eb52",
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
         "android_client_info": {
           "package_name": "com.collabsphere.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC_J1BZHaadhrLkEWN_jhc6VgNHTS4Cvzk"
+          "current_key": "YOUR_FIREBASE_API_KEY_HERE"
         }
       ],
       "services": {

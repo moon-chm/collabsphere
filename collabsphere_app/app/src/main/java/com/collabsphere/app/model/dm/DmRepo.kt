@@ -3,8 +3,12 @@ import android.util.Log
 
 import androidx.work.*
 import com.collabsphere.app.dto.dm.DmDto
+import com.collabsphere.app.model.RetryOutcome
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.isWorkRunning
 import com.collabsphere.app.remote.dm.DmApiService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -85,18 +89,45 @@ class DmRepo(
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
             Log.e("DmRepo", "Operation failed", e)
-            val syncData = workDataOf(
-                "ACTION_TYPE" to "SEND_MESSAGE",
-                "DM_ID" to tempId,
-                "WORKSPACE_ID" to workspaceId,
-                "SENDER_ID" to senderId,
-                "RECEIVER_ID" to receiverId,
-                "CONTENT" to content,
-                "TIMESTAMP" to timestampVal,
-                "MEDIA_URL" to mediaUrl,
-                "REPLY_TO_ID" to (replyToId ?: 0)
+            enqueueSync(temporaryLocalEntity.toSendWorkData())
+        }
+    }
+
+    private fun DmEntity.toSendWorkData() = workDataOf(
+        "ACTION_TYPE" to "SEND_MESSAGE",
+        "DM_ID" to id,
+        "WORKSPACE_ID" to workspaceId,
+        "SENDER_ID" to senderId,
+        "RECEIVER_ID" to receiverId,
+        "CONTENT" to dm_content,
+        "TIMESTAMP" to timestamp,
+        "MEDIA_URL" to mediaUrl,
+        "REPLY_TO_ID" to (replyToId ?: 0)
+    )
+
+    suspend fun retryPendingDm(dm: DmEntity): RetryOutcome = withContext(Dispatchers.IO) {
+        if (dm.id >= 0) return@withContext RetryOutcome.SENT
+        val workName = "DM_SYNC_${dm.id}"
+        if (isWorkRunning(workManager, workName)) return@withContext RetryOutcome.ALREADY_SENDING
+        workManager.cancelUniqueWork(workName)
+        try {
+            apiService.sendDm(
+                DmDto(
+                    action = "SEND_MESSAGE",
+                    workspaceId = dm.workspaceId,
+                    senderId = dm.senderId,
+                    receiverId = dm.receiverId,
+                    content = dm.dm_content,
+                    timestamp = dm.timestamp,
+                    mediaUrl = dm.mediaUrl,
+                    replyToId = dm.replyToId
+                )
             )
-            enqueueSync(syncData)
+            RetryOutcome.SENT
+        } catch (e: Exception) {
+            Log.e("DmRepo", "Manual retry failed", e)
+            enqueueSync(dm.toSendWorkData())
+            RetryOutcome.STILL_OFFLINE
         }
     }
 

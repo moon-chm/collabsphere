@@ -6,6 +6,7 @@ import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.model.DraftStore
+import com.collabsphere.app.model.retryOutcomeMessage
 import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.model.message.MessageRepo
 import com.collabsphere.app.model.message.MessageStatus
@@ -321,6 +322,12 @@ class MessageViewModel(
                     _uiMessages.tryEmit("Couldn't upload the image. Check your connection and try again.")
                 }
             _isUploadingMedia.value = false
+        }
+    }
+
+    fun retryMessage(message: MessageEntity) {
+        viewModelScope.launch {
+            retryOutcomeMessage(repo.retryPendingMessage(message))?.let { _uiMessages.tryEmit(it) }
         }
     }
 

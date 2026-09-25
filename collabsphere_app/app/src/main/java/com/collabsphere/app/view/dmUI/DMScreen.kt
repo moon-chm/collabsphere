@@ -62,6 +62,9 @@ import com.collabsphere.app.view.components.ReplyComposerBanner
 import com.collabsphere.app.view.components.ReplyQuote
 import com.collabsphere.app.view.components.MarkdownText
 import com.collabsphere.app.view.components.LinkPreviewCard
+import com.collabsphere.app.view.components.PendingMessageLabel
+import android.widget.Toast
+import com.collabsphere.app.view.components.isStalePending
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -265,6 +268,13 @@ fun DMScreen(
         draftStore.save(DraftStore.dmKey(workspaceId, partnerId), typedText)
     }
     val messagesById = remember(messages) { messages.associateBy { it.id } }
+    val hasPendingMessages = messages.any { it.id < 0 }
+    val pendingClock by produceState(System.currentTimeMillis(), hasPendingMessages) {
+        while (hasPendingMessages) {
+            value = System.currentTimeMillis()
+            delay(2_000)
+        }
+    }
     val replyScope = rememberCoroutineScope()
     val scrollToMessage: (Int) -> Unit = { targetId ->
         val index = messages.indexOfFirst { it.id == targetId }
@@ -1329,6 +1339,17 @@ fun DMScreen(
                                                                 linkColor = Color.White
                                                             )
                                                             LinkPreviewCard(text = message.dm_content, onDarkBubble = true)
+                                                        }
+
+                                                        if (message.id < 0) {
+                                                            PendingMessageLabel(
+                                                                stale = isStalePending(message.id, message.timestamp, pendingClock),
+                                                                onDarkBubble = true
+                                                            ) {
+                                                                viewModel.retryMessage(message) { feedback ->
+                                                                    feedback?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                                                                }
+                                                            }
                                                         }
 
                                                         // Timestamp + Read receipt row

@@ -90,6 +90,7 @@ fun WorkspaceDetailedScreen(
     initialPartnerId: Int? = null,
     onBack: () -> Unit,
     onSearchClick: () -> Unit = {},
+    onLeftWorkspace: () -> Unit = {},
     onChannelClick: (ChannelEntity) -> Unit,
     onAddMemberSubmit: (email: String) -> Unit,
     channelViewModel: ChannelViewModel,
@@ -109,6 +110,23 @@ fun WorkspaceDetailedScreen(
     LaunchedEffect(workspaceId) { muteRepo.refresh() }
     var isDmInConversation by remember { mutableStateOf(false) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
+    var showMembersDialog by remember { mutableStateOf(false) }
+
+    if (showMembersDialog) {
+        WorkspaceMembersDialog(
+            workspaceId = workspaceId,
+            currentUserId = userId.toInt(),
+            onInviteClick = {
+                showMembersDialog = false
+                showAddMemberDialog = true
+            },
+            onLeftWorkspace = {
+                showMembersDialog = false
+                onLeftWorkspace()
+            },
+            onDismiss = { showMembersDialog = false }
+        )
+    }
     var memberEmailInput by remember { mutableStateOf("") }
 
     // Skeuomorphic Add Member Dialog
@@ -495,7 +513,7 @@ fun WorkspaceDetailedScreen(
 
                     // Add Member Action
                     IconButton(
-                        onClick = { showAddMemberDialog = true },
+                        onClick = { showMembersDialog = true },
                         modifier = Modifier
                             .size(40.dp)
                             .drawWithCache {

@@ -2,6 +2,7 @@ package com.collabsphere.app.viewmodel.channel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.collabsphere.app.model.channels.ChannelDeleteResult
 import com.collabsphere.app.model.channels.ChannelEntity
 import com.collabsphere.app.model.channels.ChannelRepo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,15 +90,15 @@ class ChannelViewModel(
 
     fun onDeleteChannel(channel: ChannelEntity) {
         viewModelScope.launch {
-            val isDeleted = repo.deletechanneltoscreen(
+            val result = repo.deletechanneltoscreen(
                 channelName = channel.channelName,
                 workspaceId = loggedWorkspaceId,
                 userId = channel.userId
             )
-            if (isDeleted) {
-                _channelStatus.value = "Channel #${channel.channelName} deleted"
-            } else {
-                _channelStatus.value = "Failed to delete channel"
+            _channelStatus.value = when (result) {
+                ChannelDeleteResult.DELETED -> "Channel #${channel.channelName} deleted"
+                ChannelDeleteResult.FORBIDDEN -> "Only workspace admins or the channel's creator can delete #${channel.channelName}"
+                ChannelDeleteResult.FAILED -> "Failed to delete channel"
             }
         }
     }

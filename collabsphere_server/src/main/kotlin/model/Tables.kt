@@ -41,6 +41,7 @@ object WorkspacesTable : Table("workspace") {
 object WorkspaceMembersTable : Table("workspace_members") {
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val role = varchar("role", 10).default("MEMBER")
 
     override val primaryKey = PrimaryKey(workspaceId, userId)
 }

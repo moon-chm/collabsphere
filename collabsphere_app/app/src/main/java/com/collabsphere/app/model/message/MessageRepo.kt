@@ -8,7 +8,9 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.MessageSyncDto
+import com.collabsphere.app.model.RetryOutcome
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.isWorkRunning
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.ChannelReadState
@@ -45,20 +47,34 @@ class MessageRepo(
     // second independent 3s poller against the same endpoint.
     private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<Int, Int>>()
 
+    private fun MessageEntity.toCreateRequest() = MessageRequest(
+        id = id,
+        userId = userId,
+        workspaceId = workspaceId,
+        channelId = channelId,
+        userName = userName,
+        content = content,
+        status = status.name,
+        replyToId = replyToId,
+        mediaUrl = mediaUrl
+    )
+
+    private fun MessageEntity.toCreateWorkData(localId: Int) = workDataOf(
+        "ACTION_TYPE" to "CREATE",
+        "REPLY_TO_ID" to (replyToId ?: 0),
+        "MEDIA_URL" to mediaUrl,
+        "MESSAGE_ID" to localId,
+        "USER_ID" to userId,
+        "WORKSPACE_ID" to workspaceId,
+        "CHANNEL_ID" to channelId,
+        "USER_NAME" to userName,
+        "CONTENT" to content,
+        "STATUS" to status.name
+    )
+
     suspend fun sendMessageToUser(message: MessageEntity): Long = withContext(Dispatchers.IO) {
         return@withContext try {
-            val request = MessageRequest(
-                id = message.id,
-                userId = message.userId,
-                workspaceId = message.workspaceId,
-                channelId = message.channelId,
-                userName = message.userName,
-                content = message.content,
-                status = message.status.name,
-                replyToId = message.replyToId,
-                mediaUrl = message.mediaUrl
-            )
-            val remoteMessage = apiService.createMessage(request)
+            val remoteMessage = apiService.createMessage(message.toCreateRequest())
             val updatedMessage = message.copy(id = remoteMessage.id)
             messageDao.sendMessage(updatedMessage)
         } catch (e: Exception) {
@@ -66,20 +82,24 @@ class MessageRepo(
             // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
             // id == 0, so a positive fallback here could collide with a real id synced down later.
             val localId = messageDao.sendMessage(message.copy(id = TempId.next()))
-            val syncData = workDataOf(
-                "ACTION_TYPE" to "CREATE",
-                "REPLY_TO_ID" to (message.replyToId ?: 0),
-                "MEDIA_URL" to message.mediaUrl,
-                "MESSAGE_ID" to localId.toInt(),
-                "USER_ID" to message.userId,
-                "WORKSPACE_ID" to message.workspaceId,
-                "CHANNEL_ID" to message.channelId,
-                "USER_NAME" to message.userName,
-                "CONTENT" to message.content,
-                "STATUS" to message.status.name
-            )
-            enqueueSync(syncData)
+            enqueueSync(message.toCreateWorkData(localId.toInt()))
             localId
+        }
+    }
+
+    suspend fun retryPendingMessage(message: MessageEntity): RetryOutcome = withContext(Dispatchers.IO) {
+        if (message.id >= 0) return@withContext RetryOutcome.SENT
+        val workName = "MESSAGE_SYNC_${message.id}"
+        if (isWorkRunning(workManager, workName)) return@withContext RetryOutcome.ALREADY_SENDING
+        workManager.cancelUniqueWork(workName)
+        try {
+            val remote = apiService.createMessage(message.toCreateRequest())
+            messageDao.replaceTempId(message.id, remote.id)
+            RetryOutcome.SENT
+        } catch (e: Exception) {
+            Log.e("MessageRepo", "Manual retry failed", e)
+            enqueueSync(message.toCreateWorkData(message.id))
+            RetryOutcome.STILL_OFFLINE
         }
     }
 

@@ -4,6 +4,7 @@ import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.search.WorkspaceSearchResponse
 import com.collabsphere.app.dto.workspace.AddMemberRequest
 import com.collabsphere.app.dto.workspace.MemberResponse
+import com.collabsphere.app.dto.workspace.RoleRequest
 import com.collabsphere.app.dto.workspace.WorkspaceRequest
 import com.collabsphere.app.dto.workspace.WorkspaceResponse
 import com.collabsphere.app.dto.workspace.WorkspaceSyncDto
@@ -72,6 +73,15 @@ class WorkspaceApiService(
             parameter("since", since)
         }.body()
     }
+
+    suspend fun removeMember(workspaceId: Int, userId: Int): HttpStatusCode =
+        client.delete("$baseUrl/$workspaceId/members/$userId").status
+
+    suspend fun setMemberRole(workspaceId: Int, userId: Int, role: String): HttpStatusCode =
+        client.put("$baseUrl/$workspaceId/members/$userId/role") {
+            contentType(ContentType.Application.Json)
+            setBody(RoleRequest(role))
+        }.status
 
     suspend fun getWorkspaceMembers(workspaceId: Int): List<MemberResponse> {
         return client.get("$baseUrl/members/$workspaceId") {

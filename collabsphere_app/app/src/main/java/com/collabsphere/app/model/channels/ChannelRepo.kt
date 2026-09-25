@@ -10,6 +10,8 @@ import com.collabsphere.app.dto.channel.ChannelRequest
 import com.collabsphere.app.dto.channel.ChannelSyncDto
 import com.collabsphere.app.model.TempId
 import com.collabsphere.app.remote.channel.ChannelApiService
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +20,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+
+enum class ChannelDeleteResult { DELETED, FORBIDDEN, FAILED }
 
 class ChannelRepo(
     private val channelDao: ChannelDao,
@@ -72,11 +76,17 @@ class ChannelRepo(
         }
     }
 
-    suspend fun deletechanneltoscreen(channelName: String, workspaceId: Int, userId: Int?): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deletechanneltoscreen(channelName: String, workspaceId: Int, userId: Int?): ChannelDeleteResult = withContext(Dispatchers.IO) {
         return@withContext try {
-            val apiSuccess = apiService.deleteChannel(channelName, workspaceId, userId)
-            val deletedRows = channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
-            deletedRows > 0 || apiSuccess
+            val status = apiService.deleteChannel(channelName, workspaceId, userId)
+            when {
+                status == HttpStatusCode.Forbidden -> ChannelDeleteResult.FORBIDDEN
+                status.isSuccess() || status == HttpStatusCode.NotFound -> {
+                    channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
+                    ChannelDeleteResult.DELETED
+                }
+                else -> ChannelDeleteResult.FAILED
+            }
         } catch (e: Exception) {
             Log.e("ChannelRepo", "Operation failed", e)
             val deletedRows = channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
@@ -88,7 +98,7 @@ class ChannelRepo(
             )
             enqueueSync(syncData)
 
-            deletedRows > 0
+            if (deletedRows > 0) ChannelDeleteResult.DELETED else ChannelDeleteResult.FAILED
         }
     }
 

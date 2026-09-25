@@ -29,8 +29,30 @@ data class MemberResponse(
     val userId: Int,
     val userName: String,
     val email: String,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val role: String = "MEMBER"
 )
+
+@Serializable
+data class RoleRequest(
+    val role: String
+)
+
+object WorkspaceRoles {
+    const val OWNER = "OWNER"
+    const val ADMIN = "ADMIN"
+    const val MEMBER = "MEMBER"
+
+    fun canModerate(role: String?): Boolean = role == OWNER || role == ADMIN
+
+    fun canRemove(actorRole: String?, targetRole: String, isSelf: Boolean): Boolean = when {
+        actorRole == null -> false
+        isSelf -> targetRole != OWNER
+        targetRole == OWNER -> false
+        targetRole == ADMIN -> actorRole == OWNER
+        else -> canModerate(actorRole)
+    }
+}
 @Serializable
 data class WorkspaceSyncDto(
     val id: Int,

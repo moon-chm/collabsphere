@@ -239,6 +239,21 @@ internal fun isMember(userId: Int, workspaceId: Int): Boolean =
         .where { (WorkspaceMembersTable.workspaceId eq workspaceId) and (WorkspaceMembersTable.userId eq userId) }
         .count() > 0
 
+internal fun workspaceOwnerId(workspaceId: Int): Int? =
+    WorkspacesTable.select(WorkspacesTable.userId)
+        .where { WorkspacesTable.id eq workspaceId }
+        .singleOrNull()
+        ?.get(WorkspacesTable.userId)
+
+internal fun workspaceRole(userId: Int, workspaceId: Int): String? {
+    val memberRole = WorkspaceMembersTable.select(WorkspaceMembersTable.role)
+        .where { (WorkspaceMembersTable.workspaceId eq workspaceId) and (WorkspaceMembersTable.userId eq userId) }
+        .singleOrNull()
+        ?.get(WorkspaceMembersTable.role)
+        ?: return null
+    return if (workspaceOwnerId(workspaceId) == userId) WorkspaceRoles.OWNER else memberRole
+}
+
 /** Regex to detect @username mentions in message content. */
 private val MENTION_REGEX = Regex("@(\\w{2,})") 
 
@@ -1255,6 +1270,66 @@ fun Application.configureRouting() {
 
             route("/api/workspace") {
 
+                delete("/{workspaceId}/members/{userId}") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val targetUserId = call.parameters["userId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || targetUserId == null) {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId or userId")
+                            return@delete
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val outcome = dbQuery {
+                            val actorRole = workspaceRole(actingUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.Forbidden
+                            val targetRole = workspaceRole(targetUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.NotFound
+                            if (!WorkspaceRoles.canRemove(actorRole, targetRole, isSelf = actingUserId == targetUserId)) {
+                                return@dbQuery HttpStatusCode.Forbidden
+                            }
+                            WorkspaceMembersTable.deleteWhere {
+                                (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq targetUserId)
+                            }
+                            NotificationMutesTable.deleteWhere {
+                                (NotificationMutesTable.workspaceId eq workspaceIdParam) and (NotificationMutesTable.userId eq targetUserId)
+                            }
+                            HttpStatusCode.OK
+                        }
+                        call.respond(outcome, outcome == HttpStatusCode.OK)
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, false)
+                    }
+                }
+
+                put("/{workspaceId}/members/{userId}/role") {
+                    try {
+                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                        val targetUserId = call.parameters["userId"]?.toIntOrNull()
+                        if (workspaceIdParam == null || targetUserId == null) {
+                            call.respond(HttpStatusCode.BadRequest, false)
+                            return@put
+                        }
+                        val actingUserId = call.authenticatedUserId()
+                        val requestedRole = call.receive<RoleRequest>().role.trim().uppercase()
+                        if (requestedRole != WorkspaceRoles.ADMIN && requestedRole != WorkspaceRoles.MEMBER) {
+                            call.respond(HttpStatusCode.BadRequest, false)
+                            return@put
+                        }
+                        val outcome = dbQuery {
+                            if (workspaceRole(actingUserId, workspaceIdParam) != WorkspaceRoles.OWNER) return@dbQuery HttpStatusCode.Forbidden
+                            val targetRole = workspaceRole(targetUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.NotFound
+                            if (targetRole == WorkspaceRoles.OWNER) return@dbQuery HttpStatusCode.BadRequest
+                            WorkspaceMembersTable.update({
+                                (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq targetUserId)
+                            }) {
+                                it[WorkspaceMembersTable.role] = requestedRole
+                            }
+                            HttpStatusCode.OK
+                        }
+                        call.respond(outcome, outcome == HttpStatusCode.OK)
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.BadRequest, false)
+                    }
+                }
+
                 get("/{workspaceId}/search") {
                     try {
                         val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
@@ -1788,6 +1863,7 @@ fun Application.configureRouting() {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
+                            val ownerId = workspaceOwnerId(workspaceIdParam)
                             (WorkspaceMembersTable innerJoin UsersTable)
                                 .selectAll()
                                 .where { WorkspaceMembersTable.workspaceId eq workspaceIdParam }
@@ -1797,7 +1873,8 @@ fun Application.configureRouting() {
                                         userId = it[UsersTable.id],
                                         userName = it[UsersTable.username],
                                         email = it[UsersTable.email],
-                                        avatarUrl = it[UsersTable.avatarUrl]
+                                        avatarUrl = it[UsersTable.avatarUrl],
+                                        role = if (it[UsersTable.id] == ownerId) WorkspaceRoles.OWNER else it[WorkspaceMembersTable.role]
                                     )
                                 }
                         }
@@ -1945,14 +2022,16 @@ fun Application.configureRouting() {
                         }
 
                         val updatedRows = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery -1
-                            }
-                            ChannelsTable.update({
+                            val role = workspaceRole(actingUserId, workspaceIdParam) ?: return@dbQuery -1
+                            val channel = ChannelsTable.selectAll().where {
                                 (ChannelsTable.channelName eq channelNameParam) and
                                         (ChannelsTable.workspaceId eq workspaceIdParam) and
-                                        ((ChannelsTable.userId eq actingUserId) or ChannelsTable.userId.isNull())
-                            }) {
+                                        (ChannelsTable.isDeleted eq false)
+                            }.firstOrNull() ?: return@dbQuery 0
+                            if (!WorkspaceRoles.canModerate(role) && channel[ChannelsTable.userId] != actingUserId) {
+                                return@dbQuery -1
+                            }
+                            ChannelsTable.update({ ChannelsTable.id eq channel[ChannelsTable.id] }) {
                                 it[isDeleted] = true
                                 it[updatedAt] = System.currentTimeMillis()
                             }

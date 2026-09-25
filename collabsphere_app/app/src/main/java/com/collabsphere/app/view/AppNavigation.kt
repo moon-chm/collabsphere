@@ -17,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -443,6 +445,7 @@ fun AppNavigation(
                 val workspaceMembers by workspaceViewModel.workspaceMembers.collectAsStateWithLifecycle()
 
                 val workspaceRepo = koinInject<WorkspaceRepo>()
+                val leaveScope = rememberCoroutineScope()
                 val channelRepo = koinInject<ChannelRepo>()
                 val notesRepo = koinInject<NotesRepo>()
                 val taskRepo = koinInject<TaskRepo>()
@@ -559,6 +562,12 @@ fun AppNavigation(
                     },
                     onAddMemberSubmit = { email ->
                         workspaceViewModel.onJoinWorkspace(workspaceId, email)
+                    },
+                    onLeftWorkspace = {
+                        leaveScope.launch {
+                            workspaceRepo.removeLocalWorkspace(workspaceId)
+                            navController.popBackStack()
+                        }
                     }
                 )
             }

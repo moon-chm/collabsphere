@@ -11,6 +11,7 @@ import com.collabsphere.app.NotificationHelper
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.dm.DmEntity
 import com.collabsphere.app.model.dm.DmRepo
+import com.collabsphere.app.model.retryOutcomeMessage
 import com.collabsphere.app.model.workspace.WorkspaceRepo
 import com.collabsphere.app.remote.dm.DmWebSocketService
 import kotlinx.coroutines.Job
@@ -279,6 +280,12 @@ class DmViewModel(
             } catch (e: Exception) {
                 Log.e("DmViewModel", "Operation failed", e)
             }
+        }
+    }
+
+    fun retryMessage(dm: DmEntity, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            onResult(retryOutcomeMessage(repo.retryPendingDm(dm)))
         }
     }
 

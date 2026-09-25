@@ -71,6 +71,7 @@ import com.collabsphere.app.view.components.typingLabel
 import com.collabsphere.app.view.components.MarkdownText
 import com.collabsphere.app.view.components.LinkPreviewCard
 import com.collabsphere.app.view.components.seenByLabel
+import com.collabsphere.app.view.components.PendingMessageLabel
 import com.collabsphere.app.view.components.PinnedMessagesBanner
 import com.collabsphere.app.view.components.PinnedMessagesDialog
 import com.collabsphere.app.model.MuteRepo
@@ -845,6 +846,11 @@ fun MessageScreen(
                                                 linkColor = if (isOwnMessage) Color.White else IndigoStart
                                             )
                                             LinkPreviewCard(text = message.content, onDarkBubble = isOwnMessage)
+                                        }
+                                        if (isOwnMessage && message.id < 0) {
+                                            PendingMessageLabel(stale = true, onDarkBubble = true) {
+                                                viewModel.retryMessage(message)
+                                            }
                                         }
                                     }
 

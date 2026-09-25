@@ -26,6 +26,10 @@ class WorkspaceRepo(
     private val workManager: WorkManager,
     private val dataStore: DataStore<Preferences>
 ) {
+    suspend fun removeLocalWorkspace(workspaceId: Int) = withContext(Dispatchers.IO) {
+        workspaceDao.deleteWorkspaceById(workspaceId)
+    }
+
     companion object {
         private val LAST_SYNC_KEY = longPreferencesKey("workspaces_last_sync_time")
     }
