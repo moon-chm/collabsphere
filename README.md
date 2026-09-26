@@ -28,29 +28,34 @@ graph TD
 
 ## ✨ Features
 
-### 1. 🔐 User Authentication & Cache FALLBACK
-* **Precedence-based Login**: Authenticates online first, caching credentials if successful. Falls back to Room local cache if offline, ensuring uninterrupted login.
-* **Profile Management**: Instant profile update with real-time UI propagation across Compose screens.
+### 1. 🔐 User Authentication & Local Resilience
+* **Precedence-based Login**: Authenticates online first, caching credentials securely. Falls back to local cache if offline, ensuring uninterrupted login and access to offline data.
+* **Profile Management**: Instant profile updates with real-time UI propagation across Jetpack Compose screens.
 
-### 2. 🏢 Workspace Management
-* **Custom Workspaces**: Create private workspaces, configure owners, and invite teammates via email.
-* **Cascading Swaps**: Generates offline-safe temporary IDs when created offline. Automatically resolves and swaps temporary workspace IDs to server-generated IDs once online, propagating updates to all associated channels, messages, files, and tasks.
+### 2. 🏢 Advanced Workspace Management
+* **Custom Workspaces**: Create private workspaces, manage permissions, and invite teammates seamlessly.
+* **Cascading Offline Swaps**: Generates offline-safe temporary IDs when creating resources offline. Automatically resolves and swaps temporary IDs to server-generated IDs once connectivity is restored, seamlessly propagating updates across all associated channels, messages, files, and tasks.
 
 ### 3. 💬 Real-Time Messaging (Channels & DMs)
-* **Real-time DMs**: WebSockets-driven direct messaging with active connection monitoring in background sync workers.
-* **Channels**: Dedicated communication channels per workspace with offline queuing.
-* **DMs Cache Integrity**: Random negative ID generation for unsent offline DMs to avoid cache collisions. Auto-matches content & timestamp on server acknowledgment to delete temporary local copies and insert the official server DM record.
+* **Real-time WebSockets**: Lightning-fast, WebSockets-driven direct messaging and channel communication with active background connection monitoring.
+* **Dedicated Channels**: Workspace-specific communication channels featuring offline message queuing.
+* **Cache Integrity**: Smart random negative ID generation for unsent offline messages avoids collisions. Auto-matches content & timestamp on server acknowledgment to resolve local records without duplication.
 
-### 4. 📋 Task Management
-* **Workspace Tracker**: Create and delegate tasks to team members within a workspace.
-* **Task Statuses**: Track task flow via `To Do`, `In Progress`, and `Done` states. Syncs automatically in the background.
+### 4. 📋 Task Tracking & Delegation
+* **Workspace Tracker**: Create, manage, and delegate tasks to team members within specific workspaces.
+* **Progress Statuses**: Track task flow via `To Do`, `In Progress`, and `Done` states with automatic background synchronization powered by Android WorkManager.
 
-### 5. 📝 Workspace Notes
-* **Local Notes Cache**: Document ideas and meeting notes locally. Synchronizes via WorkManager in the background once internet connectivity is restored.
+### 5. 📝 Collaborative Workspace Notes
+* **Local Notes Cache**: Document ideas and meeting notes reliably in an offline-first format.
+* **Background Synchronization**: Synchronizes automatically once internet connectivity is restored, ensuring zero data loss and seamless team collaboration.
 
-### 6. 📁 File Uploads & Downloads
-* **Multipart File Transfer**: Upload document attachments directly to the server.
-* **Offline Upload Queue**: Queues upload operations and resolves local-to-remote file IDs for seamless management.
+### 6. 📁 File Sharing & Attachment Management
+* **Multipart File Transfer**: Upload, share, and download document attachments directly from the server.
+* **Offline Upload Queue**: Smartly queues upload operations and gracefully resolves local-to-remote file IDs for uninterrupted file management in low-connectivity environments.
+
+### 7. 🎨 Premium Tactile Skeuomorphism UI
+* **High-Fidelity Interface**: Features a precision-engineered UI built on modern skeuomorphic principles with tactile, volumetric elevation planes.
+* **Sensory Feedback**: Implements dynamic directional lighting, debossed interaction states, and polished micro-bevels to deliver an immersive and grounded premium user experience.
 
 ---
 
