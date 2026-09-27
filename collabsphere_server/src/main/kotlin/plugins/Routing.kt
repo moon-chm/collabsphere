@@ -632,28 +632,45 @@ fun Application.configureRouting() {
             }
         }
 
-        post("/api/user/fcm-token") {
-            try {
-                val params = call.receive<Map<String, String>>()
-                val userId = params["userId"]?.toIntOrNull()
-                val fcmToken = params["fcmToken"]
+        authenticate("auth-jwt") {
 
-                if (userId != null && !fcmToken.isNullOrBlank()) {
+            // ── Register this device for push notifications ────────────────────
+            // The token is always bound to the JWT's user — any userId in the body is ignored, so
+            // nobody can route another account's notifications to their own device.
+            post("/api/user/fcm-token") {
+                try {
+                    val actingUserId = call.authenticatedUserId()
+                    val fcmToken = call.receive<Map<String, String>>()["fcmToken"]
+                    if (fcmToken.isNullOrBlank() || fcmToken.length > 500) {
+                        call.respond(HttpStatusCode.BadRequest, "Missing or invalid fcmToken")
+                        return@post
+                    }
                     dbQuery {
-                        UsersTable.update({ UsersTable.id eq userId }) {
+                        // A device belongs to whoever logged in on it last — detach it from any
+                        // previous account so they stop receiving pushes on a handed-over phone.
+                        UsersTable.update({ (UsersTable.fcmToken eq fcmToken) and (UsersTable.id neq actingUserId) }) {
+                            it[UsersTable.fcmToken] = null
+                        }
+                        UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[UsersTable.fcmToken] = fcmToken
                         }
                     }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
-                } else {
-                    call.respond(HttpStatusCode.BadRequest, "Missing userId or fcmToken")
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                 }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, "Invalid request body")
             }
-        }
 
-        authenticate("auth-jwt") {
+            // ── Unregister this device (logout) ────────────────────────────────
+            delete("/api/user/fcm-token") {
+                val actingUserId = call.authenticatedUserId()
+                dbQuery {
+                    UsersTable.update({ UsersTable.id eq actingUserId }) {
+                        it[UsersTable.fcmToken] = null
+                    }
+                }
+                call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
+            }
 
             // ── GET own full profile ───────────────────────────────────────────
             get("/api/user/profile") {
@@ -784,6 +801,7 @@ fun Application.configureRouting() {
                         ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
 
                     val onlineMemberIds = dbQuery {
+                        if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
                         val memberIds = WorkspaceMembersTable
                             .select(WorkspaceMembersTable.userId)
                             .where { WorkspaceMembersTable.workspaceId eq workspaceIdParam }
@@ -796,7 +814,11 @@ fun Application.configureRouting() {
                         }
                     }
 
-                    call.respond(HttpStatusCode.OK, onlineMemberIds)
+                    if (onlineMemberIds == null) {
+                        call.respond(HttpStatusCode.Forbidden, emptyList<Int>())
+                    } else {
+                        call.respond(HttpStatusCode.OK, onlineMemberIds)
+                    }
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.InternalServerError, emptyList<Int>())
                 }
@@ -3930,6 +3952,20 @@ fun Application.configureRouting() {
                                         // Only the authenticated connection owner may send as themselves.
                                         val requestedDto = dmDto.copy(senderId = userIdParam.toInt())
                                         val savedMessageDto = dbQuery {
+                                            val rejection = DmRules.sendRejection(
+                                                senderIsMember = isMember(requestedDto.senderId, requestedDto.workspaceId),
+                                                receiverIsMember = isMember(requestedDto.receiverId, requestedDto.workspaceId),
+                                                blockedEitherWay = UserBlocksTable.selectAll().where {
+                                                    ((UserBlocksTable.blockerId eq requestedDto.senderId) and (UserBlocksTable.blockedId eq requestedDto.receiverId)) or
+                                                        ((UserBlocksTable.blockerId eq requestedDto.receiverId) and (UserBlocksTable.blockedId eq requestedDto.senderId))
+                                                }.count() > 0,
+                                                content = requestedDto.content,
+                                                hasMedia = !requestedDto.mediaUrl.isNullOrBlank()
+                                            )
+                                            if (rejection != null) {
+                                                println("[DM] Refused SEND_MESSAGE from userId=${requestedDto.senderId} to ${requestedDto.receiverId}: $rejection")
+                                                return@dbQuery null
+                                            }
                                             val validReplyToId = requestedDto.replyToId?.takeIf { targetId ->
                                                 DirectMessagesTable.selectAll().where {
                                                     (DirectMessagesTable.id eq targetId) and
@@ -3959,85 +3995,65 @@ fun Application.configureRouting() {
                                             outgoingDto.copy(id = generatedId)
                                         }
 
-                                        val receiverPayload =
-                                            savedMessageDto.copy(action = "RECEIVE_MESSAGE")
-                                        val receiverJson =
-                                            Json.encodeToString(DmDto.serializer(), receiverPayload)
-                                        sendToUser(savedMessageDto.receiverId.toLong(), receiverJson)
+                                        if (savedMessageDto != null) {
+                                            val receiverPayload =
+                                                savedMessageDto.copy(action = "RECEIVE_MESSAGE")
+                                            val receiverJson =
+                                                Json.encodeToString(DmDto.serializer(), receiverPayload)
+                                            sendToUser(savedMessageDto.receiverId.toLong(), receiverJson)
 
-                                        if (this.isActive) {
-                                            val senderAcknowledgementPayload =
-                                                savedMessageDto.copy(action = "MESSAGE_DELIVERED")
-                                            val senderJson = Json.encodeToString(
-                                                DmDto.serializer(),
-                                                senderAcknowledgementPayload
+                                            if (this.isActive) {
+                                                val senderAcknowledgementPayload =
+                                                    savedMessageDto.copy(action = "MESSAGE_DELIVERED")
+                                                val senderJson = Json.encodeToString(
+                                                    DmDto.serializer(),
+                                                    senderAcknowledgementPayload
+                                                )
+                                                this.send(Frame.Text(senderJson))
+                                            }
+
+                                            // ── Notification: DM received ─────────────────────────────────
+                                            val senderUsername = dbQuery {
+                                                UsersTable.selectAll()
+                                                    .where { UsersTable.id eq savedMessageDto.senderId }
+                                                    .singleOrNull()?.get(UsersTable.username) ?: "Someone"
+                                            }
+                                            createAndPushNotification(
+                                                recipientId = savedMessageDto.receiverId,
+                                                actorId = savedMessageDto.senderId,
+                                                type = "DM",
+                                                title = "$senderUsername sent you a message",
+                                                body = savedMessageDto.content.take(200),
+                                                workspaceId = savedMessageDto.workspaceId,
+                                                referenceId = savedMessageDto.id
                                             )
-                                            this.send(Frame.Text(senderJson))
                                         }
-
-                                        // ── Notification: DM received ─────────────────────────────────
-                                        val senderUsername = dbQuery {
-                                            UsersTable.selectAll()
-                                                .where { UsersTable.id eq savedMessageDto.senderId }
-                                                .singleOrNull()?.get(UsersTable.username) ?: "Someone"
-                                        }
-                                        createAndPushNotification(
-                                            recipientId = savedMessageDto.receiverId,
-                                            actorId = savedMessageDto.senderId,
-                                            type = "DM",
-                                            title = "$senderUsername sent you a message",
-                                            body = savedMessageDto.content.take(200),
-                                            workspaceId = savedMessageDto.workspaceId,
-                                            referenceId = savedMessageDto.id
-                                        )
-                                    } else if (dmDto.action == "UPDATE_MESSAGE") {
+                                    } else if (dmDto.action == "UPDATE_MESSAGE" || dmDto.action == "DELETE_MESSAGE") {
+                                        val isDelete = dmDto.action == "DELETE_MESSAGE"
                                         val messageId = dmDto.id
-                                        var targetReceiverId = dmDto.receiverId
-                                        var authorized = false
-                                        if (messageId != null && messageId != 0) {
-                                            dbQuery {
-                                                val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
-                                                if (existing != null && existing[DirectMessagesTable.senderId] == userIdParam.toInt()) {
-                                                    authorized = true
-                                                    val sId = existing[DirectMessagesTable.senderId]
-                                                    val rId = existing[DirectMessagesTable.receiverId]
-                                                    targetReceiverId = if (targetReceiverId != 0) targetReceiverId else if (sId == userIdParam.toInt()) rId else sId
-                                                    DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
-                                                        it[content] = dmDto.content
-                                                    }
+                                        // Only the original sender may edit/delete, and the fan-out target is always the stored
+                                        // recipient — never the client-supplied receiverId, which could point at anyone.
+                                        val isValidRequest = messageId != null && messageId != 0 &&
+                                            (isDelete || dmDto.content.length <= DmRules.MAX_CONTENT_LENGTH)
+                                        val targetReceiverId: Int? = if (!isValidRequest) null else dbQuery {
+                                            val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
+                                                ?: return@dbQuery null
+                                            if (existing[DirectMessagesTable.senderId] != userIdParam.toInt()) return@dbQuery null
+                                            if (isDelete) {
+                                                DirectMessagesTable.deleteWhere { DirectMessagesTable.id eq messageId }
+                                            } else {
+                                                DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
+                                                    it[content] = dmDto.content
                                                 }
                                             }
+                                            existing[DirectMessagesTable.receiverId]
                                         }
-                                        if (authorized) {
-                                            val updatedPayload = dmDto.copy(action = "UPDATE_MESSAGE", receiverId = targetReceiverId)
-                                            val updatedJson = Json.encodeToString(DmDto.serializer(), updatedPayload)
-                                            sendToUser(targetReceiverId.toLong(), updatedJson)
+                                        if (targetReceiverId != null) {
+                                            val payload = dmDto.copy(senderId = userIdParam.toInt(), receiverId = targetReceiverId)
+                                            val payloadJson = Json.encodeToString(DmDto.serializer(), payload)
+                                            sendToUser(targetReceiverId.toLong(), payloadJson)
                                             if (this.isActive) {
-                                                this.send(Frame.Text(updatedJson))
-                                            }
-                                        }
-                                    } else if (dmDto.action == "DELETE_MESSAGE") {
-                                        val messageId = dmDto.id
-                                        var targetReceiverId = dmDto.receiverId
-                                        var authorized = false
-                                        if (messageId != null && messageId != 0) {
-                                            dbQuery {
-                                                val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
-                                                if (existing != null && existing[DirectMessagesTable.senderId] == userIdParam.toInt()) {
-                                                    authorized = true
-                                                    val sId = existing[DirectMessagesTable.senderId]
-                                                    val rId = existing[DirectMessagesTable.receiverId]
-                                                    targetReceiverId = if (targetReceiverId != 0) targetReceiverId else if (sId == userIdParam.toInt()) rId else sId
-                                                    DirectMessagesTable.deleteWhere { DirectMessagesTable.id eq messageId }
-                                                }
-                                            }
-                                        }
-                                        if (authorized) {
-                                            val deletePayload = dmDto.copy(action = "DELETE_MESSAGE", receiverId = targetReceiverId)
-                                            val deleteJson = Json.encodeToString(DmDto.serializer(), deletePayload)
-                                            sendToUser(targetReceiverId.toLong(), deleteJson)
-                                            if (this.isActive) {
-                                                this.send(Frame.Text(deleteJson))
+                                                this.send(Frame.Text(payloadJson))
                                             }
                                         }
                                     } else if (dmDto.action == "CHANNEL_TYPING_START" || dmDto.action == "CHANNEL_TYPING_STOP") {
@@ -4072,14 +4088,16 @@ fun Application.configureRouting() {
                                         val messageId = dmDto.id
                                         val emoji = dmDto.emoji
                                         if (messageId != null && messageId != 0 && !emoji.isNullOrBlank()) {
-                                            val (targetReceiverId, aggregated) = dbQuery {
+                                            val reactionOutcome = dbQuery {
                                                 val existing = DirectMessagesTable.selectAll()
                                                     .where { DirectMessagesTable.id eq messageId }.singleOrNull()
-                                                val computedTarget = when {
-                                                    existing == null -> dmDto.receiverId
-                                                    existing[DirectMessagesTable.senderId] == userIdParam.toInt() -> existing[DirectMessagesTable.receiverId]
-                                                    else -> existing[DirectMessagesTable.senderId]
-                                                }
+                                                    ?: return@dbQuery null
+                                                // Only the two people in the conversation may react to (or see counts for) it.
+                                                val computedTarget = DmRules.partnerOf(
+                                                    senderId = existing[DirectMessagesTable.senderId],
+                                                    receiverId = existing[DirectMessagesTable.receiverId],
+                                                    actingUserId = userIdParam.toInt()
+                                                ) ?: return@dbQuery null
                                                 if (dmDto.action == "REACT_MESSAGE") {
                                                     DmReactionsTable.insertIgnore {
                                                         it[DmReactionsTable.messageId] = messageId
@@ -4100,14 +4118,17 @@ fun Application.configureRouting() {
                                                     .mapValues { (_, rows) -> rows.size }
                                                 Pair(computedTarget, counts)
                                             }
-                                            val reactPayload = dmDto.copy(
-                                                senderId = userIdParam.toInt(),
-                                                receiverId = targetReceiverId,
-                                                reactions = aggregated
-                                            )
-                                            val reactJson = Json.encodeToString(DmDto.serializer(), reactPayload)
-                                            sendToUser(targetReceiverId.toLong(), reactJson)
-                                            if (this.isActive) this.send(Frame.Text(reactJson))
+                                            if (reactionOutcome != null) {
+                                                val (targetReceiverId, aggregated) = reactionOutcome
+                                                val reactPayload = dmDto.copy(
+                                                    senderId = userIdParam.toInt(),
+                                                    receiverId = targetReceiverId,
+                                                    reactions = aggregated
+                                                )
+                                                val reactJson = Json.encodeToString(DmDto.serializer(), reactPayload)
+                                                sendToUser(targetReceiverId.toLong(), reactJson)
+                                                if (this.isActive) this.send(Frame.Text(reactJson))
+                                            }
                                         }
                                     } else if (dmDto.action == "MARK_READ") {
                                         val wsId = dmDto.workspaceId

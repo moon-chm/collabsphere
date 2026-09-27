@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.task
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.task.TaskRequest
 import com.collabsphere.app.dto.task.TaskResponse
@@ -18,7 +19,7 @@ class TaskApiService(private val client: HttpClient) {
             contentType(ContentType.Application.Json)
             parameter("userId", createdByUserId)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun getTasksByWorkspace(workspaceId: Int): List<TaskResponse> {
@@ -31,13 +32,11 @@ class TaskApiService(private val client: HttpClient) {
         return client.put("$baseUrl/$taskId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
-    suspend fun deleteTask(taskId: Int): Boolean {
-        val response = client.delete("$baseUrl/$taskId")
-        return response.status.isSuccess()
-    }
+    suspend fun deleteTask(taskId: Int): HttpStatusCode =
+        client.delete("$baseUrl/$taskId").status
 
     suspend fun getTaskUpdates(workspaceId: Int, since: Long): List<TaskSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {

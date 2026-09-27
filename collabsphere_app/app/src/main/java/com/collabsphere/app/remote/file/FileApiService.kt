@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.file
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.file.FileResponse
 import com.collabsphere.app.dto.file.FileSyncDto
@@ -44,7 +45,7 @@ class FileApiService(private val client: HttpClient) {
                     }
                 )
             }
-        ).body()
+        ).requireSuccess().body()
     }
 
     suspend fun getFilesByWorkspace(workspaceId: Int): List<FileResponse> {
@@ -53,7 +54,8 @@ class FileApiService(private val client: HttpClient) {
 
     /** Streams the response body straight to [destination] instead of buffering the whole file in memory. */
     suspend fun downloadFile(url: String, destination: File) {
-        val response = client.get(url)
+        // Without this check an error page ("File not found") would be saved as the downloaded file.
+        val response = client.get(url).requireSuccess()
         withContext(Dispatchers.IO) {
             response.bodyAsChannel().toInputStream().use { input ->
                 destination.outputStream().use { output -> input.copyTo(output) }
@@ -61,10 +63,8 @@ class FileApiService(private val client: HttpClient) {
         }
     }
 
-    suspend fun deleteFile(fileId: Long): Boolean {
-        val response = client.delete("$baseUrl/$fileId")
-        return response.status.isSuccess()
-    }
+    suspend fun deleteFile(fileId: Long): HttpStatusCode =
+        client.delete("$baseUrl/$fileId").status
 
     suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long): List<FileSyncDto> {
         return client.get("$baseUrl/updates") {

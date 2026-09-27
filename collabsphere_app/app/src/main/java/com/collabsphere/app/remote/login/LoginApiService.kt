@@ -223,6 +223,11 @@ class LoginApiService(private val client: HttpClient) {
         }
     }
 
+    /** Detaches this device from the logged-in account so it stops receiving their pushes. Must run before the token is cleared. */
+    suspend fun clearFcmToken(): Boolean = withContext(Dispatchers.IO) {
+        client.delete("${AppConfig.BASE_URL}/api/user/fcm-token").status.isSuccess()
+    }
+
     suspend fun updateFcmToken(userId: Int, fcmToken: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/user/fcm-token") {

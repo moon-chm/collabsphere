@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.notes
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import android.content.Context
@@ -53,8 +54,8 @@ class NotesSyncWorker(
         try {
             if (actionType == "DELETE") {
                 if (noteId == -1) return@withContext Result.failure()
-                apiService.deleteNote(noteId)
-                return@withContext Result.success()
+                val status = apiService.deleteNote(noteId)
+                return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
             val description = inputData.getString("DESCRIPTION") ?: ""
@@ -81,7 +82,7 @@ class NotesSyncWorker(
 
         } catch (e: Exception) {
             Log.e("NotesSyncWorker", "Operation failed", e)
-            return@withContext Result.retry()
+            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }

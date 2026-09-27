@@ -30,6 +30,7 @@ import android.content.Intent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.koin.core.parameter.parametersOf
+import kotlinx.coroutines.flow.map
 
 private const val GITHUB_TAB_INDEX = 5
 
@@ -117,26 +118,45 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .imePadding()
                 ) {
-                    val savedUserId by userPreferences.userIdFlow.collectAsStateWithLifecycle(initialValue = -1)
+                    // null = DataStore not yet loaded. Avoids the one-frame onboarding
+                    // flash for logged-in users on cold start (#5).
+                    val savedUserId: Int? by userPreferences.userIdFlow
+                        .map<Int, Int?> { it }
+                        .collectAsStateWithLifecycle(initialValue = null)
+                    val onboardingDone: Boolean? by userPreferences.onboardingDoneFlow
+                        .map<Boolean, Boolean?> { it }
+                        .collectAsStateWithLifecycle(initialValue = null)
                     val loggedInUserId by loginViewModel.loggedInUserId.collectAsStateWithLifecycle(initialValue = 0L)
 
-                    val currentUserId = if (loggedInUserId != 0L) loggedInUserId.toInt() else savedUserId
+                    // Show nothing until DataStore has answered both flows.
+                    if (savedUserId == null || onboardingDone == null) return@Surface
+
+                    val resolvedUserId: Int = savedUserId!!
+                    val currentUserId = if (loggedInUserId != 0L) loggedInUserId.toInt() else resolvedUserId
 
                     val dashboardViewModel: DashboardViewModel = koinViewModel {
                         parametersOf(currentUserId)
                     }
 
+                    // Map widget_destination extras to tab indices (#7).
+                    // Tab: 0=Spaces, 1=Tasks, 2=Files, 3=Docs, 4=Chat, 5=GitHub
                     val widgetDestination = intent?.getStringExtra("widget_destination")
+                    val widgetTab: Int? = when (widgetDestination) {
+                        "tasks"      -> 1
+                        "files"      -> 2
+                        "notes"      -> 3
+                        "dm"         -> 4
+                        "workspaces" -> 0
+                        else         -> null
+                    }
+                    val isLoggedInForWidget = resolvedUserId != -1 || loggedInUserId != 0L
 
                     val startDestination = when {
-                        // Widget deep-link overrides — map to the workspace detail route
-                        // (user must already be logged in for widgets to send these)
-                        widgetDestination == "tasks"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
-                        widgetDestination == "notes"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
-                        widgetDestination == "dm"     && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
-                        widgetDestination == "files"  && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
-                        widgetDestination == "workspaces" && (savedUserId != -1 || loggedInUserId != 0L) -> "dashboard"
-                        savedUserId != -1 || loggedInUserId != 0L -> "dashboard"
+                        widgetTab != null && isLoggedInForWidget -> "dashboard"
+                        resolvedUserId != -1 || loggedInUserId != 0L -> "dashboard"
+                        // Show onboarding only the first time; subsequent logged-out
+                        // launches go straight to login (#5).
+                        onboardingDone!! -> "login"
                         else -> "onboarding"
                     }
 
@@ -152,16 +172,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    LaunchedEffect(savedUserId) {
-                        if (savedUserId != -1) {
-                            dashboardViewModel.updateUserId(savedUserId)
-                            dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, savedUserId.toLong())
-                            com.collabsphere.app.remote.fcm.FcmTokenRegistrar.syncCurrentToken(savedUserId)
+                    LaunchedEffect(resolvedUserId) {
+                        if (resolvedUserId != -1) {
+                            dashboardViewModel.updateUserId(resolvedUserId)
+                            dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, resolvedUserId.toLong())
+                            com.collabsphere.app.remote.fcm.FcmTokenRegistrar.syncCurrentToken(resolvedUserId)
                         }
                     }
 
                     LaunchedEffect(loggedInUserId) {
-                        if (loggedInUserId != 0L && loggedInUserId.toInt() != savedUserId) {
+                        if (loggedInUserId != 0L && loggedInUserId.toInt() != resolvedUserId) {
                             userPreferences.saveUserId(loggedInUserId.toInt())
                             dashboardViewModel.updateUserId(loggedInUserId.toInt())
                             dmViewModel.initWebSocketConnection(AppConfig.BASE_URL, loggedInUserId)
@@ -176,7 +196,8 @@ class MainActivity : ComponentActivity() {
                         notificationHelper = notificationHelper,
                         startDestination = startDestination,
                         notificationDeepLink = notificationDeepLink,
-                        onDeepLinkConsumed = { notificationDeepLink = null }
+                        onDeepLinkConsumed = { notificationDeepLink = null },
+                        widgetTab = if (isLoggedInForWidget) widgetTab else null
                     )
                 }
             }

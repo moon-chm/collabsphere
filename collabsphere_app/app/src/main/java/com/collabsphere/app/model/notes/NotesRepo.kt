@@ -1,5 +1,8 @@
 package com.collabsphere.app.model.notes
 
+import com.collabsphere.app.remote.ApiStatusException
+import com.collabsphere.app.model.SyncDecision
+import com.collabsphere.app.model.SyncPolicy
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import android.util.Log
@@ -124,10 +127,16 @@ class NotesRepo(
         noteName: String,
         userId: Int,
         workspaceId: Int
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
-            apiService.deleteNote(noteId)
-            notesDao.deleteNoteById(noteId)
+            val status = apiService.deleteNote(noteId)
+            when (SyncPolicy.forStatus(status.value, isDelete = true)) {
+                SyncDecision.DONE -> notesDao.deleteNoteById(noteId)
+                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                // Refused: keep the note rather than hiding one that still exists on the server.
+                SyncDecision.DROP -> return@withContext false
+            }
+            true
         } catch (e: Exception) {
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
@@ -136,11 +145,14 @@ class NotesRepo(
                 "WORKSPACE_ID" to workspaceId,
                 "NOTE_NAME" to noteName
             )
+            notesDao.deleteNoteById(noteId)
             enqueueSync(syncData)
+            true
         }
     }
 
-    suspend fun updatetheNote(notes: NotesEntity) = withContext(Dispatchers.IO) {
+    /** False when the server refused the edit; true when it was saved or queued for background sync. */
+    suspend fun updatetheNote(notes: NotesEntity): Boolean = withContext(Dispatchers.IO) {
         try {
             notesDao.updatenotes(notes)
             apiService.updateNote(
@@ -152,7 +164,9 @@ class NotesRepo(
                     description = notes.description
                 )
             )
+            true
         } catch (e: Exception) {
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext false
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPDATE",
                 "NOTE_ID" to notes.id,
@@ -162,6 +176,7 @@ class NotesRepo(
                 "DESCRIPTION" to notes.description
             )
             enqueueSync(syncData)
+            true
         }
     }
 

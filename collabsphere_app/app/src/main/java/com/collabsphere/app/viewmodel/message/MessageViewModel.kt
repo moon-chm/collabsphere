@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel.message
 
+import com.collabsphere.app.model.SyncPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.ChannelMessageCenter
@@ -360,13 +361,17 @@ class MessageViewModel(
 
     fun changeStatus(message: MessageEntity, newmsgStatus: MessageStatus) {
         viewModelScope.launch {
-            repo.updateMessage(message.copy(status = newmsgStatus))
+            if (!repo.updateMessage(message.copy(status = newmsgStatus))) {
+                _uiMessages.tryEmit(SyncPolicy.REFUSED_MESSAGE)
+            }
         }
     }
 
     fun onDeleteMessage(messageId: Int) {
         viewModelScope.launch {
-            repo.deleteMessage(messageId, loggedUserId, loggedWorkspaceId, loggedChannelId)
+            if (!repo.deleteMessage(messageId, loggedUserId, loggedWorkspaceId, loggedChannelId)) {
+                _uiMessages.tryEmit(SyncPolicy.REFUSED_MESSAGE)
+            }
         }
     }
 

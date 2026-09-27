@@ -1,5 +1,7 @@
 package com.collabsphere.app.model.workspace
 
+import android.util.Log
+import com.collabsphere.app.model.SyncPolicy
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -61,7 +63,8 @@ class WorkspaceSyncWorker(
 
             Result.success()
         } catch (e: Exception) {
-            Result.retry()
+            Log.e("WorkspaceSyncWorker", "Operation failed", e)
+            SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }

@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.task
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import android.content.Context
@@ -42,8 +43,8 @@ class TaskSyncWorker(
 
         try {
             if (actionType == "DELETE") {
-                apiService.deleteTask(taskId)
-                return@withContext Result.success()
+                val status = apiService.deleteTask(taskId)
+                return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
             val createdByUserId = inputData.getInt("CREATED_BY_USER_ID", -1)
@@ -88,7 +89,7 @@ class TaskSyncWorker(
 
         } catch (e: Exception) {
             Log.e("TaskSyncWorker", "Operation failed", e)
-            return@withContext Result.retry()
+            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }

@@ -34,6 +34,7 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         val USER_EMAIL = stringPreferencesKey("saved_user_email")
         val AUTH_TOKEN = stringPreferencesKey("saved_auth_token")
         val FCM_TOKEN = stringPreferencesKey("saved_fcm_token")
+        val ONBOARDING_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("onboarding_done")
     }
 
     val fcmTokenFlow: Flow<String?> = dataStore.data
@@ -112,6 +113,14 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         .map { preferences ->
             preferences[USER_EMAIL] ?: ""
         }
+
+    val onboardingDoneFlow: Flow<Boolean> = dataStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[ONBOARDING_DONE] ?: false }
+
+    suspend fun markOnboardingDone() {
+        dataStore.edit { it[ONBOARDING_DONE] = true }
+    }
 
     suspend fun saveUserId(userId: Int) {
         dataStore.edit { preferences ->

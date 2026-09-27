@@ -1,4 +1,5 @@
 package com.collabsphere.app.remote.message
+import com.collabsphere.app.remote.requireSuccess
 import android.util.Log
 
 import com.collabsphere.app.AppConfig
@@ -23,29 +24,19 @@ class MessageApiService(private val client: HttpClient) {
         return client.post(baseUrl) {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun updateMessage(messageId: Int, request: MessageRequest): MessageResponse {
         return client.put("$baseUrl/$messageId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
-    suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Boolean {
-        return try {
-            val response = client.delete("$baseUrl/$messageId/$userId/$workspaceId/$channelId")
-            if (response.status.isSuccess()) {
-                response.body<Boolean>()
-            } else {
-                false
-            }
-        } catch (e: Exception) {
-            Log.e("MessageApiService", "Operation failed", e)
-            false
-        }
-    }
+    /** Network failures throw (so callers can queue a retry); server answers are returned as-is. */
+    suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): HttpStatusCode =
+        client.delete("$baseUrl/$messageId/$userId/$workspaceId/$channelId").status
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
         return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()

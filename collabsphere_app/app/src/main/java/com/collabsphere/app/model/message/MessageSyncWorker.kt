@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.message
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import android.content.Context
@@ -49,8 +50,8 @@ class MessageSyncWorker(
 
         try {
             if (actionType == "DELETE") {
-                apiService.deleteMessage(messageId, userId, workspaceId, channelId)
-                return@withContext Result.success()
+                val status = apiService.deleteMessage(messageId, userId, workspaceId, channelId)
+                return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
             val userName = inputData.getString("USER_NAME") ?: ""
@@ -81,7 +82,7 @@ class MessageSyncWorker(
 
         } catch (e: Exception) {
             Log.e("MessageSyncWorker", "Operation failed", e)
-            return@withContext Result.retry()
+            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }

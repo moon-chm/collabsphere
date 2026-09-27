@@ -176,7 +176,7 @@ val repositoryModule = module {
 val appModule = module {
     single { androidContext().dataStore }
     single { UserPreferences(get()) }
-    single { SessionManager(androidContext(), get(), get()) }
+    single { SessionManager(androidContext(), get(), get(), get(), get()) }
     single { NotificationHelper(androidContext(), get(), get()) }
     single { WorkManager.getInstance(androidContext()) }
     single { com.collabsphere.app.model.DraftStore(get()) }

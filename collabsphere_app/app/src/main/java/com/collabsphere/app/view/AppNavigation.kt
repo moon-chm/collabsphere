@@ -1,5 +1,6 @@
 package com.collabsphere.app.view
 
+import kotlinx.coroutines.flow.first
 import com.collabsphere.app.view.WorkspaceUI.WorkspaceSearchScreen
 import com.collabsphere.app.viewmodel.WorkspaceSearchViewModel
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
@@ -57,6 +58,7 @@ import com.collabsphere.app.view.MessageUI.MessageScreen
 import com.collabsphere.app.view.dmUI.DMScreen
 import com.collabsphere.app.view.OnboardingScreen
 import com.collabsphere.app.viewmodel.DashboardViewModel
+import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.viewmodel.LoginViewModel
 import com.collabsphere.app.viewmodel.channel.ChannelViewModel
 import com.collabsphere.app.viewmodel.file.FileViewModel
@@ -81,7 +83,8 @@ fun AppNavigation(
     notificationsViewModel: NotificationsViewModel,
     startDestination: String = "login",
     notificationDeepLink: NotificationDeepLink? = null,
-    onDeepLinkConsumed: () -> Unit = {}
+    onDeepLinkConsumed: () -> Unit = {},
+    widgetTab: Int? = null
 ) {
     KoinContext {
         val navController = rememberNavController()
@@ -136,6 +139,19 @@ fun AppNavigation(
             }
         }
 
+        // Widget deep-link: once logged in and workspaces have loaded, jump straight
+        // to the first workspace at the requested tab index (#7).
+        LaunchedEffect(widgetTab, isLoggedIn) {
+            if (widgetTab != null && isLoggedIn) {
+                // Wait for the workspace list to have at least one entry.
+                val workspaces = dashboardViewModel.workspaces
+                    .first { !it.isNullOrEmpty() }
+                val ws = workspaces?.firstOrNull() ?: return@LaunchedEffect
+                val encodedName = URLEncoder.encode(ws.workspaceName, StandardCharsets.UTF_8.toString())
+                navController.navigate("workspace_detailed/${ws.id}/$encodedName?initialTab=$widgetTab")
+            }
+        }
+
         NavHost(
             navController = navController,
             startDestination = startDestination,
@@ -167,8 +183,11 @@ fun AppNavigation(
             }
         ) {
             composable("onboarding") {
+                val userPrefs = koinInject<UserPreferences>()
+                val scope = rememberCoroutineScope()
                 OnboardingScreen(
                     onFinish = {
+                        scope.launch { userPrefs.markOnboardingDone() }
                         navController.navigate("login") {
                             popUpTo("onboarding") { inclusive = true }
                         }
@@ -351,7 +370,9 @@ fun AppNavigation(
                         navController.navigate("blocked_users")
                     },
                     onLogoutComplete = {
-                        dashboardViewModel.logout()
+                        // LoginViewModel.logout() owns the full cleanup sequence
+                        // (FCM unregister, WorkManager, DB, in-memory state).
+                        // dashboardViewModel.logout() ran the same sequence a second time.
                         loginViewModel.logout()
                     }
                 )

@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel.notes
 
+import com.collabsphere.app.model.SyncPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.model.notes.NotesEntity
@@ -105,9 +106,12 @@ class NotesViewModel(
                 notesName = updatedName,
                 description = updatedDescription
             )
-            repo.updatetheNote(updatedNote)
-            _notesStatus.value = "Notes updated successfully"
-            clearInputs()
+            if (repo.updatetheNote(updatedNote)) {
+                _notesStatus.value = "Notes updated successfully"
+                clearInputs()
+            } else {
+                _notesStatus.value = SyncPolicy.REFUSED_MESSAGE
+            }
         }
     }
 
@@ -125,8 +129,11 @@ class NotesViewModel(
 
     fun deleteNote(noteId: Int, name: String) {
         viewModelScope.launch {
-            repo.deletenotestoscreen(noteId, name, loggedUserId, loggedWorkspaceId)
-            _notesStatus.value = "Notes $name deleted"
+            _notesStatus.value = if (repo.deletenotestoscreen(noteId, name, loggedUserId, loggedWorkspaceId)) {
+                "Notes $name deleted"
+            } else {
+                SyncPolicy.REFUSED_MESSAGE
+            }
         }
     }
 }

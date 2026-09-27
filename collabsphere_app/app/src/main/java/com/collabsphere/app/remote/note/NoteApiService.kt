@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.note
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.notes.NotesRequest
 import com.collabsphere.app.dto.notes.NotesResponse
@@ -17,14 +18,14 @@ class NoteApiService(private val client: HttpClient) {
         return client.post(baseUrl) {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun updateNote(noteId: Int, request: NotesRequest): NotesResponse {
         return client.put("$baseUrl/$noteId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun setPinned(noteId: Int, pinned: Boolean) {
@@ -41,10 +42,8 @@ class NoteApiService(private val client: HttpClient) {
         return client.get("$baseUrl/workspace/$workspaceId").body()
     }
 
-    suspend fun deleteNote(noteId: Int): Boolean {
-        val response = client.delete("$baseUrl/$noteId")
-        return response.status.isSuccess()
-    }
+    suspend fun deleteNote(noteId: Int): HttpStatusCode =
+        client.delete("$baseUrl/$noteId").status
 
     suspend fun getNoteUpdates(workspaceId: Int, since: Long): List<NotesSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {

@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel.task
 
+import com.collabsphere.app.model.SyncPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.model.UserEntity
@@ -209,6 +210,8 @@ class TaskViewModel(
             }
             if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
                 sendUiEvent("Saved offline — will sync when you're back online.")
+            } else if (outcome.isFailure) {
+                sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
             }
         }
     }
@@ -225,6 +228,8 @@ class TaskViewModel(
             }
             if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
                 sendUiEvent("Saved offline — will sync when you're back online.")
+            } else if (outcome.isFailure) {
+                sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
             }
         }
     }
@@ -236,6 +241,8 @@ class TaskViewModel(
             }
             if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
                 sendUiEvent("Deleted offline — will sync when you're back online.")
+            } else if (outcome.isFailure) {
+                sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
             }
         }
     }
@@ -286,6 +293,8 @@ class TaskViewModel(
             }
             if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
                 sendUiEvent("Saved offline — will sync when you're back online.")
+            } else if (outcome.isFailure) {
+                sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
             }
         }
     }

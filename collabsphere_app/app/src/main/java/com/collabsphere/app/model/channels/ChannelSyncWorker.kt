@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.channels
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import android.content.Context
@@ -40,8 +41,8 @@ class ChannelSyncWorker(
 
         try {
             if (actionType == "DELETE") {
-                apiService.deleteChannel(channelName, workspaceId, if (userId == 0) null else userId)
-                return@withContext Result.success()
+                val status = apiService.deleteChannel(channelName, workspaceId, if (userId == 0) null else userId)
+                return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
             val description = inputData.getString("DESCRIPTION") ?: ""
@@ -67,7 +68,7 @@ class ChannelSyncWorker(
 
         } catch (e: Exception) {
             Log.e("ChannelSyncWorker", "Operation failed", e)
-            return@withContext Result.retry()
+            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }

@@ -1,4 +1,7 @@
 package com.collabsphere.app.model.message
+import com.collabsphere.app.remote.ApiStatusException
+import com.collabsphere.app.model.SyncDecision
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import androidx.datastore.core.DataStore
@@ -110,9 +113,16 @@ class MessageRepo(
     suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Boolean =
         withContext(Dispatchers.IO) {
             return@withContext try {
-                val apiSuccess = apiService.deleteMessage(messageId, userId, workspaceId, channelId)
-                val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
-                deletedRows > 0 || apiSuccess
+                val status = apiService.deleteMessage(messageId, userId, workspaceId, channelId)
+                when (SyncPolicy.forStatus(status.value, isDelete = true)) {
+                    SyncDecision.DONE -> {
+                        messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
+                        true
+                    }
+                    SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                    // Refused: the message still exists for everyone else, so keep it here too.
+                    SyncDecision.DROP -> false
+                }
             } catch (e: Exception) {
                 Log.e("MessageRepo", "Operation failed", e)
                 val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
@@ -128,7 +138,8 @@ class MessageRepo(
             }
         }
 
-    suspend fun updateMessage(message: MessageEntity) = withContext(Dispatchers.IO) {
+    /** False when the server refused the edit; true when it was saved or queued for background sync. */
+    suspend fun updateMessage(message: MessageEntity): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = MessageRequest(
                 id = message.id,
@@ -141,8 +152,10 @@ class MessageRepo(
             )
             apiService.updateMessage(messageId = message.id, request = request)
             messageDao.updateMessage(message)
+            true
         } catch (e: Exception) {
             Log.e("MessageRepo", "Operation failed", e)
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext false
             messageDao.updateMessage(message)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPDATE",
@@ -155,6 +168,7 @@ class MessageRepo(
                 "STATUS" to message.status.name
             )
             enqueueSync(syncData)
+            true
         }
     }
 

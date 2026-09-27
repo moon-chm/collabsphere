@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.channel
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -17,7 +18,7 @@ class ChannelApiService(private val client: HttpClient) {
         return client.post(baseUrl) {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun deleteChannel(channelName: String, workspaceId: Int, userId: Int?): HttpStatusCode {

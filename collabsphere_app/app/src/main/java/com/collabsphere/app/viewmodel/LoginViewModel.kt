@@ -287,6 +287,7 @@ class LoginViewModel(
             _loggedInUserId.value = 0L
             _loggedInUserName.value = ""
             _loggedInUserEmail.value = ""
+            _loggedInAvatarUrl.value = ""
         }
     }
 

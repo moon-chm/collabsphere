@@ -1,4 +1,7 @@
 package com.collabsphere.app.model.file
+import com.collabsphere.app.remote.ApiStatusException
+import com.collabsphere.app.model.SyncDecision
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import androidx.datastore.core.DataStore
@@ -101,14 +104,13 @@ class FileRepo(
 
     suspend fun deletefiles(fileId: Long) = withContext(Dispatchers.IO) {
         try {
-            val isNetworkDeleted = fileApiService.deleteFile(fileId)
-            if (!isNetworkDeleted) {
-                // Server explicitly rejected the delete (not a network failure) — retry in the background
-                // instead of letting the local cache silently drift from what the server still has.
-                System.err.println("Server rejected delete for file $fileId, deferring to background sync.")
-                enqueueSync(workDataOf("ACTION_TYPE" to "DELETE", "FILE_ID" to fileId))
+            val status = fileApiService.deleteFile(fileId)
+            when (SyncPolicy.forStatus(status.value, isDelete = true)) {
+                SyncDecision.DONE -> fileDoa.deleteFileById(fileId)
+                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                // Refused (e.g. not the uploader): keep showing the file — it still exists on the server.
+                SyncDecision.DROP -> Log.w("FileRepo", "Server refused delete for file $fileId (HTTP ${status.value})")
             }
-            fileDoa.deleteFileById(fileId)
         } catch (e: Exception) {
             System.err.println("Network Delete Exception encountered, deferring execution to background sync:")
             Log.e("FileRepo", "Operation failed", e)

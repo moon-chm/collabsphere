@@ -1,5 +1,8 @@
 package com.collabsphere.app.model.task
 
+import com.collabsphere.app.remote.ApiStatusException
+import com.collabsphere.app.model.SyncDecision
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -219,6 +222,8 @@ class TaskRepo(
             Result.success(TaskSyncOutcome.CONFIRMED)
         } catch (e: Exception) {
             Log.e("TaskRepo", "PUT request failed.", e)
+            // The server answered and refused — queueing it would only fail again in the background.
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext Result.failure(e)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPDATE",
                 "TASK_ID" to task.id,
@@ -240,9 +245,17 @@ class TaskRepo(
 
     suspend fun deleteTask(taskId: Int): Result<TaskSyncOutcome> = withContext(Dispatchers.IO) {
         return@withContext try {
-            apiService.deleteTask(taskId)
-            taskDao.deleteTask(taskId)
-            Result.success(TaskSyncOutcome.CONFIRMED)
+            val status = apiService.deleteTask(taskId)
+            when (SyncPolicy.forStatus(status.value, isDelete = true)) {
+                SyncDecision.DONE -> {
+                    taskDao.deleteTask(taskId)
+                    Result.success(TaskSyncOutcome.CONFIRMED)
+                }
+                // Server is up but struggling (e.g. a Render cold start) — same as being offline.
+                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                // Refused (e.g. no permission): keep the task instead of hiding one that still exists.
+                SyncDecision.DROP -> Result.failure(ApiStatusException(status.value))
+            }
         } catch (e: Exception) {
             Log.e("TaskRepo", "DELETE request failed.", e)
             taskDao.deleteTask(taskId)

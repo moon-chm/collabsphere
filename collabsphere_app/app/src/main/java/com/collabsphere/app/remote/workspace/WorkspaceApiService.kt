@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.workspace
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.search.WorkspaceSearchResponse
 import com.collabsphere.app.dto.workspace.AddMemberRequest
@@ -27,7 +28,7 @@ class WorkspaceApiService(
             contentType(ContentType.Application.Json)
             parameter("userId", userId)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun searchWorkspace(workspaceId: Int, query: String): WorkspaceSearchResponse {
@@ -47,7 +48,7 @@ class WorkspaceApiService(
         return client.post("$baseUrl/members/$workspaceId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun deleteWorkspaceFromServer(
@@ -59,7 +60,7 @@ class WorkspaceApiService(
             parameter("workspaceName", workspaceName)
             parameter("userId", userId)
             parameter("workspacePassword", workspacePassword)
-        }.body<DeleteWorkspaceResponse>().deletedIds
+        }.requireSuccess().body<DeleteWorkspaceResponse>().deletedIds
     }
 
     suspend fun getWorkspacesByUserId(userId: Int): List<WorkspaceResponse> {

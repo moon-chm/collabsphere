@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.file
+import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
 import android.content.Context
@@ -38,8 +39,8 @@ class FileSyncWorker(
                     it[longPreferencesKey("temp_file_$fileId")] ?: fileId
                 }.first()
 
-                val successful = fileApiService.deleteFile(resolvedFileId)
-                return@withContext if (successful) Result.success() else Result.retry()
+                val status = fileApiService.deleteFile(resolvedFileId)
+                return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
             val localPath = inputData.getString("LOCAL_PATH") ?: ""
@@ -96,7 +97,7 @@ class FileSyncWorker(
             return@withContext Result.success()
         } catch (e: Exception) {
             Log.e("FileSyncWorker", "Operation failed", e)
-            return@withContext Result.retry()
+            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }
     }
 }
