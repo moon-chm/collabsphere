@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.SubcomposeAsyncImage
 import com.collabsphere.app.viewmodel.GitHubPullRequestItem
+import com.collabsphere.app.viewmodel.GitHubCheckSuiteItem
 import com.collabsphere.app.viewmodel.AvailableRepo
 import com.collabsphere.app.viewmodel.GitHubAuthEvents
 import com.collabsphere.app.viewmodel.GitHubViewModel
@@ -535,6 +536,30 @@ private fun ConnectedView(
             }
         }
 
+        if (analytics.recentCheckSuites.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(title = "CI / Build Status") {
+                    analytics.recentCheckSuites.forEach { suite ->
+                        val (statusLabel, statusColor) = checkSuiteStatus(suite)
+                        val title = suite.appName ?: "GitHub Actions"
+                        val subtitle = buildString {
+                            if (suite.headBranch != null) append("${suite.headBranch} · ")
+                            append(suite.headSha.take(7))
+                            append(" · ${relativeTime(suite.updatedAt)}")
+                        }
+                        ActivityRow(
+                            title = title,
+                            subtitle = subtitle,
+                            badge = statusLabel,
+                            badgeColor = statusColor,
+                            url = suite.url
+                        )
+                    }
+                }
+            }
+        }
+
         if (analytics.recentPullRequests.isNotEmpty()) {
             item {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -780,6 +805,20 @@ internal fun pullRequestStatus(pr: GitHubPullRequestItem): Pair<String, Color> =
     pr.mergedAt != null -> "Merged" to Color(0xFF6F42C1)
     pr.state == "open" -> "Open" to Color(0xFF2DA44E)
     else -> "Closed" to Color(0xFFCF222E)
+}
+
+internal fun checkSuiteStatus(suite: GitHubCheckSuiteItem): Pair<String, Color> {
+    if (suite.status != "completed") {
+        return "⏳ Running" to Color(0xFFBF8700)
+    }
+    return when (suite.conclusion) {
+        "success" -> "✅ Passed" to Color(0xFF2DA44E)
+        "failure", "timed_out", "action_required", "startup_failure" -> "❌ Failed" to Color(0xFFCF222E)
+        "cancelled" -> "Cancelled" to Color(0xFF70625E)
+        "skipped" -> "Skipped" to Color(0xFF70625E)
+        "neutral" -> "Neutral" to Color(0xFF70625E)
+        else -> "Unknown" to Color(0xFF70625E)
+    }
 }
 
 @Composable

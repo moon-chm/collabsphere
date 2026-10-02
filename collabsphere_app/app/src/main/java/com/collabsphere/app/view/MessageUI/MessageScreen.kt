@@ -81,8 +81,10 @@ import org.koin.compose.koinInject
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.automirrored.filled.Reply
-import kotlinx.coroutines.launch
 import com.collabsphere.app.viewmodel.message.MessageViewModel
+import kotlinx.coroutines.launch
+import com.collabsphere.app.viewmodel.GitHubUnfurlViewModel
+import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -91,6 +93,11 @@ fun MessageScreen(
     channelName: String,
     onBack: () -> Unit
 ) {
+    val unfurlViewModel: GitHubUnfurlViewModel = koinViewModel()
+    val githubPreviews by unfurlViewModel.previews.collectAsStateWithLifecycle()
+    val githubActionStates by unfurlViewModel.actionStates.collectAsStateWithLifecycle()
+    val githubActionMessages by unfurlViewModel.actionMessages.collectAsStateWithLifecycle()
+    
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val messageContent by viewModel.messageContent.collectAsStateWithLifecycle()
     val isLoadingOlder by viewModel.isLoadingOlder.collectAsStateWithLifecycle()
@@ -846,6 +853,23 @@ fun MessageScreen(
                                                 linkColor = if (isOwnMessage) Color.White else IndigoStart
                                             )
                                             LinkPreviewCard(text = message.content, onDarkBubble = isOwnMessage)
+                                            
+                                            val githubRegex = Regex("(https://github\\.com/[^/]+/[^/]+/[\\w/]+|https://github\\.com/[^/]+/[^/]+/?(?=\\s|$))")
+                                            val matches = githubRegex.findAll(message.content).map { it.value }.toSet()
+                                            matches.forEach { url ->
+                                                unfurlViewModel.requestUnfurl(viewModel.currentWorkspaceId, url)
+                                                val preview = githubPreviews[url]
+                                                if (preview != null) {
+                                                    com.collabsphere.app.view.components.GitHubUnfurlCard(
+                                                        preview = preview,
+                                                        actionState = githubActionStates[url],
+                                                        actionMessage = githubActionMessages[url],
+                                                        onActionClick = { action -> 
+                                                            unfurlViewModel.performAction(viewModel.currentWorkspaceId, url, action)
+                                                        }
+                                                    )
+                                                }
+                                            }
                                         }
                                         if (isOwnMessage && message.id < 0) {
                                             PendingMessageLabel(stale = true, onDarkBubble = true) {

@@ -240,6 +240,80 @@ object GitHubService {
             false
         }
 
+    suspend fun updateIssueState(token: String, repoFullName: String, number: Int, state: String, stateReason: String? = null): Pair<GitHubIssueInfo?, HttpStatusCode> =
+        try {
+            val bodyMap = mutableMapOf("state" to state)
+            if (stateReason != null) {
+                bodyMap["state_reason"] = stateReason
+            }
+            val response = httpClient.patch("https://api.github.com/repos/$repoFullName/issues/$number") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(bodyMap)
+            }
+            if (response.status.isSuccess()) {
+                Pair(response.body<GitHubIssueInfo>(), response.status)
+            } else {
+                Pair(null, response.status)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Pair(null, HttpStatusCode.InternalServerError)
+        }
+
+    suspend fun updatePullRequestState(token: String, repoFullName: String, number: Int, state: String): Pair<GitHubPullRequestInfo?, HttpStatusCode> =
+        try {
+            val response = httpClient.patch("https://api.github.com/repos/$repoFullName/pulls/$number") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("state" to state))
+            }
+            if (response.status.isSuccess()) {
+                Pair(response.body<GitHubPullRequestInfo>(), response.status)
+            } else {
+                Pair(null, response.status)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Pair(null, HttpStatusCode.InternalServerError)
+        }
+
+    suspend fun approvePullRequest(token: String, repoFullName: String, number: Int): HttpStatusCode =
+        try {
+            val response = httpClient.post("https://api.github.com/repos/$repoFullName/pulls/$number/reviews") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("event" to "APPROVE"))
+            }
+            response.status
+        } catch (e: Exception) {
+            e.printStackTrace()
+            HttpStatusCode.InternalServerError
+        }
+
+    suspend fun mergePullRequest(token: String, repoFullName: String, number: Int, mergeMethod: String = "merge"): Pair<GitHubMergeResult?, HttpStatusCode> =
+        try {
+            val response = httpClient.put("https://api.github.com/repos/$repoFullName/pulls/$number/merge") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("merge_method" to mergeMethod))
+            }
+            if (response.status.isSuccess()) {
+                Pair(response.body<GitHubMergeResult>(), response.status)
+            } else if (response.status == HttpStatusCode.MethodNotAllowed || response.status == HttpStatusCode.Conflict) {
+                try {
+                    Pair(response.body<GitHubMergeResult>(), response.status)
+                } catch(e: Exception) {
+                    Pair(null, response.status)
+                }
+            } else {
+                Pair(null, response.status)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Pair(null, HttpStatusCode.InternalServerError)
+        }
+
     suspend fun getPullRequests(token: String, repoFullName: String, incremental: Boolean): List<GitHubPullRequestInfo> =
         try {
             getPaged<GitHubPullRequestInfo>(
@@ -252,6 +326,36 @@ object GitHubService {
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
+        }
+
+    suspend fun getPullRequest(token: String, repoFullName: String, number: Int): GitHubPullRequestInfo? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/pulls/$number") {
+                githubHeaders(token)
+            }
+            if (response.status.isSuccess()) response.body() else null
+        } catch (e: Exception) {
+            null
+        }
+
+    suspend fun getIssue(token: String, repoFullName: String, number: Int): GitHubIssueInfo? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/issues/$number") {
+                githubHeaders(token)
+            }
+            if (response.status.isSuccess()) response.body() else null
+        } catch (e: Exception) {
+            null
+        }
+
+    suspend fun getCommit(token: String, repoFullName: String, sha: String): GitHubCommitInfo? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/commits/$sha") {
+                githubHeaders(token)
+            }
+            if (response.status.isSuccess()) response.body() else null
+        } catch (e: Exception) {
+            null
         }
 }
 
@@ -306,4 +410,11 @@ data class GitHubPullRequestInfo(
 @Serializable
 data class GitHubRef(
     val sha: String? = null
+)
+
+@Serializable
+data class GitHubMergeResult(
+    val sha: String? = null,
+    val merged: Boolean = false,
+    val message: String? = null
 )

@@ -183,8 +183,25 @@ object GitHubWebhookService {
         val status = suite["status"]?.jsonPrimitive?.contentOrNull ?: return
         val conclusion = suite["conclusion"]?.jsonPrimitive?.contentOrNull
 
+        val headBranch = suite["head_branch"]?.jsonPrimitive?.contentOrNull
+        val appName = suite["app"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
+        val url = suite["url"]?.jsonPrimitive?.contentOrNull
+        val createdAt = parseGitHubTime(suite["created_at"]?.jsonPrimitive?.contentOrNull)
+        val updatedAt = parseGitHubTime(suite["updated_at"]?.jsonPrimitive?.contentOrNull) ?: System.currentTimeMillis()
+
         linkedRepositoryIds(githubRepoId).forEach { repositoryId ->
-            GitHubDataStore.saveCheckSuite(repositoryId, suiteId, headSha, status, conclusion)
+            GitHubDataStore.saveCheckSuite(
+                repositoryId = repositoryId, 
+                suiteId = suiteId, 
+                headSha = headSha, 
+                status = status, 
+                conclusion = conclusion,
+                headBranch = headBranch,
+                appName = appName,
+                url = url,
+                createdAt = createdAt,
+                updatedAt = updatedAt
+            )
         }
     }
 

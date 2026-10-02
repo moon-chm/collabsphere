@@ -110,14 +110,37 @@ object GitHubDataStore {
         }
     }
 
-    fun saveCheckSuite(repositoryId: Int, suiteId: Long, headSha: String, status: String, conclusion: String?) {
+    fun saveCheckSuite(
+        repositoryId: Int, 
+        suiteId: Long, 
+        headSha: String, 
+        status: String, 
+        conclusion: String?,
+        headBranch: String? = null,
+        appName: String? = null,
+        url: String? = null,
+        createdAt: Long? = null,
+        updatedAt: Long = System.currentTimeMillis()
+    ) {
+        val existingUpdatedAt = GitHubCheckSuitesTable.select(GitHubCheckSuitesTable.updatedAt)
+            .where { (GitHubCheckSuitesTable.repositoryId eq repositoryId) and (GitHubCheckSuitesTable.githubSuiteId eq suiteId) }
+            .singleOrNull()?.get(GitHubCheckSuitesTable.updatedAt)
+
+        if (existingUpdatedAt != null && updatedAt < existingUpdatedAt) {
+            return
+        }
+
         GitHubCheckSuitesTable.upsert(GitHubCheckSuitesTable.repositoryId, GitHubCheckSuitesTable.githubSuiteId) {
             it[GitHubCheckSuitesTable.repositoryId] = repositoryId
             it[GitHubCheckSuitesTable.githubSuiteId] = suiteId
             it[GitHubCheckSuitesTable.headSha] = headSha.take(40)
             it[GitHubCheckSuitesTable.status] = status.take(20)
             it[GitHubCheckSuitesTable.conclusion] = conclusion?.take(30)
-            it[GitHubCheckSuitesTable.updatedAt] = System.currentTimeMillis()
+            it[GitHubCheckSuitesTable.headBranch] = headBranch?.take(255)
+            it[GitHubCheckSuitesTable.appName] = appName?.take(255)
+            it[GitHubCheckSuitesTable.url] = url?.take(500)
+            it[GitHubCheckSuitesTable.createdAt] = createdAt
+            it[GitHubCheckSuitesTable.updatedAt] = updatedAt
         }
     }
 

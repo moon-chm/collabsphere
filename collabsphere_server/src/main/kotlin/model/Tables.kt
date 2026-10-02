@@ -287,12 +287,17 @@ object GitHubCheckSuitesTable : Table("github_check_suites") {
     val status = varchar("status", 20)
     val conclusion = varchar("conclusion", 30).nullable()
     val updatedAt = long("updated_at")
+    val headBranch = varchar("head_branch", 255).nullable()
+    val appName = varchar("app_name", 255).nullable()
+    val url = varchar("url", 500).nullable()
+    val createdAt = long("created_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
 
     init {
         uniqueIndex("github_check_suites_unique", repositoryId, githubSuiteId)
         index(false, repositoryId, headSha)
+        index(false, repositoryId, updatedAt)
     }
 }
 
@@ -373,6 +378,21 @@ object GitHubContributorsTable : Table("github_contributors") {
     val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val githubUsername = varchar("github_username", 255)
     val commitCount = integer("commit_count").default(0)
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubActionIdempotencyTable : Table("github_action_idempotency") {
+    val id = integer("id").autoIncrement()
+    val idempotencyKey = varchar("idempotency_key", 128).uniqueIndex()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val resourceIdentity = varchar("resource_identity", 500)
+    val action = varchar("action", 50)
+    val status = varchar("status", 50) // IN_PROGRESS, SUCCEEDED, FAILED_RETRYABLE, FAILED_FINAL
+    val resultBody = text("result_body").nullable()
+    val createdAt = long("created_at")
+    val completedAt = long("completed_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

@@ -78,6 +78,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import com.collabsphere.app.viewmodel.GitHubUnfurlViewModel
+import org.koin.androidx.compose.koinViewModel
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -208,6 +210,11 @@ fun DMScreen(
     onConversationActiveChange: (Boolean) -> Unit = {},
     onExitModule: () -> Unit
 ) {
+    val unfurlViewModel: GitHubUnfurlViewModel = koinViewModel()
+    val githubPreviews by unfurlViewModel.previews.collectAsStateWithLifecycle()
+    val githubActionStates by unfurlViewModel.actionStates.collectAsStateWithLifecycle()
+    val githubActionMessages by unfurlViewModel.actionMessages.collectAsStateWithLifecycle()
+
     val workspaceMembers by viewModel.workspaceMembers.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val isLoadingOlder by viewModel.isLoadingOlder.collectAsStateWithLifecycle()
@@ -1339,6 +1346,22 @@ fun DMScreen(
                                                                 linkColor = Color.White
                                                             )
                                                             LinkPreviewCard(text = message.dm_content, onDarkBubble = true)
+                                                            val githubRegex = Regex("(https://github\\.com/[^/]+/[^/]+/[\\w/]+|https://github\\.com/[^/]+/[^/]+/?(?=\\s|$))")
+                                                            val matches = githubRegex.findAll(message.dm_content).map { it.value }.toSet()
+                                                            matches.forEach { url ->
+                                                                unfurlViewModel.requestUnfurl(workspaceId, url)
+                                                                val preview = githubPreviews[url]
+                                                                if (preview != null) {
+                                                                    com.collabsphere.app.view.components.GitHubUnfurlCard(
+                                                                        preview = preview,
+                                                                        actionState = githubActionStates[url],
+                                                                        actionMessage = githubActionMessages[url],
+                                                                        onActionClick = { action -> 
+                                                                            unfurlViewModel.performAction(workspaceId, url, action)
+                                                                        }
+                                                                    )
+                                                                }
+                                                            }
                                                         }
 
                                                         if (message.id < 0) {
@@ -1656,6 +1679,22 @@ fun DMScreen(
                                                                 linkColor = IndigoStart
                                                             )
                                                             LinkPreviewCard(text = message.dm_content, onDarkBubble = false)
+                                                            val githubRegex = Regex("(https://github\\.com/[^/]+/[^/]+/[\\w/]+|https://github\\.com/[^/]+/[^/]+/?(?=\\s|$))")
+                                                            val matches = githubRegex.findAll(message.dm_content).map { it.value }.toSet()
+                                                            matches.forEach { url ->
+                                                                unfurlViewModel.requestUnfurl(workspaceId, url)
+                                                                val preview = githubPreviews[url]
+                                                                if (preview != null) {
+                                                                    com.collabsphere.app.view.components.GitHubUnfurlCard(
+                                                                        preview = preview,
+                                                                        actionState = githubActionStates[url],
+                                                                        actionMessage = githubActionMessages[url],
+                                                                        onActionClick = { action -> 
+                                                                            unfurlViewModel.performAction(workspaceId, url, action)
+                                                                        }
+                                                                    )
+                                                                }
+                                                            }
                                                         }
 
                                                         // Timestamp row

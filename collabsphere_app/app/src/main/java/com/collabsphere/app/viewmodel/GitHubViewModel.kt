@@ -41,7 +41,21 @@ data class GitHubAnalyticsResponse(
     val openIssues: Int = 0,
     val recentIssues: List<GitHubIssueItem> = emptyList(),
     val repositoryId: Int? = null,
-    val repositories: List<GitHubLinkedRepo> = emptyList()
+    val repositories: List<GitHubLinkedRepo> = emptyList(),
+    val recentCheckSuites: List<GitHubCheckSuiteItem> = emptyList()
+)
+
+@Serializable
+data class GitHubCheckSuiteItem(
+    val id: Long,
+    val headSha: String,
+    val headBranch: String?,
+    val status: String,
+    val conclusion: String?,
+    val appName: String?,
+    val url: String?,
+    val createdAt: Long?,
+    val updatedAt: Long
 )
 
 @Serializable

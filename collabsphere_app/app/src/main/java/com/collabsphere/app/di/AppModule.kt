@@ -278,6 +278,7 @@ val viewModelModule = module {
     }
 
     viewModel { GitHubViewModel(get(named("RegularHttpClient"))) }
+    viewModel { com.collabsphere.app.viewmodel.GitHubUnfurlViewModel(get(named("RegularHttpClient"))) }
 }
 
 val appModules = listOf(databaseModule, networkModule, repositoryModule, appModule, workerModule, viewModelModule)

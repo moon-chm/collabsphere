@@ -853,6 +853,24 @@ fun Application.configureGitHubRoutes() {
                                 )
                             }
 
+                        val recentCheckSuites = com.collabsphere.model.GitHubCheckSuitesTable.selectAll()
+                            .where { com.collabsphere.model.GitHubCheckSuitesTable.repositoryId eq repoId }
+                            .orderBy(com.collabsphere.model.GitHubCheckSuitesTable.updatedAt, SortOrder.DESC)
+                            .limit(RECENT_ITEMS)
+                            .map {
+                                com.collabsphere.dto.GitHubCheckSuiteItem(
+                                    id = it[com.collabsphere.model.GitHubCheckSuitesTable.githubSuiteId],
+                                    headSha = it[com.collabsphere.model.GitHubCheckSuitesTable.headSha],
+                                    headBranch = it[com.collabsphere.model.GitHubCheckSuitesTable.headBranch],
+                                    status = it[com.collabsphere.model.GitHubCheckSuitesTable.status],
+                                    conclusion = it[com.collabsphere.model.GitHubCheckSuitesTable.conclusion],
+                                    appName = it[com.collabsphere.model.GitHubCheckSuitesTable.appName],
+                                    url = it[com.collabsphere.model.GitHubCheckSuitesTable.url],
+                                    createdAt = it[com.collabsphere.model.GitHubCheckSuitesTable.createdAt],
+                                    updatedAt = it[com.collabsphere.model.GitHubCheckSuitesTable.updatedAt]
+                                )
+                            }
+
                         GitHubAnalyticsResponse(
                             isConnected = true,
                             hasConnection = hasConnection,
@@ -874,6 +892,7 @@ fun Application.configureGitHubRoutes() {
                             recentIssues = recentIssues,
                             repositoryId = repoId,
                             repositories = linkedRepos,
+                            recentCheckSuites = recentCheckSuites,
                             channels = if (access.isOwner) {
                                 ChannelsTable.selectAll()
                                     .where { (ChannelsTable.workspaceId eq access.workspaceId) and (ChannelsTable.isDeleted eq false) }
@@ -895,6 +914,37 @@ fun Application.configureGitHubRoutes() {
                     }
 
                     call.respond(HttpStatusCode.OK, refreshed)
+                }
+
+                post("/unfurl") {
+                    val access = call.resolveGitHubAccess(false) ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                    val request = call.receiveNullable<com.collabsphere.dto.GitHubUnfurlRequest>()
+                        ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid request")
+                    
+                    val previews = com.collabsphere.util.GitHubUnfurlService.unfurl(access.workspaceId, request.urls)
+                    call.respond(com.collabsphere.dto.GitHubUnfurlResponse(previews))
+                }
+
+                post("/action") {
+                    val access = call.resolveGitHubAccess(false) ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                    val idempotencyKey = call.request.headers["Idempotency-Key"]
+                    if (idempotencyKey.isNullOrBlank()) {
+                        return@post call.respond(HttpStatusCode.BadRequest, "Missing Idempotency-Key header")
+                    }
+
+                    val request = call.receiveNullable<com.collabsphere.dto.GitHubActionRequest>()
+                        ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid request")
+
+                    val response = com.collabsphere.util.GitHubActionService.processAction(
+                        workspaceId = access.workspaceId,
+                        userId = access.callerId,
+                        idempotencyKey = idempotencyKey,
+                        request = request
+                    )
+
+                    // For UX, return HTTP 200 even for logical failures, letting the ActionResponse status dictate
+                    // Actually, if it's AuthenticationRequired we can return 401, but the JSON body is enough
+                    call.respond(response)
                 }
             }
         }
