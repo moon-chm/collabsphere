@@ -12,7 +12,7 @@ import io.ktor.http.*
 
 class NoteApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/notes"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/notes"
 
     suspend fun createNotes(request: NotesRequest): NotesResponse {
         return client.post(baseUrl) {

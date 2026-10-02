@@ -7,6 +7,7 @@ import com.collabsphere.app.model.RetryOutcome
 import com.collabsphere.app.model.TempId
 import com.collabsphere.app.model.isWorkRunning
 import com.collabsphere.app.remote.dm.DmApiService
+import com.collabsphere.app.remote.media.MediaApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +23,7 @@ class DmRepo(
     private val dmDao: DmDao,
     private val reactionDao: DmReactionDao,
     private val apiService: DmApiService,
+    private val mediaApiService: MediaApiService,
     private val workManager: WorkManager
 ) {
 
@@ -141,7 +143,7 @@ class DmRepo(
         mimeType: String,
         fileName: String
     ) {
-        val mediaUrl = apiService.uploadDmMedia(baseUrl, fileBytes, mimeType, fileName)
+        val mediaUrl = mediaApiService.uploadMedia(baseUrl, fileBytes, mimeType, fileName)
         sendRealtimeDm(
             workspaceId = workspaceId,
             senderId = senderId,
@@ -183,7 +185,7 @@ class DmRepo(
     /** Tell the server we've read all messages from chatPartnerId */
     suspend fun markConversationRead(workspaceId: Int, currentUserId: Int, chatPartnerId: Int) {
         // Optimistic local update
-        dmDao.markAllReadFrom(currentUserId, chatPartnerId, workspaceId)
+        dmDao.markMessagesAsRead(senderId = chatPartnerId, receiverId = currentUserId, workspaceId = workspaceId)
         val payload = DmDto(
             action = "MARK_READ",
             workspaceId = workspaceId,
@@ -206,7 +208,7 @@ class DmRepo(
             val partnerId = message.senderId // the one who just read
             val wsId = message.workspaceId
             // Update rows where we are the sender and partner is receiver
-            dmDao.markAllReadFrom(partnerId, currentUserId, wsId)
+            dmDao.markMessagesAsRead(senderId = currentUserId, receiverId = partnerId, workspaceId = wsId)
             return
         }
 
@@ -220,8 +222,11 @@ class DmRepo(
             // We use a synthetic userId=0 as a placeholder for aggregated counts
             // Actually, we store the reactions coming from the dto's userId context
             // For simplicity: store reactor as senderId
-            reactionMap.entries.forEach { (emoji, _) ->
+            reactionMap.entries.forEach { (emoji, count) ->
                 // We don't know individual reactors from aggregated map, so just emit to UI via event flow
+                for (i in 1..count) {
+                    reactionDao.upsertReaction(DmReactionEntity(msgId, i, emoji))
+                }
             }
             return
         }
@@ -259,7 +264,7 @@ class DmRepo(
                     isRead = false,
                     replyToId = message.replyToId
                 )
-                dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp)
+                dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
             }
             return
@@ -276,7 +281,7 @@ class DmRepo(
                 dm_content = message.content,
                 timestamp = message.timestamp,
                 mediaUrl = message.mediaUrl,
-                isRead = message.reactions != null, // reuse reactions field to pass isRead — see server
+                isRead = message.isRead,
                 replyToId = message.replyToId
             )
             dmDao.sendDm(historyEntity)
@@ -296,7 +301,7 @@ class DmRepo(
                     isRead = false,
                     replyToId = message.replyToId
                 )
-                dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp)
+                dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
             }
             return
@@ -357,7 +362,8 @@ class DmRepo(
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE_MESSAGE",
                 "DM_ID" to dmId,
-                "WORKSPACE_ID" to workspaceId
+                "WORKSPACE_ID" to workspaceId,
+                "RECEIVER_ID" to receiverId
             )
             enqueueSync(syncData)
         }

@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import com.collabsphere.app.R
 import androidx.core.app.NotificationCompat
 import com.collabsphere.app.ChannelMessageCenter
 import com.collabsphere.app.MyApplication
@@ -21,8 +22,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -61,14 +63,29 @@ class DmWebSocketService : Service() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Ensure any legacy persistent foreground notification is immediately cleared
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                setShowBadge(false)
+            }
+            notificationManager.createNotificationChannel(channel)
         }
-        notificationManager.cancel(NOTIFICATION_ID)
+
+        val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("CollabSphere Sync")
+            .setContentText("Listening for real-time updates...")
+            .setSmallIcon(R.drawable.ic_stat_collabsphere)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         // MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED pushes arrive over the same DM socket
         // but are routed here via NotificationCenter (see DmApiService.observeIncomingDms) instead
@@ -98,7 +115,7 @@ class DmWebSocketService : Service() {
 
         if (!baseUrl.isNullOrBlank() && userId != -1L) {
             val needsRestart = connectionJob == null || 
-                               !connectionJob!!.isActive || 
+                               connectionJob?.isActive != true || 
                                baseUrl != currentBaseUrl || 
                                userId != currentUserIdLong
 
@@ -163,13 +180,12 @@ class DmWebSocketService : Service() {
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     override fun onDestroy() {
         isWebSocketConnected = false
         connectionJob?.cancel()
         // Deliberately outlives serviceScope (cancelled right after) so the disconnect handshake can
         // still finish even though the service itself is being torn down right now.
-        GlobalScope.launch(Dispatchers.IO) {
+        CoroutineScope(NonCancellable + Dispatchers.IO).launch {
             try {
                 repo.disconnectChat()
             } finally {

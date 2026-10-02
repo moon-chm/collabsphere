@@ -17,5 +17,6 @@ data class DmDto(
     val emoji: String? = null,
     val reactions: Map<String, Int>? = null,
     val replyToId: Int? = null,
-    val channelId: Int? = null
+    val channelId: Int? = null,
+    val isRead: Boolean = false
 )

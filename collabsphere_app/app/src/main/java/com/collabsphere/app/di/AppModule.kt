@@ -21,6 +21,7 @@ import com.collabsphere.app.remote.channel.ChannelApiService
 import com.collabsphere.app.remote.task.TaskApiService
 import com.collabsphere.app.remote.message.MessageApiService
 import com.collabsphere.app.remote.dm.DmApiService
+import com.collabsphere.app.remote.media.MediaApiService
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import com.collabsphere.app.viewmodel.LoginViewModel
 import com.collabsphere.app.viewmodel.DashboardViewModel
@@ -157,6 +158,7 @@ val networkModule = module {
     single { NoteApiService(get(named("RegularHttpClient"))) }
     single { MessageApiService(get(named("RegularHttpClient"))) }
     single { DmApiService(get(named("WebSocketHttpClient"))) }
+    single { MediaApiService() }
     single { FileApiService(get(named("RegularHttpClient"))) }
     single { NotificationApiService(get(named("RegularHttpClient"))) }
 }
@@ -167,9 +169,9 @@ val repositoryModule = module {
     single { ChannelRepo(get(), get(), get(), get()) }
     single { TaskRepo(get(), get(), get(), get(), get(), get()) }
     single { NotesRepo(get(), get(), get(), get()) }
-    single { MessageRepo(get(), get(), get(), get(), get()) }
+    single { MessageRepo(get(), get(), get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
-    single { DmRepo(get(), get(), get(), get()) }
+    single { DmRepo(get(), get(), get(), get(), get()) }
     single { NotificationRepo(get()) }
 }
 

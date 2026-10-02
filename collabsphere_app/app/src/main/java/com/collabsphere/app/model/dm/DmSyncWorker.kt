@@ -41,19 +41,21 @@ class DmSyncWorker(
             val userIdFlowKey = intPreferencesKey("saved_user_id")
             val savedUserId = dataStore.data.map { it[userIdFlowKey] ?: -1 }.first()
             val connectUserId = if (senderId != -1) senderId else savedUserId
+            val wasConnected = com.collabsphere.app.remote.dm.DmWebSocketService.isWebSocketConnected
 
-            if (connectUserId != -1) {
-                apiService.connect(com.collabsphere.app.AppConfig.BASE_URL, connectUserId.toLong(), dmDao.newestSyncedDmId() ?: 0)
+            if (!wasConnected) {
+                return@withContext Result.retry()
             }
 
             when (actionType) {
                 "DELETE_MESSAGE" -> {
                     if (dmId == -1) return@withContext Result.failure()
+                    val receiverId = inputData.getInt("RECEIVER_ID", 0)
                     val socketMessage = DmDto(
                         action = "DELETE_MESSAGE",
                         workspaceId = workspaceId,
                         senderId = 0,
-                        receiverId = 0,
+                        receiverId = receiverId,
                         content = "",
                         timestamp = System.currentTimeMillis(),
                         id = dmId
@@ -79,6 +81,10 @@ class DmSyncWorker(
                     )
                     apiService.sendDm(socketMessage)
                 }
+            }
+            if (!wasConnected) {
+                kotlinx.coroutines.delay(500)
+                apiService.disconnect()
             }
             return@withContext Result.success()
 

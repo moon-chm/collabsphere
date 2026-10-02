@@ -20,6 +20,7 @@ import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.remote.dm.DmApiService
 import com.collabsphere.app.remote.dm.DmWebSocketService
 import com.collabsphere.app.remote.message.MessageApiService
+import com.collabsphere.app.remote.media.MediaApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -34,7 +35,8 @@ class MessageRepo(
     private val apiService: MessageApiService,
     private val workManager: WorkManager,
     private val dataStore: DataStore<Preferences>,
-    private val dmApiService: DmApiService
+    private val dmApiService: DmApiService,
+    private val mediaApiService: MediaApiService
 ) {
     companion object {
         private const val LAST_SYNC_KEY_PREFIX = "messages_last_sync_time_"
@@ -48,7 +50,7 @@ class MessageRepo(
     // MessageRepo is a Koin singleton shared by every MessageViewModel instance — without this
     // guard, re-entering the same channel (without popping the earlier backstack entry) starts a
     // second independent 3s poller against the same endpoint.
-    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<Int, Int>>()
+    private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, kotlinx.coroutines.Job>()
 
     private fun MessageEntity.toCreateRequest() = MessageRequest(
         id = id,
@@ -192,7 +194,7 @@ class MessageRepo(
     suspend fun sendMediaMessage(message: MessageEntity, fileBytes: ByteArray, mimeType: String, fileName: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val mediaUrl = dmApiService.uploadDmMedia(AppConfig.BASE_URL, fileBytes, mimeType, fileName)
+                val mediaUrl = mediaApiService.uploadMedia(AppConfig.BASE_URL, fileBytes, mimeType, fileName)
                 sendMessageToUser(message.copy(mediaUrl = mediaUrl))
                 Unit
             }
@@ -271,7 +273,8 @@ class MessageRepo(
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
         val loopKey = workspaceId to channelId
-        if (!activeSyncLoops.add(loopKey)) return@withContext
+        activeSyncLoops[loopKey]?.cancel()
+        activeSyncLoops[loopKey] = coroutineContext[kotlinx.coroutines.Job]!!
         try {
         var lastPollAt = 0L
         var wasSocketConnected = false
@@ -314,7 +317,7 @@ class MessageRepo(
             delay(2000)
         }
         } finally {
-            activeSyncLoops.remove(loopKey)
+            activeSyncLoops.remove(loopKey, coroutineContext[kotlinx.coroutines.Job])
         }
     }
 

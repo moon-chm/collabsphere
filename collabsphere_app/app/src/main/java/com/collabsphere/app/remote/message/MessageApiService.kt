@@ -18,7 +18,7 @@ import io.ktor.http.*
 
 class MessageApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/message"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/message"
 
     suspend fun createMessage(request: MessageRequest): MessageResponse {
         return client.post(baseUrl) {

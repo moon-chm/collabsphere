@@ -38,8 +38,8 @@ interface DmDao {
     @Query("UPDATE DM SET isRead = :isRead WHERE id = :dmId")
     suspend fun updateIsRead(dmId: Int, isRead: Boolean)
 
-    @Query("UPDATE DM SET isRead = 1 WHERE receiverId = :currentUserId AND senderId = :partnerId AND workspaceId = :workspaceId AND isRead = 0")
-    suspend fun markAllReadFrom(currentUserId: Int, partnerId: Int, workspaceId: Int)
+    @Query("UPDATE DM SET isRead = 1 WHERE receiverId = :receiverId AND senderId = :senderId AND workspaceId = :workspaceId AND isRead = 0")
+    suspend fun markMessagesAsRead(senderId: Int, receiverId: Int, workspaceId: Int)
 
     @Query("UPDATE DM SET mediaUrl = :mediaUrl WHERE id = :dmId")
     suspend fun updateMediaUrl(dmId: Int, mediaUrl: String?)
@@ -50,6 +50,6 @@ interface DmDao {
     @Query("DELETE FROM DM WHERE id = :dmId")
     suspend fun deleteDmById(dmId: Int)
 
-    @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp")
-    suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long)
+    @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp AND senderId = :senderId")
+    suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long, senderId: Int)
 }

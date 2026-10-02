@@ -47,6 +47,10 @@ class DmViewModel(
     private val _reactions = MutableStateFlow<Map<Int, Map<String, Int>>>(emptyMap())
     val reactions: StateFlow<Map<Int, Map<String, Int>>> = _reactions.asStateFlow()
 
+    // ── My Reactions State — messageId → set of emojis ──────────────────────────
+    private val _myReactedEmojis = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
+    val myReactedEmojis: StateFlow<Map<Int, Set<String>>> = _myReactedEmojis.asStateFlow()
+
     // ── Media upload progress ─────────────────────────────────────────────────────
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia: StateFlow<Boolean> = _isUploadingMedia.asStateFlow()
@@ -81,7 +85,7 @@ class DmViewModel(
         }
 
         // Started as standard background service — no foreground notification needed
-        context.startService(intent)
+        androidx.core.content.ContextCompat.startForegroundService(context, intent)
 
         startObservingEvents()
     }
@@ -153,12 +157,16 @@ class DmViewModel(
         memberCollectionJob = viewModelScope.launch {
             try {
                 workspaceRepo.syncWorkspaceMembers(workspaceId)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("DM_VM", "Failed syncing workspace members (will use local cache)", e)
+            }
 
             try {
                 val initialOnline = repo.fetchOnlineUsers(baseUrl, workspaceId)
                 _onlineUserIds.value = initialOnline.toSet()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("DM_VM", "Failed fetching online users for workspace $workspaceId", e)
+            }
 
             workspaceRepo.getWorkspaceMembersFlow(workspaceId)
                 .catch { e ->
@@ -183,7 +191,7 @@ class DmViewModel(
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", chatPartnerId)
         }
-        context.startService(intent)
+        androidx.core.content.ContextCompat.startForegroundService(context, intent)
 
         historyCollectionJob?.cancel()
         historyCollectionJob = viewModelScope.launch {
@@ -191,6 +199,20 @@ class DmViewModel(
                 .catch { e -> Log.e("DM_VM", "History collection error", e) }
                 .collect { history ->
                     _messages.value = history
+                    launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val myReacted = mutableMapOf<Int, Set<String>>()
+                        history.forEach { dm ->
+                            if (dm.id > 0) {
+                                try {
+                                    val emojis = repo.getUserReactionsForMessage(dm.id, userId)
+                                    if (emojis.isNotEmpty()) myReacted[dm.id] = emojis.toSet()
+                                } catch (e: Exception) {
+                                    Log.e("DM_VM", "Failed loading reactions for message ${dm.id}", e)
+                                }
+                            }
+                        }
+                        _myReactedEmojis.value = myReacted
+                    }
                 }
         }
 
@@ -198,7 +220,9 @@ class DmViewModel(
         viewModelScope.launch {
             try {
                 repo.markConversationRead(workspaceId, userId, chatPartnerId)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e("DM_VM", "Failed marking conversation as read (partnerId=$chatPartnerId)", e)
+            }
         }
     }
 
@@ -258,7 +282,7 @@ class DmViewModel(
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", -1)
         }
-        context.startService(intent)
+        androidx.core.content.ContextCompat.startForegroundService(context, intent)
     }
 
     fun shutdownWebSocketEntirely() {
@@ -328,6 +352,12 @@ class DmViewModel(
                 if (newCount <= 0) msgReactions.remove(emoji) else msgReactions[emoji] = newCount
                 current[messageId] = msgReactions
                 _reactions.value = current
+
+                val currentMy = _myReactedEmojis.value.toMutableMap()
+                val mySet = currentMy[messageId]?.toMutableSet() ?: mutableSetOf()
+                mySet.remove(emoji)
+                if (mySet.isEmpty()) currentMy.remove(messageId) else currentMy[messageId] = mySet
+                _myReactedEmojis.value = currentMy
             } else {
                 repo.upsertReactionLocally(messageId, userId, emoji)
                 repo.sendReaction(messageId, emoji, workspaceId, receiverId, isAdd = true)
@@ -337,6 +367,12 @@ class DmViewModel(
                 msgReactions[emoji] = (msgReactions[emoji] ?: 0) + 1
                 current[messageId] = msgReactions
                 _reactions.value = current
+
+                val currentMy = _myReactedEmojis.value.toMutableMap()
+                val mySet = currentMy[messageId]?.toMutableSet() ?: mutableSetOf()
+                mySet.add(emoji)
+                currentMy[messageId] = mySet
+                _myReactedEmojis.value = currentMy
             }
         }
     }

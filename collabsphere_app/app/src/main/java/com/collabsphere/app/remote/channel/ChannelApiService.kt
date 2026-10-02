@@ -12,7 +12,7 @@ import com.collabsphere.app.dto.channel.ChannelSyncDto
 
 class ChannelApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/channels"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/channels"
 
     suspend fun createChannel(request: ChannelRequest): ChannelResponse {
         return client.post(baseUrl) {

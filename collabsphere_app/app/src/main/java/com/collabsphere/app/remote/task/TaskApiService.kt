@@ -12,7 +12,7 @@ import io.ktor.http.*
 
 class TaskApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/tasks"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/tasks"
 
     suspend fun createTask(createdByUserId: Int, request: TaskRequest): TaskResponse {
         return client.post(baseUrl) {

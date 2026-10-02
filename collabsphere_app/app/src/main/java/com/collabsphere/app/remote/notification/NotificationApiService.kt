@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 
 class NotificationApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/notifications"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/notifications"
 
     suspend fun getNotifications(unreadOnly: Boolean = false, limit: Int = 50, offset: Long = 0): List<NotificationResponse> =
         withContext(Dispatchers.IO) {

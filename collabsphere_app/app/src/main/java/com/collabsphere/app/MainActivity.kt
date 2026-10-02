@@ -128,8 +128,17 @@ class MainActivity : ComponentActivity() {
                         .collectAsStateWithLifecycle(initialValue = null)
                     val loggedInUserId by loginViewModel.loggedInUserId.collectAsStateWithLifecycle(initialValue = 0L)
 
-                    // Show nothing until DataStore has answered both flows.
-                    if (savedUserId == null || onboardingDone == null) return@Surface
+                    var showSplash by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+
+                    // Show splash while DataStore is loading
+                    if (savedUserId == null || onboardingDone == null) {
+                        if (showSplash) {
+                            com.collabsphere.app.view.SplashScreen(
+                                onSplashFinished = { showSplash = false }
+                            )
+                        }
+                        return@Surface
+                    }
 
                     val resolvedUserId: Int = savedUserId!!
                     val currentUserId = if (loggedInUserId != 0L) loggedInUserId.toInt() else resolvedUserId
@@ -189,16 +198,29 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    AppNavigation(
-                        loginViewModel = loginViewModel,
-                        dashboardViewModel = dashboardViewModel,
-                        notificationsViewModel = notificationsViewModel,
-                        notificationHelper = notificationHelper,
-                        startDestination = startDestination,
-                        notificationDeepLink = notificationDeepLink,
-                        onDeepLinkConsumed = { notificationDeepLink = null },
-                        widgetTab = if (isLoggedInForWidget) widgetTab else null
-                    )
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavigation(
+                            loginViewModel = loginViewModel,
+                            dashboardViewModel = dashboardViewModel,
+                            notificationsViewModel = notificationsViewModel,
+                            notificationHelper = notificationHelper,
+                            startDestination = startDestination,
+                            notificationDeepLink = notificationDeepLink,
+                            onDeepLinkConsumed = { notificationDeepLink = null },
+                            widgetTab = if (isLoggedInForWidget) widgetTab else null
+                        )
+
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showSplash,
+                            exit = androidx.compose.animation.fadeOut(
+                                animationSpec = androidx.compose.animation.core.tween(500)
+                            )
+                        ) {
+                            com.collabsphere.app.view.SplashScreen(
+                                onSplashFinished = { showSplash = false }
+                            )
+                        }
+                    }
                 }
             }
         }

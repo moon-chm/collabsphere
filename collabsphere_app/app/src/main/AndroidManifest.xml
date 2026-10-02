@@ -22,7 +22,8 @@
         <service
             android:name=".remote.dm.DmWebSocketService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
 
         <receiver
             android:name=".remote.dm.DmNotificationReplyReceiver"

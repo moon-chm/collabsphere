@@ -24,15 +24,21 @@ interface ChannelDao {
     @Query("SELECT id FROM channels WHERE channelName = :channelName AND workspaceId = :workspaceId LIMIT 1")
     suspend fun getChannelIdByName(channelName: String, workspaceId: Int): Int?
 
-    @Query("UPDATE channels SET id = :newId WHERE id = :oldId")
-    suspend fun updateChannelIdRaw(oldId: Int, newId: Int)
+    @Query("SELECT * FROM channels WHERE id = :channelId LIMIT 1")
+    suspend fun getChannelById(channelId: Int): ChannelEntity?
+
+    @Query("DELETE FROM channels WHERE id = :channelId")
+    suspend fun deleteChannelById(channelId: Int)
 
     @Query("UPDATE message SET channelId = :newId WHERE channelId = :oldId")
     suspend fun updateMessageChannelIdRaw(oldId: Int, newId: Int)
 
     @androidx.room.Transaction
     suspend fun swapChannelId(oldId: Int, newId: Int) {
-        updateChannelIdRaw(oldId, newId)
+        val channel = getChannelById(oldId) ?: return
+        val newChannel = channel.copy(id = newId)
+        createChannels(newChannel)
         updateMessageChannelIdRaw(oldId, newId)
+        deleteChannelById(oldId)
     }
 }

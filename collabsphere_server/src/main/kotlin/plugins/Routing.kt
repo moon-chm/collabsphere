@@ -208,6 +208,7 @@ private fun ResultRow.toDmHistoryDto(): DmDto {
         content = this[DirectMessagesTable.content],
         timestamp = this[DirectMessagesTable.timestamp],
         mediaUrl = this[DirectMessagesTable.mediaUrl],
+        isRead = this[DirectMessagesTable.isRead],
         replyToId = this[DirectMessagesTable.replyToId]
     )
 }
@@ -3274,8 +3275,10 @@ fun Application.configureRouting() {
                             return@post
                         }
                         call.respond(HttpStatusCode.OK, summary.first)
-                        val json = Json.encodeToString(summary.first)
-                        summary.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
+                        if (summary.first.workspaceId > 0) {
+                            val json = Json.encodeToString(summary.first)
+                            summary.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
+                        }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, "Reaction failed")
                     }
@@ -3445,7 +3448,12 @@ fun Application.configureRouting() {
                         // The client always sends workspaceId before the file part (see FileApiService.uploadFile's
                         // formData order) — checked as soon as it arrives so a non-member's file bytes are never
                         // buffered at all, instead of paying that cost before finding out the request is rejected.
+                        //
+                        // Defence-in-depth: if a malicious client reorders parts and sends file bytes BEFORE
+                        // workspaceId, the file data is disposed immediately (not buffered) and the request is
+                        // rejected after all parts have been consumed, closing a potential memory-DoS window.
                         var isForbidden = false
+                        var membershipVerified = false
 
                         multipart.forEachPart { part ->
                             when (part) {
@@ -3456,6 +3464,8 @@ fun Application.configureRouting() {
                                             workspaceId?.let { wsId ->
                                                 if (!dbQuery { isMember(actingUserId, wsId) }) {
                                                     isForbidden = true
+                                                } else {
+                                                    membershipVerified = true
                                                 }
                                             }
                                         }
@@ -3465,7 +3475,9 @@ fun Application.configureRouting() {
                                     part.dispose()
                                 }
                                 is PartData.FileItem -> {
-                                    if (isForbidden) {
+                                    if (isForbidden || !membershipVerified) {
+                                        // Either explicitly forbidden or workspaceId hasn't arrived yet —
+                                        // refuse to buffer potentially 25 MB of unauthorized file data.
                                         part.dispose()
                                     } else {
                                         // File(...).name strips any directory components (e.g. "../../etc/passwd" -> "passwd"),
@@ -3835,7 +3847,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            post("/api/dm/upload-media") {
+            post("/api/media/upload") {
                 val actingUserId = call.authenticatedUserId()
                 try {
                     val multipart = call.receiveMultipart()

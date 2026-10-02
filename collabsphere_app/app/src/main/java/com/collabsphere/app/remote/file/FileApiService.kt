@@ -18,7 +18,7 @@ import java.io.File
 
 class FileApiService(private val client: HttpClient) {
 
-    private val baseUrl = "${AppConfig.BASE_URL}/api/file"
+    private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/file"
 
     suspend fun uploadFile(
         userId: Int,

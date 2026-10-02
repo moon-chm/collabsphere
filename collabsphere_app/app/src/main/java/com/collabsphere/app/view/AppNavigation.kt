@@ -74,6 +74,8 @@ import com.collabsphere.app.viewmodel.dm.DmViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.compose.KoinContext
 import org.koin.compose.koinInject
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 
 @Composable
 fun AppNavigation(
@@ -95,6 +97,7 @@ fun AppNavigation(
         val loggedInAvatarUrl by loginViewModel.loggedInAvatarUrl.collectAsStateWithLifecycle()
         val unreadNotificationCount by notificationsViewModel.unreadCount.collectAsStateWithLifecycle()
         val context = LocalContext.current
+        var wasLoggedIn by remember { mutableStateOf(isLoggedIn) }
 
         LaunchedEffect(isLoggedIn) {
             val currentRoute = navController.currentDestination?.route
@@ -109,7 +112,9 @@ fun AppNavigation(
                     }
                 }
             } else {
-                if (currentRoute != "login" && currentRoute != "register"
+                if (startDestination == "dashboard" && !wasLoggedIn) {
+                    // Initial load race condition: avoid navigating to login immediately
+                } else if (currentRoute != "login" && currentRoute != "register"
                     && currentRoute != "onboarding" && currentRoute != null
                 ) {
                     navController.navigate("login") {
@@ -117,6 +122,7 @@ fun AppNavigation(
                     }
                 }
             }
+            wasLoggedIn = isLoggedIn
         }
 
         LaunchedEffect(notificationDeepLink, isLoggedIn) {
