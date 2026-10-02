@@ -85,7 +85,7 @@ class DmViewModel(
         }
 
         // Started as standard background service — no foreground notification needed
-        androidx.core.content.ContextCompat.startForegroundService(context, intent)
+        context.startService(intent)
 
         startObservingEvents()
     }
@@ -191,7 +191,7 @@ class DmViewModel(
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", chatPartnerId)
         }
-        androidx.core.content.ContextCompat.startForegroundService(context, intent)
+        context.startService(intent)
 
         historyCollectionJob?.cancel()
         historyCollectionJob = viewModelScope.launch {
@@ -282,7 +282,7 @@ class DmViewModel(
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", -1)
         }
-        androidx.core.content.ContextCompat.startForegroundService(context, intent)
+        context.startService(intent)
     }
 
     fun shutdownWebSocketEntirely() {

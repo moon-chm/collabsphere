@@ -63,30 +63,6 @@ class DmWebSocketService : Service() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setShowBadge(false)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val notification = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("CollabSphere Sync")
-            .setContentText("Listening for real-time updates...")
-            .setSmallIcon(R.drawable.ic_stat_collabsphere)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
-            .build()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-
         // MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED pushes arrive over the same DM socket
         // but are routed here via NotificationCenter (see DmApiService.observeIncomingDms) instead
         // of the DmDto flow above, since they aren't chat messages.
