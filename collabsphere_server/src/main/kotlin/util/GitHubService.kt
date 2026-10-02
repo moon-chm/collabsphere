@@ -261,6 +261,23 @@ object GitHubService {
             Pair(null, HttpStatusCode.InternalServerError)
         }
 
+    suspend fun addIssueComment(token: String, repoFullName: String, number: Int, body: String): Pair<GitHubIssueComment?, HttpStatusCode> =
+        try {
+            val response = httpClient.post("https://api.github.com/repos/$repoFullName/issues/$number/comments") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("body" to body))
+            }
+            if (response.status.isSuccess()) {
+                Pair(response.body<GitHubIssueComment>(), response.status)
+            } else {
+                Pair(null, response.status)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Pair(null, HttpStatusCode.InternalServerError)
+        }
+
     suspend fun updatePullRequestState(token: String, repoFullName: String, number: Int, state: String): Pair<GitHubPullRequestInfo?, HttpStatusCode> =
         try {
             val response = httpClient.patch("https://api.github.com/repos/$repoFullName/pulls/$number") {
@@ -417,4 +434,14 @@ data class GitHubMergeResult(
     val sha: String? = null,
     val merged: Boolean = false,
     val message: String? = null
+)
+
+@Serializable
+data class GitHubIssueComment(
+    val id: Long,
+    val body: String,
+    val user: GitHubOwner? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null,
+    val html_url: String? = null
 )

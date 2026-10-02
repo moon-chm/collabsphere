@@ -108,7 +108,7 @@ object GitHubActionService {
 
             // 5. Execute action using GitHub API
             val result = try {
-                executeGitHubMutation(token, parsed, request.action, repoRow[GitHubRepositoriesTable.id])
+                executeGitHubMutation(token, parsed, request, repoRow[GitHubRepositoriesTable.id])
             } catch (e: Exception) {
                 GitHubActionResponse(
                     GitHubActionResultStatus.UnknownFailure, 
@@ -140,17 +140,49 @@ object GitHubActionService {
     private suspend fun executeGitHubMutation(
         token: String, 
         parsed: GitHubUnfurlService.ParsedUrl, 
-        action: String,
+        request: GitHubActionRequest,
         repositoryId: Int
     ): GitHubActionResponse {
-        return when (action) {
+        return when (request.action) {
+            "COMMENT_ISSUE", "COMMENT_PR" -> {
+                val number = when (parsed) {
+                    is GitHubUnfurlService.ParsedUrl.Issue -> parsed.number
+                    is GitHubUnfurlService.ParsedUrl.PullRequest -> parsed.number
+                    else -> return GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "URL is not an issue or pull request")
+                }
+                
+                val body = request.body
+                if (body.isNullOrBlank()) {
+                    return GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "Comment body cannot be empty")
+                }
+                
+                val (comment, statusCode) = GitHubService.addIssueComment(token, parsed.repoFullName, number, body)
+                
+                when (statusCode) {
+                    io.ktor.http.HttpStatusCode.Created -> {
+                        GitHubActionResponse(GitHubActionResultStatus.ActionSucceeded, "Comment posted successfully")
+                    }
+                    io.ktor.http.HttpStatusCode.Forbidden, io.ktor.http.HttpStatusCode.Unauthorized -> {
+                        GitHubActionResponse(GitHubActionResultStatus.PermissionDenied, "You do not have permission to comment on this repository")
+                    }
+                    io.ktor.http.HttpStatusCode.NotFound -> {
+                        GitHubActionResponse(GitHubActionResultStatus.ResourceNotFound, "Issue/PR not found on GitHub")
+                    }
+                    io.ktor.http.HttpStatusCode.TooManyRequests -> {
+                        GitHubActionResponse(GitHubActionResultStatus.RateLimited, "GitHub API rate limit exceeded")
+                    }
+                    else -> {
+                        GitHubActionResponse(GitHubActionResultStatus.UnknownFailure, "GitHub API returned status ${statusCode.value}")
+                    }
+                }
+            }
             "CLOSE_ISSUE", "REOPEN_ISSUE" -> {
                 if (parsed !is GitHubUnfurlService.ParsedUrl.Issue) {
                     return GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "URL is not an issue")
                 }
                 
-                val newState = if (action == "CLOSE_ISSUE") "closed" else "open"
-                val stateReason = if (action == "CLOSE_ISSUE") "completed" else "reopened"
+                val newState = if (request.action == "CLOSE_ISSUE") "closed" else "open"
+                val stateReason = if (request.action == "CLOSE_ISSUE") "completed" else "reopened"
                 
                 val (updatedIssue, statusCode) = GitHubService.updateIssueState(token, parsed.repoFullName, parsed.number, newState, stateReason)
                 
@@ -183,7 +215,7 @@ object GitHubActionService {
                 if (parsed !is GitHubUnfurlService.ParsedUrl.PullRequest) {
                     return GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "URL is not a pull request")
                 }
-                val newState = if (action == "CLOSE_PR") "closed" else "open"
+                val newState = if (request.action == "CLOSE_PR") "closed" else "open"
                 val (updatedPr, statusCode) = GitHubService.updatePullRequestState(token, parsed.repoFullName, parsed.number, newState)
                 
                 when (statusCode) {
@@ -285,7 +317,7 @@ object GitHubActionService {
                     else -> GitHubActionResponse(GitHubActionResultStatus.UnknownFailure, "GitHub API returned status ${statusCode.value}")
                 }
             }
-            else -> GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "Unsupported action: $action")
+            else -> GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "Unsupported action: ${request.action}")
         }
     }
 }

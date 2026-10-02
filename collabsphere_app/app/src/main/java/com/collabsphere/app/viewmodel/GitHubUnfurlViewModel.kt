@@ -78,7 +78,7 @@ class GitHubUnfurlViewModel(private val httpClient: HttpClient) : ViewModel() {
     private val _actionMessages = MutableStateFlow<Map<String, String>>(emptyMap())
     val actionMessages: StateFlow<Map<String, String>> = _actionMessages.asStateFlow()
 
-    fun performAction(workspaceId: Int, url: String, action: String, idempotencyKey: String = java.util.UUID.randomUUID().toString()) {
+    fun performAction(workspaceId: Int, url: String, action: String, body: String? = null, idempotencyKey: String = java.util.UUID.randomUUID().toString()) {
         if (_actionStates.value[url] == GitHubActionClientState.Executing) return
         
         _actionStates.value = _actionStates.value + (url to GitHubActionClientState.Executing)
@@ -94,7 +94,7 @@ class GitHubUnfurlViewModel(private val httpClient: HttpClient) : ViewModel() {
                     header(HttpHeaders.Authorization, "Bearer $token")
                     header("Idempotency-Key", idempotencyKey)
                     contentType(ContentType.Application.Json)
-                    setBody(GitHubActionRequest(url, action))
+                    setBody(GitHubActionRequest(url, action, body))
                 }
                 
                 if (response.status.isSuccess()) {

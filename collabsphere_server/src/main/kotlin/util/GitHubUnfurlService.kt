@@ -86,6 +86,11 @@ object GitHubUnfurlService {
                             .singleOrNull()
 
                         if (pr != null) {
+                            val headSha = pr[GitHubPullRequestsTable.headSha]
+                            val ciStatus = if (headSha != null) {
+                                com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(headSha))[headSha]
+                            } else null
+                            
                             previews[url] = GitHubPreviewItem(
                                 type = "PULL_REQUEST",
                                 url = url,
@@ -95,7 +100,8 @@ object GitHubUnfurlService {
                                 state = pr[GitHubPullRequestsTable.state],
                                 author = pr[GitHubPullRequestsTable.authorUsername],
                                 merged = pr[GitHubPullRequestsTable.mergedAt] != null,
-                                timestamp = pr[GitHubPullRequestsTable.createdAt]
+                                timestamp = pr[GitHubPullRequestsTable.createdAt],
+                                ciStatus = ciStatus
                             )
                         } else {
                             misses.add(url to parsed)
@@ -127,6 +133,9 @@ object GitHubUnfurlService {
                             .singleOrNull()
 
                         if (commit != null) {
+                            val sha = commit[GitHubCommitsTable.sha]
+                            val ciStatus = com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(sha))[sha]
+                            
                             previews[url] = GitHubPreviewItem(
                                 type = "COMMIT",
                                 url = url,
@@ -134,7 +143,8 @@ object GitHubUnfurlService {
                                 repoFullName = repoFullName,
                                 shortSha = parsed.sha.take(7),
                                 author = commit[GitHubCommitsTable.authorName],
-                                timestamp = commit[GitHubCommitsTable.commitDate]
+                                timestamp = commit[GitHubCommitsTable.commitDate],
+                                ciStatus = ciStatus
                             )
                         } else {
                             misses.add(url to parsed)
@@ -223,6 +233,11 @@ object GitHubUnfurlService {
                         headSha = prInfo.head?.sha
                     )
                     newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.savePullRequest(repoId, prRecord) }
+                    val headSha = prInfo.head?.sha
+                    val ciStatus = if (headSha != null) {
+                        newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(headSha))[headSha] }
+                    } else null
+
                     return GitHubPreviewItem(
                         type = "PULL_REQUEST",
                         url = url,
@@ -232,7 +247,8 @@ object GitHubUnfurlService {
                         state = prInfo.state,
                         author = prInfo.user?.login ?: "",
                         merged = prInfo.merged_at != null,
-                        timestamp = prRecord.createdAt
+                        timestamp = prRecord.createdAt,
+                        ciStatus = ciStatus
                     )
                 }
             }
@@ -265,6 +281,8 @@ object GitHubUnfurlService {
                         commitDate = com.collabsphere.util.parseGitHubTime(commitInfo.commit?.author?.date) ?: now
                     )
                     newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.saveCommits(repoId, listOf(commitRecord)) }
+                    val ciStatus = newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(parsed.sha))[parsed.sha] }
+
                     return GitHubPreviewItem(
                         type = "COMMIT",
                         url = url,
@@ -272,7 +290,8 @@ object GitHubUnfurlService {
                         repoFullName = repoFullName,
                         shortSha = parsed.sha.take(7),
                         author = commitInfo.commit?.author?.name,
-                        timestamp = commitRecord.commitDate
+                        timestamp = commitRecord.commitDate,
+                        ciStatus = ciStatus
                     )
                 }
             }

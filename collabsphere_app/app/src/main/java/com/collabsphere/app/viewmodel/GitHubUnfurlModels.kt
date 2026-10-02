@@ -26,6 +26,7 @@ data class GitHubPreviewItem(
     val shortSha: String? = null,
     val timestamp: Long? = null,
     val isPrivate: Boolean? = null,
+    val ciStatus: String? = null,
     val reason: String? = null
 )
 
@@ -48,7 +49,8 @@ enum class GitHubActionResultStatus {
 @Serializable
 data class GitHubActionRequest(
     val url: String,
-    val action: String
+    val action: String,
+    val body: String? = null
 )
 
 @Serializable

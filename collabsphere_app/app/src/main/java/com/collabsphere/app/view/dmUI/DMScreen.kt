@@ -1356,8 +1356,8 @@ fun DMScreen(
                                                                         preview = preview,
                                                                         actionState = githubActionStates[url],
                                                                         actionMessage = githubActionMessages[url],
-                                                                        onActionClick = { action -> 
-                                                                            unfurlViewModel.performAction(workspaceId, url, action)
+                                                                        onActionClick = { action, body -> 
+                                                                            unfurlViewModel.performAction(workspaceId, url, action, body)
                                                                         }
                                                                     )
                                                                 }
@@ -1689,8 +1689,8 @@ fun DMScreen(
                                                                         preview = preview,
                                                                         actionState = githubActionStates[url],
                                                                         actionMessage = githubActionMessages[url],
-                                                                        onActionClick = { action -> 
-                                                                            unfurlViewModel.performAction(workspaceId, url, action)
+                                                                        onActionClick = { action, body -> 
+                                                                            unfurlViewModel.performAction(workspaceId, url, action, body)
                                                                         }
                                                                     )
                                                                 }

@@ -21,7 +21,8 @@ enum class GitHubActionResultStatus {
 @Serializable
 data class GitHubActionRequest(
     val url: String,
-    val action: String
+    val action: String,
+    val body: String? = null
 )
 
 @Serializable

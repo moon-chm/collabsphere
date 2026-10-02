@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,11 +28,14 @@ fun GitHubUnfurlCard(
     preview: GitHubPreviewItem,
     actionState: GitHubActionClientState? = null,
     actionMessage: String? = null,
-    onActionClick: ((String) -> Unit)? = null,
+    onActionClick: ((String, String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val isDark = isSystemInDarkThemeWrapper() // We usually handle this with MaterialTheme
+    
+    var showComposer by remember { mutableStateOf(false) }
+    var commentText by remember { mutableStateOf("") }
 
     val cardColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFF5F5F5)
     val contentColor = if (isDark) Color.White else Color.Black
@@ -114,6 +117,29 @@ fun GitHubUnfurlCard(
                     Spacer(modifier = Modifier.width(6.dp))
                 }
 
+                if (preview.ciStatus != null) {
+                    val (ciColor, ciText) = when (preview.ciStatus) {
+                        "success" -> Color(0xFF238636) to "✅ CI Passed"
+                        "failure" -> Color(0xFFD32F2F) to "❌ CI Failed"
+                        "pending" -> Color(0xFFE3B341) to "⏳ CI Pending"
+                        else -> Color.Gray to "CI Unknown"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(ciColor.copy(alpha = 0.1f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = ciText,
+                            color = ciColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+
                 val idText = preview.number?.let { "#$it" } ?: preview.shortSha
                 if (idText != null) {
                     Text(
@@ -153,17 +179,53 @@ fun GitHubUnfurlCard(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (preview.type == "ISSUE") {
                         if (preview.state == "open") {
-                            ActionButton("Close", isExecuting) { onActionClick("CLOSE_ISSUE") }
+                            ActionButton("Close", isExecuting) { onActionClick("CLOSE_ISSUE", null) }
                         } else if (preview.state == "closed") {
-                            ActionButton("Reopen", isExecuting) { onActionClick("REOPEN_ISSUE") }
+                            ActionButton("Reopen", isExecuting) { onActionClick("REOPEN_ISSUE", null) }
                         }
+                        ActionButton("Comment", isExecuting, Color.DarkGray) { showComposer = !showComposer }
                     } else if (preview.type == "PULL_REQUEST") {
                         if (preview.state == "open") {
-                            ActionButton("Approve", isExecuting, Color(0xFF238636)) { onActionClick("APPROVE_PR") }
-                            ActionButton("Merge", isExecuting, Color(0xFF8957E5)) { onActionClick("MERGE_PR") }
-                            ActionButton("Close", isExecuting) { onActionClick("CLOSE_PR") }
+                            ActionButton("Approve", isExecuting, Color(0xFF238636)) { onActionClick("APPROVE_PR", null) }
+                            ActionButton("Merge", isExecuting, Color(0xFF8957E5)) { onActionClick("MERGE_PR", null) }
+                            ActionButton("Close", isExecuting) { onActionClick("CLOSE_PR", null) }
                         } else if (preview.state == "closed" && preview.merged != true) {
-                            ActionButton("Reopen", isExecuting) { onActionClick("REOPEN_PR") }
+                            ActionButton("Reopen", isExecuting) { onActionClick("REOPEN_PR", null) }
+                        }
+                        ActionButton("Comment", isExecuting, Color.DarkGray) { showComposer = !showComposer }
+                    }
+                }
+                
+                if (showComposer) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = commentText,
+                        onValueChange = { commentText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Leave a comment...", fontSize = 12.sp) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                        maxLines = 4
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { 
+                            showComposer = false
+                            commentText = ""
+                        }) {
+                            Text("Cancel", fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val action = if (preview.type == "ISSUE") "COMMENT_ISSUE" else "COMMENT_PR"
+                                onActionClick(action, commentText)
+                                showComposer = false
+                                commentText = ""
+                            },
+                            enabled = commentText.isNotBlank() && !isExecuting,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(if (isExecuting) "Posting..." else "Comment", fontSize = 12.sp)
                         }
                     }
                 }

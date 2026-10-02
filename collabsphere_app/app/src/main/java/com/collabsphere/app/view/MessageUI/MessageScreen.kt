@@ -864,8 +864,8 @@ fun MessageScreen(
                                                         preview = preview,
                                                         actionState = githubActionStates[url],
                                                         actionMessage = githubActionMessages[url],
-                                                        onActionClick = { action -> 
-                                                            unfurlViewModel.performAction(viewModel.currentWorkspaceId, url, action)
+                                                        onActionClick = { action, body -> 
+                                                            unfurlViewModel.performAction(viewModel.currentWorkspaceId, url, action, body)
                                                         }
                                                     )
                                                 }
