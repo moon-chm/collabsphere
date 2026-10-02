@@ -490,21 +490,27 @@ object GitHubService {
                     Triple(null, false, 0) // File not found
                 } else null
             } else {
-                val file = response.body<GitHubFileContent>()
-                if (file.type != "file") {
-                    Triple(null, false, 0) // Not a file (directory, submodule, etc.)
-                } else if (file.size > 512 * 1024) {
-                    Triple(null, false, file.size) // Too large
-                } else if (file.encoding == "base64" && file.content != null) {
-                    val decoded = try {
-                        String(java.util.Base64.getMimeDecoder().decode(file.content))
-                    } catch (e: Exception) {
-                        null // Binary file — can't decode as UTF-8
-                    }
-                    val isBinary = decoded == null || decoded.contains('\u0000')
-                    Triple(if (isBinary) null else decoded, isBinary, file.size)
+                val element = response.body<kotlinx.serialization.json.JsonElement>()
+                if (element is kotlinx.serialization.json.JsonArray) {
+                    Triple(null, false, 0) // Not a file (directory listing)
                 } else {
-                    Triple(null, true, file.size) // No content or unknown encoding
+                    val file = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                        .decodeFromJsonElement(GitHubFileContent.serializer(), element)
+                    if (file.type != "file") {
+                        Triple(null, false, 0) // Not a file (directory, submodule, etc.)
+                    } else if (file.size > 512 * 1024) {
+                        Triple(null, false, file.size) // Too large
+                    } else if (file.encoding == "base64" && file.content != null) {
+                        val decoded = try {
+                            String(java.util.Base64.getMimeDecoder().decode(file.content))
+                        } catch (e: Exception) {
+                            null // Binary file — can't decode as UTF-8
+                        }
+                        val isBinary = decoded == null || decoded.contains('\u0000')
+                        Triple(if (isBinary) null else decoded, isBinary, file.size)
+                    } else {
+                        Triple(null, true, file.size) // No content or unknown encoding
+                    }
                 }
             }
         } catch (e: Exception) {
