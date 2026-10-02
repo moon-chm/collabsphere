@@ -106,7 +106,9 @@ object DatabaseFactory {
                 GitHubContributorsTable,
                 GitHubTaskLinksTable,
                 GitHubIssuesTable,
-                GitHubCheckSuitesTable
+                GitHubCheckSuitesTable,
+                GitHubWebhookEventsTable,
+                GitHubActionIdempotencyTable
             )
             com.collabsphere.util.GitHubBot.ensureExists()
         }
