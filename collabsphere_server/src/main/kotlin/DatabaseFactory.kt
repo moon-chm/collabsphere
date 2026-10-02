@@ -58,6 +58,12 @@ object DatabaseFactory {
             maximumPoolSize = System.getenv("DB_MAX_POOL_SIZE")?.toIntOrNull() ?: 10
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+            
+            // Set maxLifetime to prevent cloud infrastructure from silently dropping idle connections.
+            // 5-10 minutes is usually safe for most providers like Render/Neon/AWS.
+            maxLifetime = System.getenv("DB_MAX_LIFETIME_MS")?.toLongOrNull() ?: 600000L // 10 minutes default
+            idleTimeout = System.getenv("DB_IDLE_TIMEOUT_MS")?.toLongOrNull() ?: 300000L // 5 minutes default
+            validate()
             connectionTimeout = 30000
             schema = "public"
             connectionInitSql = "SET search_path TO public;"
