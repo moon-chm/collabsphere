@@ -44,6 +44,8 @@ fun GitHubUnfurlCard(
         "PULL_REQUEST" -> Icons.Default.CallSplit
         "ISSUE" -> Icons.Default.Info
         "COMMIT" -> Icons.Default.Commit
+        "CODE_SNIPPET" -> Icons.Default.Code
+        "ERROR" -> Icons.Default.Error
         else -> Icons.Default.Source
     }
 
@@ -72,7 +74,7 @@ fun GitHubUnfurlCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = preview.type,
-                    tint = contentColor.copy(alpha = 0.7f),
+                    tint = if (preview.type == "ERROR") Color(0xFFD32F2F) else contentColor.copy(alpha = 0.7f),
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -95,8 +97,39 @@ fun GitHubUnfurlCard(
                 overflow = TextOverflow.Ellipsis
             )
 
+            if (preview.type == "ERROR" && preview.reason != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = preview.reason,
+                    color = Color(0xFFD32F2F),
+                    fontSize = 12.sp
+                )
+            }
+
             Spacer(modifier = Modifier.height(6.dp))
             
+            // Code Snippet Block
+            if (preview.type == "CODE_SNIPPET" && preview.description != null) {
+                val codeBg = if (isDark) Color(0xFF0D1117) else Color(0xFFF6F8FA)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(codeBg)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = preview.description,
+                        color = if (isDark) Color(0xFFC9D1D9) else Color(0xFF24292F),
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        maxLines = 20,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
             // Status and Meta
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (preview.state != null) {
@@ -151,8 +184,9 @@ fun GitHubUnfurlCard(
                 }
 
                 if (preview.author != null) {
+                    val prefix = if (preview.type == "CODE_SNIPPET") "" else "by "
                     Text(
-                        text = "by ${preview.author}",
+                        text = "$prefix${preview.author}",
                         color = contentColor.copy(alpha = 0.6f),
                         fontSize = 12.sp,
                         maxLines = 1,

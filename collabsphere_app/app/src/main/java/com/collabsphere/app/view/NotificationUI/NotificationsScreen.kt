@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Source
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +34,8 @@ import com.collabsphere.app.dto.notification.NotificationResponse
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.view.components.NotificationSkeletonList
 import com.collabsphere.app.viewmodel.NotificationsViewModel
+import com.collabsphere.app.viewmodel.GitHubUnfurlViewModel
+import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +49,11 @@ fun NotificationsScreen(
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    val unfurlViewModel: GitHubUnfurlViewModel = koinViewModel()
+    val githubPreviews by unfurlViewModel.previews.collectAsStateWithLifecycle()
+    val githubActionStates by unfurlViewModel.actionStates.collectAsStateWithLifecycle()
+    val githubActionMessages by unfurlViewModel.actionMessages.collectAsStateWithLifecycle()
+    
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { viewModel.loadNotifications() }
@@ -147,7 +155,11 @@ fun NotificationsScreen(
                                 onClick = { onNotificationClick(notification) },
                                 onDelete = { viewModel.onDelete(notification.id) },
                                 onAcceptInvitation = onAcceptInvitation,
-                                onDeclineInvitation = onDeclineInvitation
+                                onDeclineInvitation = onDeclineInvitation,
+                                unfurlViewModel = unfurlViewModel,
+                                githubPreviews = githubPreviews,
+                                githubActionStates = githubActionStates,
+                                githubActionMessages = githubActionMessages
                             )
                         }
                     }
@@ -161,6 +173,7 @@ private fun iconFor(type: String): ImageVector = when (type) {
     "MENTION" -> Icons.Default.AlternateEmail
     "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE" -> Icons.AutoMirrored.Filled.Assignment
     "WORKSPACE_INVITE" -> Icons.Default.GroupAdd
+    "GITHUB_PR", "GITHUB_ISSUE", "GITHUB_CI", "GITHUB_RELEASE" -> Icons.Default.Source
     else -> Icons.AutoMirrored.Filled.Chat
 }
 
@@ -170,7 +183,11 @@ private fun NotificationRow(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onAcceptInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
-    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null
+    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
+    unfurlViewModel: GitHubUnfurlViewModel? = null,
+    githubPreviews: Map<String, com.collabsphere.app.viewmodel.GitHubPreviewItem>? = null,
+    githubActionStates: Map<String, com.collabsphere.app.viewmodel.GitHubActionClientState>? = null,
+    githubActionMessages: Map<String, String>? = null
 ) {
     Box(
         modifier = Modifier
@@ -258,6 +275,29 @@ private fun NotificationRow(
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = Muted
                             )
+                        }
+                    }
+                }
+
+                if (unfurlViewModel != null && githubPreviews != null) {
+                    val githubRegex = Regex("(https://github\\.com/[^/]+/[^/]+/[\\w/]+|https://github\\.com/[^/]+/[^/]+/?(?=\\s|$))")
+                    val matches = githubRegex.findAll(notification.body).map { it.value }.toSet()
+                    matches.forEach { url ->
+                        val workspaceId = notification.workspaceId
+                        if (workspaceId != null) {
+                            unfurlViewModel.requestUnfurl(workspaceId, url)
+                            val preview = githubPreviews[url]
+                            if (preview != null) {
+                                Spacer(Modifier.height(8.dp))
+                                com.collabsphere.app.view.components.GitHubUnfurlCard(
+                                    preview = preview,
+                                    actionState = githubActionStates?.get(url),
+                                    actionMessage = githubActionMessages?.get(url),
+                                    onActionClick = { action, body -> 
+                                        unfurlViewModel.performAction(workspaceId, url, action, body)
+                                    }
+                                )
+                            }
                         }
                     }
                 }

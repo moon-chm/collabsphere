@@ -119,3 +119,22 @@ data class GitHubPullRequestItem(
     val url: String? = null,
     val ciStatus: String? = null
 )
+
+@Serializable
+data class GitHubReleaseItem(
+    val id: Long,
+    val tagName: String,
+    val name: String?,
+    val author: String?,
+    val htmlUrl: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+    val publishedAt: Long?,
+    val repositoryFullName: String
+)
+
+@Serializable
+data class GitHubReleasesResponse(
+    val releases: List<GitHubReleaseItem>,
+    val hasMore: Boolean
+)

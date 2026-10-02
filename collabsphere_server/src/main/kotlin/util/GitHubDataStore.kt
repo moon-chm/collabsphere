@@ -4,6 +4,7 @@ import com.collabsphere.model.GitHubCommitsTable
 import com.collabsphere.model.GitHubCheckSuitesTable
 import com.collabsphere.model.GitHubIssuesTable
 import com.collabsphere.model.GitHubPullRequestsTable
+import com.collabsphere.model.GitHubReleasesTable
 import com.collabsphere.model.GitHubRepositoriesTable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -108,6 +109,53 @@ object GitHubDataStore {
             it[GitHubIssuesTable.createdAt] = issue.createdAt
             it[GitHubIssuesTable.closedAt] = issue.closedAt
         }
+    }
+
+    fun saveRelease(repositoryId: Int, release: ReleaseRecord) {
+        // Out-of-order protection: only update if the incoming event is newer
+        val existingUpdatedAt = GitHubReleasesTable
+            .select(GitHubReleasesTable.updatedAt)
+            .where { (GitHubReleasesTable.repositoryId eq repositoryId) and (GitHubReleasesTable.githubReleaseId eq release.githubReleaseId) }
+            .singleOrNull()?.get(GitHubReleasesTable.updatedAt)
+
+        if (existingUpdatedAt != null && release.updatedAt < existingUpdatedAt) return
+
+        GitHubReleasesTable.upsert(GitHubReleasesTable.repositoryId, GitHubReleasesTable.githubReleaseId) {
+            it[GitHubReleasesTable.repositoryId] = repositoryId
+            it[GitHubReleasesTable.githubReleaseId] = release.githubReleaseId
+            it[GitHubReleasesTable.tagName] = release.tagName.take(255)
+            it[GitHubReleasesTable.name] = release.name?.take(255)
+            it[GitHubReleasesTable.body] = release.body
+            it[GitHubReleasesTable.author] = release.author?.take(255)
+            it[GitHubReleasesTable.htmlUrl] = release.htmlUrl.take(500)
+            it[GitHubReleasesTable.draft] = release.draft
+            it[GitHubReleasesTable.prerelease] = release.prerelease
+            it[GitHubReleasesTable.publishedAt] = release.publishedAt
+            it[GitHubReleasesTable.createdAt] = release.createdAt
+            it[GitHubReleasesTable.updatedAt] = release.updatedAt
+        }
+    }
+
+    fun getRecentReleases(repositoryId: Int, limit: Int = 20, offset: Long = 0): List<GitHubReleasesTable.ReleaseRow> {
+        return GitHubReleasesTable.selectAll()
+            .where { GitHubReleasesTable.repositoryId eq repositoryId }
+            .orderBy(GitHubReleasesTable.publishedAt to org.jetbrains.exposed.sql.SortOrder.DESC_NULLS_LAST)
+            .limit(limit, offset)
+            .map {
+                GitHubReleasesTable.ReleaseRow(
+                    id = it[GitHubReleasesTable.id],
+                    githubReleaseId = it[GitHubReleasesTable.githubReleaseId],
+                    tagName = it[GitHubReleasesTable.tagName],
+                    name = it[GitHubReleasesTable.name],
+                    body = it[GitHubReleasesTable.body],
+                    author = it[GitHubReleasesTable.author],
+                    htmlUrl = it[GitHubReleasesTable.htmlUrl],
+                    draft = it[GitHubReleasesTable.draft],
+                    prerelease = it[GitHubReleasesTable.prerelease],
+                    publishedAt = it[GitHubReleasesTable.publishedAt],
+                    createdAt = it[GitHubReleasesTable.createdAt]
+                )
+            }
     }
 
     fun saveCheckSuite(
@@ -217,6 +265,12 @@ object GitHubDataStore {
                 headSha = pr.head?.sha
             )
         }
+        // Only fetch historical releases on first sync (non-incremental) to avoid expensive repeated fetches
+        val releases = if (!incremental) {
+            GitHubService.getReleases(token, repoFullName, page = 1, perPage = 30).map { it.toRecord(now) }
+        } else {
+            emptyList()
+        }
 
         return newSuspendedTransaction(Dispatchers.IO) {
             val stillLinked = GitHubRepositoriesTable.selectAll()
@@ -233,6 +287,7 @@ object GitHubDataStore {
             commits.chunked(500).forEach { saveCommits(repositoryId, it) }
             pullRequests.forEach { savePullRequest(repositoryId, it) }
             issues.forEach { saveIssue(repositoryId, it) }
+            releases.forEach { saveRelease(repositoryId, it) }
             markSynced(repositoryId)
             activities
         }

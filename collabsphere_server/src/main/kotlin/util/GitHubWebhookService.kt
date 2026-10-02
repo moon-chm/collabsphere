@@ -10,6 +10,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.sql.transactions.transaction
 import java.security.MessageDigest
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -38,6 +39,24 @@ data class GitHubIssueActivity(
     override val repositoryId: Int,
     val action: String,
     val issue: IssueRecord,
+    val announce: Boolean = true
+) : GitHubActivity
+
+data class GitHubReleaseActivity(
+    override val repositoryId: Int,
+    val action: String,
+    val release: ReleaseRecord,
+    val url: String?,
+    val announce: Boolean = true
+) : GitHubActivity
+
+data class GitHubCheckSuiteActivity(
+    override val repositoryId: Int,
+    val headSha: String,
+    val status: String,
+    val conclusion: String?,
+    val headBranch: String?,
+    val url: String?,
     val announce: Boolean = true
 ) : GitHubActivity
 
@@ -72,10 +91,8 @@ object GitHubWebhookService {
                 "push" -> handlePushEvent(payload)
                 "pull_request" -> handlePullRequestEvent(payload)
                 "issues" -> handleIssuesEvent(payload)
-                "check_suite" -> {
-                    handleCheckSuiteEvent(payload)
-                    emptyList()
-                }
+                "release" -> handleReleaseEvent(payload)
+                "check_suite" -> handleCheckSuiteEvent(payload)
                 "installation" -> {
                     handleInstallationEvent(payload)
                     emptyList()
@@ -167,20 +184,72 @@ object GitHubWebhookService {
         if (issue.pull_request != null) return emptyList()
         val record = issue.toRecord()
 
+        // Feature E: Extract assignee IDs for sync
+        val assigneeIds = try {
+            val assigneesArray = (issueJson as? kotlinx.serialization.json.JsonObject)
+                ?.get("assignees")
+            if (assigneesArray != null) {
+                json.decodeFromString<List<com.collabsphere.util.GitHubService.GitHubAssignee>>(assigneesArray.toString())
+                    .map { it.id }
+            } else emptyList()
+        } catch (_: Exception) { emptyList<Long>() }
+
         return linkedRepositoryIds(githubRepoId).map { repositoryId ->
             GitHubDataStore.saveIssue(repositoryId, record)
             GitHubDataStore.markSynced(repositoryId)
+
+            // Feature E: Trigger assignee sync from GitHub → CollabSphere
+            if (action in listOf("assigned", "unassigned", "opened", "edited")) {
+                val workspaceId = GitHubRepositoriesTable.selectAll()
+                    .where { GitHubRepositoriesTable.id eq repositoryId }
+                    .singleOrNull()?.get(GitHubRepositoriesTable.workspaceId)
+                if (workspaceId != null) {
+                    try {
+                        GitHubAssigneeSyncService.refreshIdentityMappings(workspaceId)
+                        GitHubAssigneeSyncService.syncFromGitHub(repositoryId, record.number, assigneeIds, workspaceId)
+                    } catch (e: Exception) {
+                        println("[GitHub] Assignee sync from GitHub failed: ${e.message}")
+                    }
+                }
+            }
+
             GitHubIssueActivity(repositoryId, action, record)
         }
     }
 
-    private fun handleCheckSuiteEvent(payload: JsonObject) {
-        val suite = payload["check_suite"]?.jsonObject ?: return
-        val repo = payload["repository"]?.jsonObject ?: return
-        val githubRepoId = repo["id"]?.jsonPrimitive?.longOrNull ?: return
-        val suiteId = suite["id"]?.jsonPrimitive?.longOrNull ?: return
-        val headSha = suite["head_sha"]?.jsonPrimitive?.contentOrNull ?: return
-        val status = suite["status"]?.jsonPrimitive?.contentOrNull ?: return
+    private fun handleReleaseEvent(payload: JsonObject): List<GitHubActivity> {
+        val action = payload["action"]?.jsonPrimitive?.content ?: return emptyList()
+        val repo = payload["repository"]?.jsonObject ?: return emptyList()
+        val githubRepoId = repo["id"]?.jsonPrimitive?.longOrNull ?: return emptyList()
+        val release = payload["release"]?.jsonObject ?: return emptyList()
+
+        val releaseInfo = json.decodeFromJsonElement<GitHubReleaseInfo>(release)
+        val releaseRecord = releaseInfo.toRecord()
+
+        val activities = linkedRepositoryIds(githubRepoId).mapNotNull { repositoryId ->
+            transaction { GitHubDataStore.saveRelease(repositoryId, releaseRecord) }
+
+            if (action in listOf("published", "released")) {
+                GitHubReleaseActivity(
+                    repositoryId = repositoryId,
+                    action = action,
+                    release = releaseRecord,
+                    url = releaseInfo.html_url
+                )
+            } else {
+                null
+            }
+        }
+        return activities
+    }
+
+    private fun handleCheckSuiteEvent(payload: JsonObject): List<GitHubCheckSuiteActivity> {
+        val suite = payload["check_suite"]?.jsonObject ?: return emptyList()
+        val repo = payload["repository"]?.jsonObject ?: return emptyList()
+        val githubRepoId = repo["id"]?.jsonPrimitive?.longOrNull ?: return emptyList()
+        val suiteId = suite["id"]?.jsonPrimitive?.longOrNull ?: return emptyList()
+        val headSha = suite["head_sha"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
+        val status = suite["status"]?.jsonPrimitive?.contentOrNull ?: return emptyList()
         val conclusion = suite["conclusion"]?.jsonPrimitive?.contentOrNull
 
         val headBranch = suite["head_branch"]?.jsonPrimitive?.contentOrNull
@@ -189,7 +258,7 @@ object GitHubWebhookService {
         val createdAt = parseGitHubTime(suite["created_at"]?.jsonPrimitive?.contentOrNull)
         val updatedAt = parseGitHubTime(suite["updated_at"]?.jsonPrimitive?.contentOrNull) ?: System.currentTimeMillis()
 
-        linkedRepositoryIds(githubRepoId).forEach { repositoryId ->
+        return linkedRepositoryIds(githubRepoId).map { repositoryId ->
             GitHubDataStore.saveCheckSuite(
                 repositoryId = repositoryId, 
                 suiteId = suiteId, 
@@ -201,6 +270,14 @@ object GitHubWebhookService {
                 url = url,
                 createdAt = createdAt,
                 updatedAt = updatedAt
+            )
+            GitHubCheckSuiteActivity(
+                repositoryId = repositoryId,
+                headSha = headSha,
+                status = status,
+                conclusion = conclusion,
+                headBranch = headBranch,
+                url = url
             )
         }
     }

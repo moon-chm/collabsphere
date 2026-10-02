@@ -22,15 +22,30 @@ object GitHubUnfurlService {
         data class PullRequest(override val owner: String, override val repo: String, val number: Int) : ParsedUrl()
         data class Issue(override val owner: String, override val repo: String, val number: Int) : ParsedUrl()
         data class Commit(override val owner: String, override val repo: String, val sha: String) : ParsedUrl()
+        data class CodeFile(override val owner: String, override val repo: String, val ref: String, val filePath: String, val startLine: Int?, val endLine: Int?) : ParsedUrl()
     }
 
     private val PULL_REQUEST_REGEX = Regex("^https://github\\.com/([^/]+)/([^/]+)/pull/(\\d+).*$")
     private val ISSUE_REGEX = Regex("^https://github\\.com/([^/]+)/([^/]+)/issues/(\\d+).*$")
     private val COMMIT_REGEX = Regex("^https://github\\.com/([^/]+)/([^/]+)/commit/([a-f0-9]+).*$")
+    private val CODE_FILE_REGEX = Regex("""^https://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+?)(?:#L(\d+)(?:-L(\d+))?)?$""")
     private val REPO_REGEX = Regex("^https://github\\.com/([^/]+)/([^/]+)/?$")
 
     fun parse(url: String): ParsedUrl? {
-        val cleanUrl = url.substringBefore("#").substringBefore("?")
+        val noQueryUrl = url.substringBefore("?")
+        
+        CODE_FILE_REGEX.matchEntire(noQueryUrl)?.let { match ->
+            return ParsedUrl.CodeFile(
+                owner = match.groupValues[1],
+                repo = match.groupValues[2],
+                ref = match.groupValues[3],
+                filePath = java.net.URLDecoder.decode(match.groupValues[4], "UTF-8"),
+                startLine = match.groupValues[5].toIntOrNull(),
+                endLine = match.groupValues[6].toIntOrNull()
+            )
+        }
+
+        val cleanUrl = noQueryUrl.substringBefore("#")
         
         PULL_REQUEST_REGEX.matchEntire(cleanUrl)?.let { match ->
             return ParsedUrl.PullRequest(match.groupValues[1], match.groupValues[2], match.groupValues[3].toInt())
@@ -150,6 +165,29 @@ object GitHubUnfurlService {
                             misses.add(url to parsed)
                         }
                     }
+                    is ParsedUrl.CodeFile -> {
+                        // For CodeFile, delegate entirely to GitHubCodeSnippetService which handles its own caching
+                        val snippet = com.collabsphere.util.GitHubCodeSnippetService.resolveSnippet(workspaceId, url)
+                        if (snippet.error != null) {
+                            previews[url] = GitHubPreviewItem(
+                                type = "ERROR",
+                                url = url,
+                                title = "Code Snippet Error",
+                                repoFullName = parsed.repoFullName,
+                                reason = snippet.error
+                            )
+                        } else {
+                            previews[url] = GitHubPreviewItem(
+                                type = "CODE_SNIPPET",
+                                url = url,
+                                title = parsed.filePath.substringAfterLast('/'),
+                                repoFullName = parsed.repoFullName,
+                                description = snippet.content,
+                                shortSha = snippet.commitSha?.take(7),
+                                author = snippet.language // repurposing author for language hint
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -215,6 +253,7 @@ object GitHubUnfurlService {
 
     private suspend fun fetchAndSave(parsed: ParsedUrl, url: String, repoId: Int, repoFullName: String, token: String): GitHubPreviewItem? {
         when (parsed) {
+            is ParsedUrl.CodeFile -> return null // Handled upstream
             is ParsedUrl.PullRequest -> {
                 val prInfo = GitHubService.getPullRequest(token, repoFullName, parsed.number)
                 if (prInfo != null) {

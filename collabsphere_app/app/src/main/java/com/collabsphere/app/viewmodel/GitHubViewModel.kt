@@ -96,6 +96,33 @@ data class PullRequestListState(
 )
 
 @Serializable
+data class GitHubReleaseItem(
+    val id: Long,
+    val tagName: String,
+    val name: String?,
+    val author: String?,
+    val htmlUrl: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+    val publishedAt: Long?,
+    val repositoryFullName: String
+)
+
+@Serializable
+data class GitHubReleasesResponse(
+    val releases: List<GitHubReleaseItem>,
+    val hasMore: Boolean
+)
+
+data class ReleaseListState(
+    val items: List<GitHubReleaseItem> = emptyList(),
+    val page: Int = 0,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
+@Serializable
 data class GitHubChannelOption(
     val id: Int,
     val name: String
@@ -241,7 +268,11 @@ class GitHubViewModel(
     private val _pullRequestList = MutableStateFlow<PullRequestListState?>(null)
     val pullRequestList: StateFlow<PullRequestListState?> = _pullRequestList
 
+    private val _releaseList = MutableStateFlow(ReleaseListState())
+    val releaseList: StateFlow<ReleaseListState> = _releaseList
+
     private var pullRequestJob: Job? = null
+    private var releaseJob: Job? = null
 
     private fun api(workspaceId: Int, path: String) =
         "${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/$path"
@@ -388,6 +419,47 @@ class GitHubViewModel(
             } catch (e: Exception) {
                 _error.value = "Could not reach the server"
                 _pullRequestList.value = _pullRequestList.value?.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun loadReleases(workspaceId: Int, reset: Boolean = true) {
+        val current = _releaseList.value
+        if (!reset && (!current.hasMore || current.isLoading)) return
+        val nextPage = if (reset) 0 else current.page + 1
+
+        releaseJob?.cancel()
+        _releaseList.value = current.copy(isLoading = true, error = null)
+        releaseJob = viewModelScope.launch {
+            try {
+                val response = client.get(api(workspaceId, "releases")) {
+                    auth()
+                    selectedRepo()
+                    parameter("page", nextPage)
+                }
+                if (response.status == HttpStatusCode.OK) {
+                    val result = response.body<GitHubReleasesResponse>()
+                    val latest = _releaseList.value
+                    _releaseList.value = latest.copy(
+                        items = if (reset) result.releases else latest.items + result.releases,
+                        page = nextPage,
+                        hasMore = result.hasMore,
+                        isLoading = false,
+                        error = null
+                    )
+                } else {
+                    _releaseList.value = _releaseList.value.copy(
+                        isLoading = false,
+                        error = response.errorMessage("Could not load releases")
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _releaseList.value = _releaseList.value.copy(
+                    isLoading = false,
+                    error = "Could not reach the server"
+                )
             }
         }
     }

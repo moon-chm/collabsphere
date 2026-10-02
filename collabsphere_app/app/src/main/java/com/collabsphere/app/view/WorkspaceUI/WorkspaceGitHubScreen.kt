@@ -67,12 +67,14 @@ fun WorkspaceGitHubScreen(
     val error by viewModel.error.collectAsState()
     val authResult by GitHubAuthEvents.result.collectAsState()
     val pullRequestList by viewModel.pullRequestList.collectAsState()
+    val releaseList by viewModel.releaseList.collectAsState()
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var showRemoveRepoDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(workspaceId) {
         viewModel.resetForWorkspace()
         viewModel.loadAnalytics(workspaceId)
+        viewModel.loadReleases(workspaceId)
     }
 
     LaunchedEffect(authResult) {
@@ -81,6 +83,7 @@ fun WorkspaceGitHubScreen(
         GitHubAuthEvents.consume()
         result.error?.let { viewModel.reportAuthError(it) }
         viewModel.loadAnalytics(workspaceId)
+        viewModel.loadReleases(workspaceId)
     }
 
     LaunchedEffect(error) {
@@ -162,6 +165,7 @@ fun WorkspaceGitHubScreen(
         } else if (isConnected) {
             ConnectedView(
                 analytics = analytics!!,
+                releaseList = releaseList,
                 canManage = canManage,
                 onAddRepo = { viewModel.startAddRepo(workspaceId) },
                 onRemoveRepo = { showRemoveRepoDialog = true },
@@ -382,6 +386,7 @@ private fun RepoPickerView(
 @Composable
 private fun ConnectedView(
     analytics: com.collabsphere.app.viewmodel.GitHubAnalyticsResponse,
+    releaseList: com.collabsphere.app.viewmodel.ReleaseListState,
     canManage: Boolean,
     onAddRepo: () -> Unit,
     onRemoveRepo: () -> Unit,
@@ -580,6 +585,25 @@ private fun ConnectedView(
                             badgeColor = statusColor,
                             url = pr.url,
                             ci = pr.ciStatus
+                        )
+                    }
+                }
+            }
+        }
+
+        if (releaseList.items.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(
+                    title = "Recent Releases"
+                ) {
+                    releaseList.items.take(3).forEach { release ->
+                        ActivityRow(
+                            title = release.name ?: release.tagName,
+                            subtitle = "${release.author ?: "Unknown"} · ${if (release.publishedAt != null) relativeTime(release.publishedAt) else "Draft"}",
+                            badge = if (release.prerelease) "Pre-release" else if (release.draft) "Draft" else "Release",
+                            badgeColor = if (release.prerelease) Color(0xFFE3B341) else if (release.draft) Color(0xFF6E7781) else Color(0xFF2DA44E),
+                            url = release.htmlUrl
                         )
                     }
                 }

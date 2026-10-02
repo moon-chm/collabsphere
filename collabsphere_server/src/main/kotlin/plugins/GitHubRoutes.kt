@@ -17,6 +17,7 @@ import com.collabsphere.dto.GitHubLinkedRepo
 import com.collabsphere.model.GitHubIssuesTable
 import com.collabsphere.util.toRecord
 import org.jetbrains.exposed.sql.insertIgnore
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import com.collabsphere.model.GitHubCommitsTable
 import com.collabsphere.model.GitHubConnectionsTable
 import com.collabsphere.model.GitHubPullRequestsTable
@@ -945,6 +946,181 @@ fun Application.configureGitHubRoutes() {
                     // For UX, return HTTP 200 even for logical failures, letting the ActionResponse status dictate
                     // Actually, if it's AuthenticationRequired we can return 401, but the JSON body is enough
                     call.respond(response)
+                }
+
+                get("/releases") {
+                    val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                    val page = call.request.queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                    val repoId = call.request.queryParameters["repositoryId"]?.toIntOrNull()
+                    val pageSize = 20
+
+                    newSuspendedTransaction {
+                        // Validate that requested repositoryId belongs to this workspace
+                        val linkedRepoIds = GitHubRepositoriesTable.selectAll()
+                            .where { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
+                            .associate { it[GitHubRepositoriesTable.id] to it[GitHubRepositoriesTable.fullName] }
+
+                        val targetRepoIds = if (repoId != null) {
+                            if (!linkedRepoIds.containsKey(repoId)) {
+                                return@newSuspendedTransaction call.respond(HttpStatusCode.Forbidden)
+                            }
+                            listOf(repoId)
+                        } else {
+                            linkedRepoIds.keys.toList()
+                        }
+
+                        val offset = page.toLong() * pageSize
+                        val totalFetch = pageSize + 1
+
+                        val allReleases = targetRepoIds.flatMap { rid ->
+                            val repoFullName = linkedRepoIds[rid] ?: ""
+                            GitHubDataStore.getRecentReleases(rid, totalFetch, if (targetRepoIds.size == 1) offset else 0)
+                                .map { it to repoFullName }
+                        }
+                            .sortedByDescending { (r, _) -> r.publishedAt ?: r.createdAt }
+
+                        val hasMore = allReleases.size > pageSize
+                        val page_items = allReleases.take(pageSize)
+
+                        val items = page_items.map { (r, repoFullName) ->
+                            com.collabsphere.dto.GitHubReleaseItem(
+                                id = r.githubReleaseId,
+                                tagName = r.tagName,
+                                name = r.name,
+                                author = r.author,
+                                htmlUrl = r.htmlUrl,
+                                draft = r.draft,
+                                prerelease = r.prerelease,
+                                publishedAt = r.publishedAt,
+                                repositoryFullName = repoFullName
+                            )
+                        }
+
+                        call.respond(com.collabsphere.dto.GitHubReleasesResponse(releases = items, hasMore = hasMore))
+                    }
+                }
+
+                // ── Feature E: Assignee Sync ────────────────────────────────
+
+                route("/assignee-sync") {
+                    /** Toggle assignee sync for a task/issue link. */
+                    post("/toggle") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@post
+                        @kotlinx.serialization.Serializable
+                        data class ToggleRequest(val taskId: Int, val repositoryId: Int, val issueNumber: Int, val enabled: Boolean)
+                        val request = call.receive<ToggleRequest>()
+                        newSuspendedTransaction {
+                            com.collabsphere.util.GitHubAssigneeSyncService.setSyncEnabled(
+                                request.taskId, request.repositoryId, request.issueNumber, request.enabled
+                            )
+                        }
+                        call.respond(HttpStatusCode.OK, mapOf("enabled" to request.enabled))
+                    }
+
+                    /** Get sync status for a task. */
+                    get("/status/{taskId}") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                        val taskId = call.parameters["taskId"]?.toIntOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid taskId")
+                        val syncRecords = newSuspendedTransaction {
+                            com.collabsphere.model.GitHubAssigneeSyncTable.selectAll()
+                                .where { com.collabsphere.model.GitHubAssigneeSyncTable.taskId eq taskId }
+                                .map {
+                                    mapOf(
+                                        "repositoryId" to it[com.collabsphere.model.GitHubAssigneeSyncTable.repositoryId],
+                                        "issueNumber" to it[com.collabsphere.model.GitHubAssigneeSyncTable.issueNumber],
+                                        "enabled" to it[com.collabsphere.model.GitHubAssigneeSyncTable.enabled],
+                                        "syncStatus" to it[com.collabsphere.model.GitHubAssigneeSyncTable.syncStatus],
+                                        "lastSyncSource" to it[com.collabsphere.model.GitHubAssigneeSyncTable.lastSyncSource],
+                                        "lastSyncAt" to it[com.collabsphere.model.GitHubAssigneeSyncTable.lastSyncAt],
+                                        "syncError" to it[com.collabsphere.model.GitHubAssigneeSyncTable.syncError]
+                                    )
+                                }
+                        }
+                        call.respond(syncRecords)
+                    }
+
+                    /** Get identity mappings for the workspace. */
+                    get("/identity-map") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                        val mappings = newSuspendedTransaction {
+                            com.collabsphere.util.GitHubAssigneeSyncService.refreshIdentityMappings(access.workspaceId)
+                            com.collabsphere.model.GitHubIdentityMappingTable.selectAll()
+                                .where { com.collabsphere.model.GitHubIdentityMappingTable.workspaceId eq access.workspaceId }
+                                .map {
+                                    mapOf(
+                                        "userId" to it[com.collabsphere.model.GitHubIdentityMappingTable.userId],
+                                        "githubUserId" to it[com.collabsphere.model.GitHubIdentityMappingTable.githubUserId],
+                                        "githubLogin" to it[com.collabsphere.model.GitHubIdentityMappingTable.githubLogin]
+                                    )
+                                }
+                        }
+                        call.respond(mappings)
+                    }
+                }
+
+                // ── Feature G: Code Snippets ────────────────────────────────
+
+                route("/code") {
+                    /** Resolve a GitHub code URL into a snippet with content. */
+                    post("/resolve") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@post
+                        @kotlinx.serialization.Serializable
+                        data class ResolveRequest(val url: String)
+                        val request = call.receive<ResolveRequest>()
+                        val result = com.collabsphere.util.GitHubCodeSnippetService.resolveSnippet(
+                            access.workspaceId, request.url
+                        )
+                        call.respond(result)
+                    }
+
+                    /** Attach a code reference to a task/message/DM. */
+                    post("/attach") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@post
+                        @kotlinx.serialization.Serializable
+                        data class AttachRequest(val url: String, val referenceType: String, val referenceId: Int)
+                        val request = call.receive<AttachRequest>()
+
+                        if (request.referenceType !in listOf("TASK", "CHANNEL_MESSAGE", "DM")) {
+                            return@post call.respond(HttpStatusCode.BadRequest, "Invalid referenceType")
+                        }
+
+                        val ref = com.collabsphere.util.GitHubCodeSnippetService.attachCodeReference(
+                            access.workspaceId, request.url, request.referenceType, request.referenceId, access.callerId
+                        )
+                        if (ref != null) {
+                            call.respond(HttpStatusCode.Created, ref)
+                        } else {
+                            call.respond(HttpStatusCode.BadRequest, "Invalid code URL or repository not linked")
+                        }
+                    }
+
+                    /** List code references for a given target. */
+                    get("/references/{referenceType}/{referenceId}") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
+                        val referenceType = call.parameters["referenceType"]
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing referenceType")
+                        val referenceId = call.parameters["referenceId"]?.toIntOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid referenceId")
+
+                        val refs = com.collabsphere.util.GitHubCodeSnippetService.getCodeReferences(
+                            access.workspaceId, referenceType, referenceId
+                        )
+                        call.respond(refs)
+                    }
+
+                    /** Delete a code reference. */
+                    delete("/references/{id}") {
+                        val access = call.resolveGitHubAccess(requireOwner = false) ?: return@delete
+                        val id = call.parameters["id"]?.toIntOrNull()
+                            ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
+                        val deleted = com.collabsphere.util.GitHubCodeSnippetService.deleteCodeReference(id, access.callerId)
+                        if (deleted) {
+                            call.respond(HttpStatusCode.OK, mapOf("deleted" to true))
+                        } else {
+                            call.respond(HttpStatusCode.NotFound, "Reference not found or not authorized")
+                        }
+                    }
                 }
             }
         }

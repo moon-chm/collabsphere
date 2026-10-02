@@ -374,6 +374,157 @@ object GitHubService {
         } catch (e: Exception) {
             null
         }
+
+    suspend fun getReleases(
+        token: String,
+        repoFullName: String,
+        page: Int = 1,
+        perPage: Int = 10
+    ): List<GitHubReleaseInfo> =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/releases") {
+                githubHeaders(token)
+                url {
+                    parameters.append("per_page", perPage.toString())
+                    parameters.append("page", page.toString())
+                }
+            }
+            if (response.status.isSuccess()) response.body() else emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+    // ── Feature E: Assignee Management ──────────────────────────────────────
+
+    @Serializable
+    data class GitHubAssignee(
+        val id: Long,
+        val login: String
+    )
+
+    /** Get current assignees on an issue. Works for PRs too (GitHub treats them as issues). */
+    suspend fun getIssueAssignees(token: String, repoFullName: String, number: Int): List<GitHubAssignee>? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/issues/$number") {
+                githubHeaders(token)
+            }
+            if (response.status.isSuccess()) {
+                val body = response.body<kotlinx.serialization.json.JsonObject>()
+                val assignees = body["assignees"]?.let {
+                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                        .decodeFromString<List<GitHubAssignee>>(it.toString())
+                } ?: emptyList()
+                assignees
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+
+    /** Add assignees to an issue. GitHub supports up to 10 per call. */
+    suspend fun addIssueAssignees(token: String, repoFullName: String, number: Int, logins: List<String>): Boolean =
+        try {
+            val response = httpClient.post("https://api.github.com/repos/$repoFullName/issues/$number/assignees") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("assignees" to logins))
+            }
+            if (!response.status.isSuccess()) {
+                println("[GitHub] Adding assignees to issue #$number in $repoFullName failed: ${response.status}")
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+
+    /** Remove assignees from an issue. */
+    suspend fun removeIssueAssignees(token: String, repoFullName: String, number: Int, logins: List<String>): Boolean =
+        try {
+            val response = httpClient.delete("https://api.github.com/repos/$repoFullName/issues/$number/assignees") {
+                githubHeaders(token)
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("assignees" to logins))
+            }
+            if (!response.status.isSuccess()) {
+                println("[GitHub] Removing assignees from issue #$number in $repoFullName failed: ${response.status}")
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+
+    // ── Feature G: File Content Retrieval ────────────────────────────────────
+
+    @Serializable
+    data class GitHubFileContent(
+        val type: String = "",
+        val encoding: String? = null,
+        val size: Int = 0,
+        val name: String = "",
+        val path: String = "",
+        val content: String? = null,
+        val sha: String? = null,
+        val html_url: String? = null
+    )
+
+    /**
+     * Fetch file content from a GitHub repository at a specific ref.
+     * Returns decoded content string, or null if file not found / binary / too large.
+     * Max file size enforced at 512KB to prevent memory issues.
+     */
+    suspend fun getFileContent(
+        token: String,
+        repoFullName: String,
+        filePath: String,
+        ref: String
+    ): Triple<String?, Boolean, Int>? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/contents/${filePath.trimStart('/')}") {
+                githubHeaders(token)
+                parameter("ref", ref)
+            }
+            if (!response.status.isSuccess()) {
+                if (response.status == HttpStatusCode.NotFound) {
+                    Triple(null, false, 0) // File not found
+                } else null
+            } else {
+                val file = response.body<GitHubFileContent>()
+                if (file.type != "file") {
+                    Triple(null, false, 0) // Not a file (directory, submodule, etc.)
+                } else if (file.size > 512 * 1024) {
+                    Triple(null, false, file.size) // Too large
+                } else if (file.encoding == "base64" && file.content != null) {
+                    val decoded = try {
+                        String(java.util.Base64.getMimeDecoder().decode(file.content))
+                    } catch (e: Exception) {
+                        null // Binary file — can't decode as UTF-8
+                    }
+                    val isBinary = decoded == null || decoded.contains('\u0000')
+                    Triple(if (isBinary) null else decoded, isBinary, file.size)
+                } else {
+                    Triple(null, true, file.size) // No content or unknown encoding
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+
+    /** Resolve the latest commit SHA for a branch or ref. */
+    suspend fun resolveRef(token: String, repoFullName: String, ref: String): String? =
+        try {
+            val response = httpClient.get("https://api.github.com/repos/$repoFullName/commits/$ref") {
+                githubHeaders(token)
+                parameter("per_page", 1)
+            }
+            if (response.status.isSuccess()) {
+                response.body<GitHubCommitInfo>().sha
+            } else null
+        } catch (e: Exception) {
+            null
+        }
 }
 
 @Serializable
@@ -445,3 +596,46 @@ data class GitHubIssueComment(
     val updated_at: String? = null,
     val html_url: String? = null
 )
+
+@Serializable
+data class GitHubReleaseInfo(
+    val id: Long,
+    val tag_name: String,
+    val name: String? = null,
+    val body: String? = null,
+    val author: GitHubOwner? = null,
+    val html_url: String,
+    val draft: Boolean = false,
+    val prerelease: Boolean = false,
+    val published_at: String? = null,
+    val created_at: String? = null
+)
+
+data class ReleaseRecord(
+    val githubReleaseId: Long,
+    val tagName: String,
+    val name: String?,
+    val body: String?,
+    val author: String?,
+    val htmlUrl: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+    val publishedAt: Long?,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+fun GitHubReleaseInfo.toRecord(now: Long = System.currentTimeMillis()): ReleaseRecord =
+    ReleaseRecord(
+        githubReleaseId = id,
+        tagName = tag_name,
+        name = name,
+        body = body,
+        author = author?.login,
+        htmlUrl = html_url,
+        draft = draft,
+        prerelease = prerelease,
+        publishedAt = parseGitHubTime(published_at),
+        createdAt = parseGitHubTime(created_at) ?: now,
+        updatedAt = now
+    )

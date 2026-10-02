@@ -301,6 +301,41 @@ object GitHubCheckSuitesTable : Table("github_check_suites") {
     }
 }
 
+object GitHubReleasesTable : Table("github_releases") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val githubReleaseId = long("github_release_id")
+    val tagName = varchar("tag_name", 255)
+    val name = varchar("name", 255).nullable()
+    val body = text("body").nullable()
+    val author = varchar("author", 255).nullable()
+    val htmlUrl = varchar("html_url", 500)
+    val draft = bool("draft").default(false)
+    val prerelease = bool("prerelease").default(false)
+    val publishedAt = long("published_at").nullable()
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
+
+    init {
+        uniqueIndex("github_releases_unique", repositoryId, githubReleaseId)
+        index(false, repositoryId, publishedAt)
+    }
+
+    data class ReleaseRow(
+        val id: Int,
+        val githubReleaseId: Long,
+        val tagName: String,
+        val name: String?,
+        val body: String?,
+        val author: String?,
+        val htmlUrl: String,
+        val draft: Boolean,
+        val prerelease: Boolean,
+        val publishedAt: Long?,
+        val createdAt: Long
+    )
+}
+
 object GitHubIssuesTable : Table("github_issues") {
     val id = integer("id").autoIncrement()
     val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE).index()
@@ -395,4 +430,107 @@ object GitHubActionIdempotencyTable : Table("github_action_idempotency") {
     val completedAt = long("completed_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * Feature E: Stable mapping from CollabSphere users to GitHub identities.
+ * Derived from GitHubConnectionsTable but provides a denormalized, queryable
+ * index for workspace-level assignee synchronization.
+ * The githubUserId (numeric) is the long-term identity key.
+ */
+object GitHubIdentityMappingTable : Table("github_identity_mapping") {
+    val id = integer("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val githubUserId = long("github_user_id")
+    val githubLogin = varchar("github_login", 255)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_identity_ws_user_unique", workspaceId, userId)
+        uniqueIndex("github_identity_ws_ghid_unique", workspaceId, githubUserId)
+        index(false, workspaceId, githubLogin)
+    }
+}
+
+/**
+ * Feature E: Tracks assignee sync state for linked task↔issue pairs.
+ * Prevents infinite loops by recording the origin of the last sync and
+ * comparing assignee set hashes before triggering writes.
+ */
+object GitHubAssigneeSyncTable : Table("github_assignee_sync") {
+    val id = integer("id").autoIncrement()
+    val taskId = integer("task_id").references(TasksTable.id, onDelete = ReferenceOption.CASCADE)
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE)
+    val issueNumber = integer("issue_number")
+    val enabled = bool("enabled").default(true)
+    /** "GITHUB", "COLLABSPHERE", or "INITIAL" — who triggered the last sync */
+    val lastSyncSource = varchar("last_sync_source", 20).default("INITIAL")
+    /** Hash of the assignee set at last sync (sorted github user IDs, joined) */
+    val lastSyncHash = varchar("last_sync_hash", 128).default("")
+    val lastSyncAt = long("last_sync_at").nullable()
+    val syncStatus = varchar("sync_status", 20).default("SYNCED") // SYNCED, PARTIAL, FAILED, RETRYING
+    val syncError = text("sync_error").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_assignee_sync_unique", taskId, repositoryId, issueNumber)
+    }
+}
+
+/**
+ * Feature G: Structured reference to a code snippet in a GitHub repository.
+ * Stored as metadata only — source content is fetched on-demand and cached.
+ * Can be attached to tasks, channel messages, or DMs via referenceType/referenceId.
+ */
+object GitHubCodeReferencesTable : Table("github_code_references") {
+    val id = integer("id").autoIncrement()
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE)
+    val filePath = varchar("file_path", 1000)
+    val ref = varchar("ref", 255)           // branch name or commit SHA
+    val commitSha = varchar("commit_sha", 40).nullable()  // pinned commit for stability
+    val startLine = integer("start_line").nullable()
+    val endLine = integer("end_line").nullable()
+    val canonicalUrl = varchar("canonical_url", 1000)
+    /** "TASK", "CHANNEL_MESSAGE", "DM" */
+    val referenceType = varchar("reference_type", 30)
+    val referenceId = integer("reference_id")  // task ID, message ID, or DM ID
+    val createdByUserId = integer("created_by_user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, referenceType, referenceId)
+        index(false, repositoryId, commitSha, filePath)
+    }
+}
+
+/**
+ * Feature G: Bounded cache for fetched code snippet content.
+ * Keyed by repository + commitSha + filePath for immutability.
+ * Content is trimmed to the requested line range at fetch time.
+ */
+object GitHubCodeCacheTable : Table("github_code_cache") {
+    val id = integer("id").autoIncrement()
+    val repositoryId = integer("repository_id").references(GitHubRepositoriesTable.id, onDelete = ReferenceOption.CASCADE)
+    val commitSha = varchar("commit_sha", 40)
+    val filePath = varchar("file_path", 1000)
+    val content = text("content")
+    val language = varchar("language", 50).nullable()
+    val totalLines = integer("total_lines").default(0)
+    val sizeBytes = integer("size_bytes").default(0)
+    val isBinary = bool("is_binary").default(false)
+    val fetchedAt = long("fetched_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex("github_code_cache_unique", repositoryId, commitSha, filePath)
+    }
 }

@@ -23,6 +23,8 @@ import com.collabsphere.model.NotificationMutesTable
 import com.collabsphere.model.ChannelReadStateTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.ChannelsTable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.GlobalScope
 import com.collabsphere.model.UserBlocksTable
 import com.collabsphere.model.UserVerificationTable
 import com.collabsphere.model.NotificationsTable
@@ -2450,6 +2452,16 @@ fun Application.configureRouting() {
                     } else {
                         call.respond(HttpStatusCode.OK, updatedTask)
                         syncLinkedIssuesWithTask(updatedTask.id, previousStatus, updatedTask.status)
+                        // Feature E: Sync assignee to linked GitHub issues
+                        kotlinx.coroutines.GlobalScope.launch {
+                            try {
+                                com.collabsphere.util.GitHubAssigneeSyncService.syncToGitHub(
+                                    updatedTask.id, updatedTask.workspaceId, updatedTask.assignedToUserId
+                                )
+                            } catch (e: Exception) {
+                                println("[GitHub] Assignee sync to GitHub failed: ${e.message}")
+                            }
+                        }
                         // ── Notification: task updated ────────────────────────────────────
                         val assigneeId = updatedTask.assignedToUserId
                         if (assigneeId != null && assigneeId != actingUserId) {

@@ -24,6 +24,8 @@ import com.collabsphere.util.GitHubIssueActivity
 import com.collabsphere.util.GitHubService
 import com.collabsphere.util.GitHubPullRequestActivity
 import com.collabsphere.util.GitHubPushActivity
+import com.collabsphere.util.GitHubReleaseActivity
+import com.collabsphere.util.GitHubCheckSuiteActivity
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.and
@@ -180,6 +182,8 @@ suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
                 is GitHubPushActivity -> handlePush(repo, activity)
                 is GitHubPullRequestActivity -> handlePullRequest(repo, activity)
                 is GitHubIssueActivity -> handleIssue(repo, activity)
+                is GitHubReleaseActivity -> handleRelease(repo, activity)
+                is GitHubCheckSuiteActivity -> handleCheckSuite(repo, activity)
             }
         } catch (e: Exception) {
             println("[GitHub] Automation failed for repository ${activity.repositoryId}: ${e.message}")
@@ -260,7 +264,12 @@ private suspend fun handlePullRequest(repo: LinkedRepo, activity: GitHubPullRequ
         source = "PR #${pr.number}"
     )
     notifyAssignees(changes)
-    if (activity.announce) post?.let { postToChannel(repo, "$it\n$url") }
+    if (activity.announce) {
+        if (post != null) {
+            postToChannel(repo, "$post\n$url")
+            notifyWorkspaceMembers(repo.workspaceId, "GITHUB_PR", "Pull Request", post, url, null)
+        }
+    }
 }
 
 private suspend fun handleIssue(repo: LinkedRepo, activity: GitHubIssueActivity) {
@@ -298,7 +307,33 @@ private suspend fun handleIssue(repo: LinkedRepo, activity: GitHubIssueActivity)
         source = "issue #${issue.number}"
     )
     notifyAssignees(changes)
-    if (activity.announce) post?.let { postToChannel(repo, "$it\n${issue.url}") }
+    if (activity.announce) {
+        if (post != null) {
+            postToChannel(repo, "$post\n${issue.url}")
+            notifyWorkspaceMembers(repo.workspaceId, "GITHUB_ISSUE", "Issue", post, issue.url, null)
+        }
+    }
+}
+
+private suspend fun handleRelease(repo: LinkedRepo, activity: GitHubReleaseActivity) {
+    if (!activity.announce) return
+    val release = activity.release
+    val title = release.name ?: release.tagName
+    val post = "🚀 Release published\n\n${repo.fullName}\n$title\n${release.tagName}"
+    val url = activity.url ?: release.htmlUrl
+    postToChannel(repo, "$post\n$url")
+    notifyWorkspaceMembers(repo.workspaceId, "GITHUB_RELEASE", "Release Published", "$title\n${release.tagName}", url, null)
+}
+
+private suspend fun handleCheckSuite(repo: LinkedRepo, activity: GitHubCheckSuiteActivity) {
+    if (!activity.announce) return
+    if (activity.status == "completed") {
+        val emoji = if (activity.conclusion == "success") "✅" else "❌"
+        val post = "$emoji CI/CD ${activity.conclusion} on ${repo.fullName} (${activity.headBranch ?: activity.headSha.take(7)})"
+        val url = activity.url ?: "${repo.htmlUrl}/commit/${activity.headSha}"
+        postToChannel(repo, "$post\n$url")
+        notifyWorkspaceMembers(repo.workspaceId, "GITHUB_CI", "CI/CD ${activity.conclusion}", post, url, null)
+    }
 }
 
 private suspend fun tasksLinkedToIssue(repositoryId: Int, number: Int): Set<Int> = dbQuery {
@@ -417,6 +452,35 @@ private suspend fun notifyAssignees(changes: List<TaskChange>) {
             body = "\"${change.taskName}\" is now ${change.status} via ${change.source}",
             workspaceId = change.workspaceId,
             referenceId = change.taskId
+        )
+    }
+}
+
+private suspend fun notifyWorkspaceMembers(
+    workspaceId: Int,
+    type: String,
+    title: String,
+    body: String,
+    url: String,
+    referenceId: Int?
+) {
+    val fullBody = if (url.isNotEmpty()) "$body\n$url" else body
+    
+    val members = dbQuery {
+        com.collabsphere.model.WorkspaceMembersTable.selectAll()
+            .where { com.collabsphere.model.WorkspaceMembersTable.workspaceId eq workspaceId }
+            .map { it[com.collabsphere.model.WorkspaceMembersTable.userId] }
+    }
+    
+    for (userId in members) {
+        createAndPushNotification(
+            recipientId = userId,
+            actorId = null,
+            type = type,
+            title = title,
+            body = fullBody,
+            workspaceId = workspaceId,
+            referenceId = referenceId
         )
     }
 }
