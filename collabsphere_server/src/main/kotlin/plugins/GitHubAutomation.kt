@@ -332,7 +332,7 @@ suspend fun syncLinkedIssuesWithTask(taskId: Int, previousStatus: String?, newSt
                     number = link[GitHubTaskLinksTable.ref].toIntOrNull() ?: return@mapNotNull null,
                     repoFullName = repoRow[GitHubRepositoriesTable.fullName],
                     installationId = connRow[GitHubConnectionsTable.installationId],
-                    userToken = connRow[GitHubConnectionsTable.accessTokenEncrypted]
+                    userToken = com.collabsphere.util.CryptoService.decrypt(connRow[GitHubConnectionsTable.accessTokenEncrypted])
                 )
             }
     }

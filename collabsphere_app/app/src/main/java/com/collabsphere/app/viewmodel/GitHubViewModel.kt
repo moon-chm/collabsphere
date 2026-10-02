@@ -27,7 +27,8 @@ data class GitHubAnalyticsResponse(
     val repositoryName: String?,
     val repositoryUrl: String? = null,
     val lastSyncedAt: Long? = null,
-    val isSyncing: Boolean = false,
+    val syncState: String = "IDLE",
+    val syncError: String? = null,
     val totalCommits: Int,
     val openPullRequests: Int,
     val mergedPullRequests: Int,
@@ -263,7 +264,6 @@ class GitHubViewModel(
                 val result = response.body<GitHubAnalyticsResponse>()
                 _analytics.value = result
                 _selectedRepoId.value = result.repositoryId
-                if (result.isSyncing) pollWhileSyncing(workspaceId)
                 if (!result.isConnected && result.hasConnection && result.canManage) {
                     fetchAvailableRepos(workspaceId)
                 }
@@ -300,16 +300,8 @@ class GitHubViewModel(
     }
 
     private fun pollWhileSyncing(workspaceId: Int) {
-        if (pollJob?.isActive == true) return
-        pollJob = viewModelScope.launch {
-            while (_analytics.value?.isSyncing == true) {
-                delay(SYNC_POLL_INTERVAL_MS)
-                fetchAnalytics(workspaceId)
-                if (_error.value != null) {
-                    _analytics.value = _analytics.value?.copy(isSyncing = false)
-                }
-            }
-        }
+        // Polling removed to avoid aggressive battery/network usage on Android.
+        // The user can manually refresh by pulling down or clicking sync.
     }
 
     fun syncNow(workspaceId: Int) {
@@ -320,8 +312,7 @@ class GitHubViewModel(
                     selectedRepo()
                 }
                 if (response.status == HttpStatusCode.Accepted) {
-                    _analytics.value = _analytics.value?.copy(isSyncing = true)
-                    pollWhileSyncing(workspaceId)
+                    _analytics.value = _analytics.value?.copy(syncState = "SYNCING")
                 } else {
                     _error.value = response.errorMessage("Could not start sync")
                 }

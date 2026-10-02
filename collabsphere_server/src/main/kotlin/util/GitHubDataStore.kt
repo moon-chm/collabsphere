@@ -142,9 +142,16 @@ object GitHubDataStore {
     const val CI_SUCCESS = "success"
     private val FAILING_CONCLUSIONS = setOf("failure", "timed_out", "cancelled", "action_required", "startup_failure")
 
-    fun markSynced(repositoryId: Int) {
+    fun markSynced(repositoryId: Int, state: String = "IDLE") {
         GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
             it[GitHubRepositoriesTable.lastSyncedAt] = System.currentTimeMillis()
+            if (state == "IDLE") {
+                it[GitHubRepositoriesTable.syncState] = "IDLE"
+                it[GitHubRepositoriesTable.lastSuccessfulSyncAt] = System.currentTimeMillis()
+                it[GitHubRepositoriesTable.lastSyncError] = null
+            } else {
+                it[GitHubRepositoriesTable.syncState] = state
+            }
         }
     }
 
@@ -297,15 +304,42 @@ object GitHubSyncManager {
         cooldownMap?.put(repositoryId, System.currentTimeMillis())
         scope.launch {
             try {
+                newSuspendedTransaction(Dispatchers.IO) {
+                    GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
+                        it[syncState] = "SYNCING"
+                        it[lastSyncError] = null
+                    }
+                }
                 val token = GitHubService.repoAccessToken(installationId, userToken)
                 if (token == null) {
                     println("[GitHub] No token available to sync $repoFullName")
+                    newSuspendedTransaction(Dispatchers.IO) {
+                        GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
+                            it[syncState] = "FAILED"
+                            it[lastSyncError] = "No token available"
+                        }
+                    }
                     return@launch
                 }
                 val activities = GitHubDataStore.sync(repositoryId, token, repoFullName, branch)
                 if (activities.isNotEmpty()) activityHandler?.invoke(activities)
+            } catch (e: GitHubApiException) {
+                println("[GitHub] API Error during sync of $repoFullName: ${e.statusCode} ${e.message}")
+                val state = if (e.statusCode == 403 || e.statusCode == 429) "RATE_LIMITED" else "FAILED"
+                newSuspendedTransaction(Dispatchers.IO) {
+                    GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
+                        it[syncState] = state
+                        it[lastSyncError] = e.message
+                    }
+                }
             } catch (e: Exception) {
                 println("[GitHub] Sync failed for $repoFullName: ${e.message}")
+                newSuspendedTransaction(Dispatchers.IO) {
+                    GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
+                        it[syncState] = "FAILED"
+                        it[lastSyncError] = e.message
+                    }
+                }
             } finally {
                 running.remove(repositoryId)
             }

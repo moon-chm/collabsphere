@@ -257,10 +257,26 @@ object GitHubRepositoriesTable : Table("github_repositories") {
     val htmlUrl = varchar("html_url", 500)
     val defaultBranch = varchar("default_branch", 255)
     val lastSyncedAt = long("last_synced_at").clientDefault { System.currentTimeMillis() }
+    val syncState = varchar("sync_state", 20).default("IDLE")
+    val lastSuccessfulSyncAt = long("last_successful_sync_at").nullable()
+    val lastSyncError = text("last_sync_error").nullable()
     val notifyChannelId = integer("notify_channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
     val lastDigestAt = long("last_digest_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object GitHubWebhookEventsTable : Table("github_webhook_events") {
+    val deliveryId = varchar("delivery_id", 128)
+    val eventType = varchar("event_type", 64)
+    val payload = text("payload")
+    val status = varchar("status", 20).default("QUEUED")
+    val retryCount = integer("retry_count").default(0)
+    val nextRetryAt = long("next_retry_at").clientDefault { System.currentTimeMillis() }
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val error = text("error").nullable()
+
+    override val primaryKey = PrimaryKey(deliveryId)
 }
 
 object GitHubCheckSuitesTable : Table("github_check_suites") {

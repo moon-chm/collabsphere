@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
@@ -389,225 +391,251 @@ private fun ConnectedView(
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = analytics.repositoryName ?: "GitHub Activity",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2C2A28)
-                )
-                if (analytics.isSyncing) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Syncing with GitHub…", fontSize = 12.sp, color = Color(0xFF9E8E89))
-                    }
-                } else {
-                    analytics.lastSyncedAt?.let {
-                        Text(
-                            text = "Updated ${relativeTime(it)}",
-                            fontSize = 12.sp,
-                            color = Color(0xFF9E8E89)
-                        )
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = analytics.repositoryName ?: "GitHub Activity",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2C2A28)
+                    )
+                    when (analytics.syncState) {
+                        "SYNCING" -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "Syncing with GitHub…", fontSize = 12.sp, color = Color(0xFF9E8E89))
+                            }
+                        }
+                        "RATE_LIMITED" -> {
+                            Text("API Rate Limited", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                        "FAILED" -> {
+                            Text(analytics.syncError ?: "Sync Failed", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                        else -> {
+                            analytics.lastSyncedAt?.let {
+                                Text(
+                                    text = "Updated ${relativeTime(it)}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF9E8E89)
+                                )
+                            }
+                        }
                     }
                 }
-            }
-            TextButton(onClick = onSync, enabled = !analytics.isSyncing) {
-                Text("Sync", color = Color(0xFF2C2A28))
-            }
-            analytics.repositoryUrl?.let { url ->
-                TextButton(onClick = { openInBrowser(context, url) }) {
-                    Text("Open", color = Color(0xFF2C2A28))
+                TextButton(onClick = onSync, enabled = analytics.syncState != "SYNCING") {
+                    Text("Sync", color = Color(0xFF2C2A28))
+                }
+                analytics.repositoryUrl?.let { url ->
+                    TextButton(onClick = { openInBrowser(context, url) }) {
+                        Text("Open", color = Color(0xFF2C2A28))
+                    }
                 }
             }
         }
 
         if (analytics.repositories.size > 1) {
-            Spacer(modifier = Modifier.height(8.dp))
-            RepoSwitcher(
-                repositories = analytics.repositories,
-                selectedId = analytics.repositoryId,
-                onSelected = onRepoSelected
-            )
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                RepoSwitcher(
+                    repositories = analytics.repositories,
+                    selectedId = analytics.repositoryId,
+                    onSelected = onRepoSelected
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item { Spacer(modifier = Modifier.height(16.dp)) }
 
         if (analytics.commitActivity.isNotEmpty()) {
-            val counts = analytics.commitActivity
-            val chartEntryModel = remember(counts) {
-                entryModelOf(*counts.map<GitHubDailyCount, Number> { it.count }.toTypedArray())
-            }
-            val dayLabels = remember(counts) { counts.map { it.date.takeLast(2).trimStart('0') } }
-            val bottomAxisFormatter = remember(dayLabels) {
-                AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
-                    dayLabels.getOrNull(value.toInt()) ?: ""
+            item {
+                val counts = analytics.commitActivity
+                val chartEntryModel = remember(counts) {
+                    entryModelOf(*counts.map<GitHubDailyCount, Number> { it.count }.toTypedArray())
                 }
-            }
+                val dayLabels = remember(counts) { counts.map { it.date.takeLast(2).trimStart('0') } }
+                val bottomAxisFormatter = remember(dayLabels) {
+                    AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
+                        dayLabels.getOrNull(value.toInt()) ?: ""
+                    }
+                }
 
-            SectionCard(title = "Commits, last ${counts.size} days") {
-                ProvideChartStyle(m3ChartStyle()) {
-                    Chart(
-                        chart = columnChart(),
-                        model = chartEntryModel,
-                        startAxis = rememberStartAxis(),
-                        bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter),
-                        modifier = Modifier.height(180.dp)
-                    )
+                SectionCard(title = "Commits, last ${counts.size} days") {
+                    ProvideChartStyle(m3ChartStyle()) {
+                        Chart(
+                            chart = columnChart(),
+                            model = chartEntryModel,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisFormatter),
+                            modifier = Modifier.height(180.dp)
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            StatCard("Commits", analytics.totalCommits.toString(), Modifier.weight(1f))
-            StatCard("Open PRs", analytics.openPullRequests.toString(), Modifier.weight(1f))
-            StatCard("Merged", analytics.mergedPullRequests.toString(), Modifier.weight(1f))
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                StatCard("Commits", analytics.totalCommits.toString(), Modifier.weight(1f))
+                StatCard("Open PRs", analytics.openPullRequests.toString(), Modifier.weight(1f))
+                StatCard("Merged", analytics.mergedPullRequests.toString(), Modifier.weight(1f))
+            }
         }
 
         if (analytics.topContributors.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionCard(title = "Top contributors") {
-                analytics.topContributors.forEach { contributor ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ContributorAvatar(contributor)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = contributor.username,
-                                fontSize = 14.sp,
-                                color = Color(0xFF2C2A28),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            val githubName = contributor.githubName
-                            if (contributor.memberUserId != null && githubName != null && githubName != contributor.username) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(title = "Top contributors") {
+                    analytics.topContributors.forEach { contributor ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ContributorAvatar(contributor)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = githubName,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF9E8E89),
+                                    text = contributor.username,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF2C2A28),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                val githubName = contributor.githubName
+                                if (contributor.memberUserId != null && githubName != null && githubName != contributor.username) {
+                                    Text(
+                                        text = githubName,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF9E8E89),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
+                            Text(
+                                text = "${contributor.commits} commits",
+                                fontSize = 13.sp,
+                                color = Color(0xFF70625E)
+                            )
                         }
-                        Text(
-                            text = "${contributor.commits} commits",
-                            fontSize = 13.sp,
-                            color = Color(0xFF70625E)
-                        )
                     }
                 }
             }
         }
 
         if (analytics.recentPullRequests.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionCard(
-                title = "Recent pull requests",
-                action = {
-                    TextButton(onClick = onViewAllPullRequests) {
-                        Text("View all", color = Color(0xFF2C2A28), fontSize = 13.sp)
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(
+                    title = "Recent pull requests",
+                    action = {
+                        TextButton(onClick = onViewAllPullRequests) {
+                            Text("View all", color = Color(0xFF2C2A28), fontSize = 13.sp)
+                        }
                     }
-                }
-            ) {
-                analytics.recentPullRequests.forEach { pr ->
-                    val (statusLabel, statusColor) = pullRequestStatus(pr)
-                    ActivityRow(
-                        title = "#${pr.number} ${pr.title}",
-                        subtitle = "${pr.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(pr.createdAt)}",
-                        badge = statusLabel,
-                        badgeColor = statusColor,
-                        url = pr.url,
-                        ci = pr.ciStatus
-                    )
+                ) {
+                    analytics.recentPullRequests.forEach { pr ->
+                        val (statusLabel, statusColor) = pullRequestStatus(pr)
+                        ActivityRow(
+                            title = "#${pr.number} ${pr.title}",
+                            subtitle = "${pr.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(pr.createdAt)}",
+                            badge = statusLabel,
+                            badgeColor = statusColor,
+                            url = pr.url,
+                            ci = pr.ciStatus
+                        )
+                    }
                 }
             }
         }
 
         if (analytics.recentIssues.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionCard(title = "Issues (${analytics.openIssues} open)") {
-                analytics.recentIssues.forEach { issue ->
-                    ActivityRow(
-                        title = "#${issue.number} ${issue.title}",
-                        subtitle = "${issue.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(issue.createdAt)}",
-                        badge = if (issue.state == "open") "Open" else "Closed",
-                        badgeColor = if (issue.state == "open") Color(0xFF2DA44E) else Color(0xFF6F42C1),
-                        url = issue.url
-                    )
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(title = "Issues (${analytics.openIssues} open)") {
+                    analytics.recentIssues.forEach { issue ->
+                        ActivityRow(
+                            title = "#${issue.number} ${issue.title}",
+                            subtitle = "${issue.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(issue.createdAt)}",
+                            badge = if (issue.state == "open") "Open" else "Closed",
+                            badgeColor = if (issue.state == "open") Color(0xFF2DA44E) else Color(0xFF6F42C1),
+                            url = issue.url
+                        )
+                    }
                 }
             }
         }
 
         if (analytics.recentCommits.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionCard(title = "Recent commits") {
-                analytics.recentCommits.forEach { commit ->
-                    ActivityRow(
-                        title = commit.message.ifBlank { commit.sha.take(7) },
-                        subtitle = "${commit.authorName ?: "Unknown"} · ${relativeTime(commit.commitDate)}",
-                        badge = commit.sha.take(7),
-                        badgeColor = Color(0xFF70625E),
-                        url = commit.url,
-                        ci = commit.ciStatus
-                    )
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionCard(title = "Recent commits") {
+                    analytics.recentCommits.forEach { commit ->
+                        ActivityRow(
+                            title = commit.message.ifBlank { commit.sha.take(7) },
+                            subtitle = "${commit.authorName ?: "Unknown"} · ${relativeTime(commit.commitDate)}",
+                            badge = commit.sha.take(7),
+                            badgeColor = Color(0xFF70625E),
+                            url = commit.url,
+                            ci = commit.ciStatus
+                        )
+                    }
                 }
             }
         }
 
         if (canManage) {
-            Spacer(modifier = Modifier.height(16.dp))
-            NotifyChannelPicker(
-                channels = analytics.channels,
-                selectedId = analytics.notifyChannelId,
-                onSelected = onNotifyChannelSelected
-            )
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                NotifyChannelPicker(
+                    channels = analytics.channels,
+                    selectedId = analytics.notifyChannelId,
+                    onSelected = onNotifyChannelSelected
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onAddRepo,
-                    enabled = analytics.repositories.size < MAX_LINKED_REPOS,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Add Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                    OutlinedButton(
+                        onClick = onAddRepo,
+                        enabled = analytics.repositories.size < MAX_LINKED_REPOS,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Add Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                    }
+                    OutlinedButton(
+                        onClick = onRemoveRepo,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Remove Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                    }
                 }
-                OutlinedButton(
-                    onClick = onRemoveRepo,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Remove Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TextButton(
+                        onClick = onDisconnect
+                    ) {
+                        Text("Disconnect GitHub", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                    }
                 }
-            }
-            TextButton(
-                onClick = onDisconnect,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            ) {
-                Text("Disconnect GitHub", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

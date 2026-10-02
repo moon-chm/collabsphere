@@ -11,6 +11,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.OffsetDateTime
 
+class GitHubApiException(val statusCode: Int, message: String) : Exception(message)
+
 @Serializable
 data class GitHubRepository(
     val id: Long,
@@ -74,7 +76,7 @@ object GitHubService {
         header(HttpHeaders.Accept, "application/vnd.github+json")
     }
 
-    private suspend inline fun <reified T> getPaged(token: String, url: String, maxPages: Int): List<T>? {
+    private suspend inline fun <reified T> getPaged(token: String, url: String, maxPages: Int): List<T> {
         val results = mutableListOf<T>()
         for (page in 1..maxPages) {
             val response = httpClient.get(url) {
@@ -84,7 +86,15 @@ object GitHubService {
             }
             if (!response.status.isSuccess()) {
                 println("[GitHub] GET $url page $page failed: ${response.status}")
-                return if (page == 1) null else results
+                val rateLimitRemaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
+                val msg = if (response.status == HttpStatusCode.Forbidden && rateLimitRemaining == 0) {
+                    "GitHub API Rate limit exceeded"
+                } else if (response.status == HttpStatusCode.TooManyRequests) {
+                    "GitHub API Secondary Rate limit exceeded"
+                } else {
+                    "GitHub API error: ${response.status}"
+                }
+                throw GitHubApiException(response.status.value, msg)
             }
             val items = response.body<List<T>>()
             results += items
@@ -133,7 +143,7 @@ object GitHubService {
         }
     }
 
-    private suspend fun fetchRepositoryPages(token: String, url: String): List<GitHubRepository>? {
+    private suspend fun fetchRepositoryPages(token: String, url: String): List<GitHubRepository> {
         try {
             val results = mutableListOf<GitHubRepository>()
             for (page in 1..MAX_REPO_PAGES) {
@@ -144,20 +154,30 @@ object GitHubService {
                 }
                 if (!response.status.isSuccess()) {
                     println("[GitHub] Listing installation repos failed: ${response.status}")
-                    return if (page == 1) null else results
+                    val rateLimitRemaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
+                    val msg = if (response.status == HttpStatusCode.Forbidden && rateLimitRemaining == 0) {
+                        "GitHub API Rate limit exceeded"
+                    } else if (response.status == HttpStatusCode.TooManyRequests) {
+                        "GitHub API Secondary Rate limit exceeded"
+                    } else {
+                        "GitHub API error: ${response.status}"
+                    }
+                    throw GitHubApiException(response.status.value, msg)
                 }
                 val repos = response.body<GitHubRepositoriesResponse>().repositories
                 results += repos
                 if (repos.size < PAGE_SIZE) break
             }
             return results
+        } catch (e: GitHubApiException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            return null
+            throw Exception("Failed to fetch repository pages", e)
         }
     }
 
-    suspend fun getCommits(token: String, repoFullName: String, branch: String, since: Long?): List<GitHubCommitInfo>? =
+    suspend fun getCommits(token: String, repoFullName: String, branch: String, since: Long?): List<GitHubCommitInfo> =
         try {
             val sinceParam = since?.let { "&since=${java.time.Instant.ofEpochMilli(it)}" } ?: ""
             getPaged<GitHubCommitInfo>(
@@ -165,21 +185,25 @@ object GitHubService {
                 "https://api.github.com/repos/$repoFullName/commits?sha=${branch.encodeURLQueryComponent()}$sinceParam",
                 MAX_COMMIT_PAGES
             )
+        } catch (e: GitHubApiException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            emptyList()
         }
 
-    suspend fun getIssues(token: String, repoFullName: String, incremental: Boolean): List<GitHubIssueInfo>? =
+    suspend fun getIssues(token: String, repoFullName: String, incremental: Boolean): List<GitHubIssueInfo> =
         try {
             getPaged<GitHubIssueInfo>(
                 token,
                 "https://api.github.com/repos/$repoFullName/issues?state=all&sort=updated&direction=desc",
                 if (incremental) INCREMENTAL_PR_PAGES else MAX_ISSUE_PAGES
-            )?.filter { it.pull_request == null }
+            ).filter { it.pull_request == null }
+        } catch (e: GitHubApiException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            emptyList()
         }
 
     suspend fun createIssue(token: String, repoFullName: String, title: String, body: String): Pair<GitHubIssueInfo?, HttpStatusCode?> =
@@ -216,16 +240,18 @@ object GitHubService {
             false
         }
 
-    suspend fun getPullRequests(token: String, repoFullName: String, incremental: Boolean): List<GitHubPullRequestInfo>? =
+    suspend fun getPullRequests(token: String, repoFullName: String, incremental: Boolean): List<GitHubPullRequestInfo> =
         try {
             getPaged<GitHubPullRequestInfo>(
                 token,
                 "https://api.github.com/repos/$repoFullName/pulls?state=all&sort=updated&direction=desc",
                 if (incremental) INCREMENTAL_PR_PAGES else MAX_PR_PAGES
             )
+        } catch (e: GitHubApiException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            null
+            emptyList()
         }
 }
 

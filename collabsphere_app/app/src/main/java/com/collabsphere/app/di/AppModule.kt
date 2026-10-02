@@ -72,9 +72,6 @@ val databaseModule = module {
             AppDatabase::class.java,
             "app_database"
         )
-            // WAL mode: concurrent readers are never blocked by a writer.
-            // Without this, every incoming WebSocket message write fully locks the
-            // database and causes the UI Flow queries to stall — the main source of lag.
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42)
@@ -104,7 +101,6 @@ val networkModule = module {
                 })
             }
             install(HttpTimeout) {
-                // Render free tier cold-starts in 30–60 s — give it enough room
                 requestTimeoutMillis = 60000
                 connectTimeoutMillis = 60000
                 socketTimeoutMillis  = 60000

@@ -27,6 +27,7 @@ import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.util.AvatarGenerator
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.max
+import com.collabsphere.util.CryptoService
 import com.collabsphere.util.GitHubAuthService
 import com.collabsphere.util.GitHubDataStore
 import com.collabsphere.util.GitHubRepository
@@ -228,7 +229,7 @@ private suspend fun syncTarget(workspaceId: Int, repoId: Int? = null): SyncTarge
     SyncTarget(
         repositoryId = repoRow[GitHubRepositoriesTable.id],
         installationId = connRow[GitHubConnectionsTable.installationId],
-        userToken = connRow[GitHubConnectionsTable.accessTokenEncrypted],
+        userToken = CryptoService.decrypt(connRow[GitHubConnectionsTable.accessTokenEncrypted]),
         repoFullName = repoRow[GitHubRepositoriesTable.fullName],
         branch = repoRow[GitHubRepositoriesTable.defaultBranch],
         lastSyncedAt = repoRow[GitHubRepositoriesTable.lastSyncedAt]
@@ -252,7 +253,7 @@ private suspend fun installationRepositories(ownerId: Int): List<GitHubRepositor
             Triple(
                 it[GitHubConnectionsTable.id],
                 it[GitHubConnectionsTable.installationId],
-                it[GitHubConnectionsTable.accessTokenEncrypted]
+                CryptoService.decrypt(it[GitHubConnectionsTable.accessTokenEncrypted])
             )
         }
     } ?: return emptyList()
@@ -272,6 +273,7 @@ private suspend fun installationRepositories(ownerId: Int): List<GitHubRepositor
 fun Application.configureGitHubRoutes() {
     GitHubSyncManager.activityHandler = { processGitHubActivities(it) }
     startGitHubDigestScheduler()
+    startGitHubWebhookProcessor()
     routing {
 
         route("/auth/github") {
@@ -334,7 +336,7 @@ fun Application.configureGitHubRoutes() {
                                 it[GitHubConnectionsTable.githubUserId] = githubUser?.id ?: 0L
                                 it[GitHubConnectionsTable.githubUsername] = githubUser?.login ?: installation.account.login
                                 it[GitHubConnectionsTable.installationId] = installation.id
-                                it[GitHubConnectionsTable.accessTokenEncrypted] = storedUserToken
+                                it[GitHubConnectionsTable.accessTokenEncrypted] = CryptoService.encrypt(storedUserToken)
                                 it[GitHubConnectionsTable.accessTokenExpiresAt] = tokenExpiresAt
                             }
                         } else {
@@ -344,7 +346,7 @@ fun Application.configureGitHubRoutes() {
                                     it[GitHubConnectionsTable.githubUsername] = githubUser.login
                                 }
                                 it[GitHubConnectionsTable.installationId] = installation.id
-                                it[GitHubConnectionsTable.accessTokenEncrypted] = storedUserToken
+                                it[GitHubConnectionsTable.accessTokenEncrypted] = CryptoService.encrypt(storedUserToken)
                                 it[GitHubConnectionsTable.accessTokenExpiresAt] = tokenExpiresAt
                                 it[GitHubConnectionsTable.updatedAt] = System.currentTimeMillis()
                             }
@@ -367,20 +369,34 @@ fun Application.configureGitHubRoutes() {
         post("/webhook/github") {
             val payload = call.receive<ByteArray>()
             val signature = call.request.header("X-Hub-Signature-256")
+            val eventType = call.request.header("X-GitHub-Event")
+            val deliveryId = call.request.header("X-GitHub-Delivery")
+
+            if (eventType == null || deliveryId == null) {
+                call.respond(HttpStatusCode.BadRequest, "Missing required headers")
+                return@post
+            }
+
             if (!GitHubWebhookService.verifySignature(payload, signature)) {
                 println("[GitHub] Rejected webhook with invalid signature")
                 call.respond(HttpStatusCode.Unauthorized)
                 return@post
             }
-            val activities = try {
-                GitHubWebhookService.handleWebhookEvent(call.request.header("X-GitHub-Event"), payload.decodeToString())
+            
+            try {
+                dbQuery {
+                    com.collabsphere.model.GitHubWebhookEventsTable.insertIgnore {
+                        it[com.collabsphere.model.GitHubWebhookEventsTable.deliveryId] = deliveryId
+                        it[com.collabsphere.model.GitHubWebhookEventsTable.eventType] = eventType
+                        it[com.collabsphere.model.GitHubWebhookEventsTable.payload] = payload.decodeToString()
+                        it[com.collabsphere.model.GitHubWebhookEventsTable.status] = "QUEUED"
+                    }
+                }
+                call.respond(HttpStatusCode.Accepted)
             } catch (e: Exception) {
-                println("[GitHub] Webhook processing failed: ${e.message}")
+                println("[GitHub] Webhook enqueue failed: ${e.message}")
                 call.respond(HttpStatusCode.InternalServerError)
-                return@post
             }
-            call.respond(HttpStatusCode.OK)
-            processGitHubActivities(activities)
         }
 
         authenticate("auth-jwt") {
@@ -452,7 +468,7 @@ fun Application.configureGitHubRoutes() {
                                 it[GitHubRepositoriesTable.defaultBranch] = repo.default_branch
                             } get GitHubRepositoriesTable.id
 
-                            LinkResult.Linked(repoId, connRow[GitHubConnectionsTable.installationId], connRow[GitHubConnectionsTable.accessTokenEncrypted])
+                            LinkResult.Linked(repoId, connRow[GitHubConnectionsTable.installationId], CryptoService.decrypt(connRow[GitHubConnectionsTable.accessTokenEncrypted]))
                         }
 
                         when (linked) {
@@ -703,7 +719,7 @@ fun Application.configureGitHubRoutes() {
                                 .count() > 0
                             if (stillUsed) return@dbQuery null
                             GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.id eq connectionId }
-                            connRow[GitHubConnectionsTable.accessTokenEncrypted]
+                            CryptoService.decrypt(connRow[GitHubConnectionsTable.accessTokenEncrypted])
                         }
                         if (!revokedToken.isNullOrBlank()) {
                             GitHubAuthService.revokeUserGrant(revokedToken)
@@ -844,7 +860,8 @@ fun Application.configureGitHubRoutes() {
                             repositoryName = repoRow[GitHubRepositoriesTable.fullName],
                             repositoryUrl = repoRow[GitHubRepositoriesTable.htmlUrl],
                             lastSyncedAt = repoRow[GitHubRepositoriesTable.lastSyncedAt],
-                            isSyncing = GitHubSyncManager.isSyncing(repoId),
+                            syncState = if (GitHubSyncManager.isSyncing(repoId)) "SYNCING" else repoRow[GitHubRepositoriesTable.syncState],
+                            syncError = repoRow[GitHubRepositoriesTable.lastSyncError],
                             totalCommits = totalCommits,
                             openPullRequests = openPrs,
                             mergedPullRequests = mergedPrs,
@@ -868,11 +885,11 @@ fun Application.configureGitHubRoutes() {
                         )
                     }
 
-                    val refreshed = if (analytics.isConnected && !analytics.isSyncing) {
+                    val refreshed = if (analytics.isConnected && analytics.syncState != "SYNCING") {
                         val target = syncTarget(access.workspaceId, analytics.repositoryId)
                         val stale = target != null &&
                             System.currentTimeMillis() - target.lastSyncedAt > STALE_SYNC_MS
-                        if (stale && target.start(SyncTrigger.AUTO)) analytics.copy(isSyncing = true) else analytics
+                        if (stale && target.start(SyncTrigger.AUTO)) analytics.copy(syncState = "SYNCING") else analytics
                     } else {
                         analytics
                     }
