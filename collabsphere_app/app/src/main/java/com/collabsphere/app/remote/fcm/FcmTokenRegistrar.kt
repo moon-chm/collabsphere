@@ -50,7 +50,7 @@ object FcmTokenRegistrar : KoinComponent {
 
             val token = task.result ?: return@addOnCompleteListener
             Log.d(TAG, "Retrieved current FCM token: $token")
-            CoroutineScope(Dispatchers.IO).launch {
+            com.collabsphere.app.MyApplication.appScope.launch {
                 sendTokenToServer(userId, token)
             }
         }

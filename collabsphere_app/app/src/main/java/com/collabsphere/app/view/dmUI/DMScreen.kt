@@ -255,7 +255,7 @@ fun DMScreen(
         onDispose {
             if (partnerId != null && draftLoadedFor == partnerId) {
                 val finalDraft = if (editingMessage != null) draftBeforeEdit else typedText
-                CoroutineScope(Dispatchers.IO).launch {
+                com.collabsphere.app.MyApplication.appScope.launch {
                     draftStore.save(DraftStore.dmKey(workspaceId, partnerId), finalDraft)
                 }
             }

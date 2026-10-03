@@ -22,8 +22,8 @@ fun main(args: Array<String>) {
 fun Application.module() {
     install(WebSockets) {
         pingPeriod = 15.seconds
-        timeout = 15.seconds
-        maxFrameSize = Long.MAX_VALUE
+        timeout = 30.seconds
+        maxFrameSize = 8L * 1024 * 1024
         masking = false
     }
 
@@ -43,7 +43,7 @@ fun Application.module() {
     // from ever reaching a client.
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            cause.printStackTrace()
+            call.application.environment.log.error("Unhandled exception caught by StatusPages", cause)
             call.respond(HttpStatusCode.InternalServerError, "Internal server error")
         }
     }

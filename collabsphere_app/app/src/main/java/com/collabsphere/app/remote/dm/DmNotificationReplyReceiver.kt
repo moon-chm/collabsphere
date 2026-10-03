@@ -50,7 +50,7 @@ class DmNotificationReplyReceiver : BroadcastReceiver(), KoinComponent {
 
                 if (!replyText.isNullOrBlank() && workspaceId != -1 && partnerId != -1 && currentUserId != -1) {
                     val pendingResult = goAsync()
-                    CoroutineScope(Dispatchers.IO).launch {
+                    com.collabsphere.app.MyApplication.appScope.launch {
                         try {
                             dmRepo.sendRealtimeDm(
                                 id = null,

@@ -192,10 +192,10 @@ class MessageViewModel(
 
     override fun onCleared() {
         val finalDraft = if (isEditingMessage) draftBeforeEdit else _messageContent.value
-        CoroutineScope(Dispatchers.IO).launch { draftStore.save(draftKey, finalDraft) }
+        com.collabsphere.app.MyApplication.appScope.launch { draftStore.save(draftKey, finalDraft) }
         if (isTypingSent) {
             isTypingSent = false
-            CoroutineScope(Dispatchers.IO).launch { repo.sendTyping(loggedWorkspaceId, loggedChannelId, false) }
+            com.collabsphere.app.MyApplication.appScope.launch { repo.sendTyping(loggedWorkspaceId, loggedChannelId, false) }
         }
         super.onCleared()
     }

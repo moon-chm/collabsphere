@@ -33,6 +33,8 @@ class MyApplication : Application() {
         var isAppForeground: Boolean
             get() = _isAppForegroundFlow.value
             private set(value) { _isAppForegroundFlow.value = value }
+
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 
     override fun onCreate() {

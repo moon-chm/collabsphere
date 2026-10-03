@@ -16,7 +16,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 
 fun Application.startGitHubWebhookProcessor() {
-    CoroutineScope(Dispatchers.IO).launch {
+    launch(Dispatchers.IO) {
         while (isActive) {
             try {
                 processNextWebhookBatch()

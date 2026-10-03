@@ -1961,7 +1961,8 @@ fun Application.configureRouting() {
 
                         val actingUserId = call.authenticatedUserId()
 
-                        val password = call.request.queryParameters["workspacePassword"]
+                        val password = call.request.headers["X-Workspace-Password"]
+                            ?: call.request.queryParameters["workspacePassword"]
                             ?: return@delete call.respond(
                                 HttpStatusCode.BadRequest,
                                 "Missing password"
@@ -2165,6 +2166,9 @@ fun Application.configureRouting() {
                             if (!isMember(actingUserId, request.workspaceId)) {
                                 return@dbQuery null
                             }
+                            if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
+                                throw IllegalArgumentException("Assignee is not a member of the workspace")
+                            }
 
                             // A WorkManager retry after a successful-but-lost create response re-sends
                             // the same idempotencyKey — return the existing row instead of inserting again.
@@ -2359,6 +2363,9 @@ fun Application.configureRouting() {
                         ) {
                             return@dbQuery -2
                         }
+                        if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
+                            return@dbQuery -4
+                        }
 
                         // Mirror the client's business rules server-side: without this, any workspace
                         // member could bypass the UI's assignee/creator restrictions by calling the API directly.
@@ -2423,6 +2430,10 @@ fun Application.configureRouting() {
                         call.respond(HttpStatusCode.Forbidden, "Only the assignee can edit or move this task; only the creator can reassign it; due date and priority can be changed by the creator or assignee")
                         return@put
                     }
+                    if (updateResult == -4) {
+                        call.respond(HttpStatusCode.BadRequest, "Assignee is not a member of the workspace")
+                        return@put
+                    }
 
                     val updatedTask = dbQuery {
                         TasksTable.selectAll()
@@ -2453,7 +2464,7 @@ fun Application.configureRouting() {
                         call.respond(HttpStatusCode.OK, updatedTask)
                         syncLinkedIssuesWithTask(updatedTask.id, previousStatus, updatedTask.status)
                         // Feature E: Sync assignee to linked GitHub issues
-                        kotlinx.coroutines.GlobalScope.launch {
+                        call.application.launch {
                             try {
                                 com.collabsphere.util.GitHubAssigneeSyncService.syncToGitHub(
                                     updatedTask.id, updatedTask.workspaceId, updatedTask.assignedToUserId

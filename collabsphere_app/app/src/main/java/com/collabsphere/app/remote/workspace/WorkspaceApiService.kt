@@ -59,7 +59,7 @@ class WorkspaceApiService(
         return client.delete("$baseUrl/delete") {
             parameter("workspaceName", workspaceName)
             parameter("userId", userId)
-            parameter("workspacePassword", workspacePassword)
+            header("X-Workspace-Password", workspacePassword)
         }.requireSuccess().body<DeleteWorkspaceResponse>().deletedIds
     }
 
