@@ -138,7 +138,7 @@ object GitHubCodeSnippetService {
             ?: return CodeSnippetResult(error = "Invalid GitHub code URL")
 
         // Verify repository is linked to this workspace
-        val repoRow = newSuspendedTransaction {
+        val repoRow = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubRepositoriesTable.selectAll()
                 .where {
                     (GitHubRepositoriesTable.workspaceId eq workspaceId) and
@@ -150,7 +150,7 @@ object GitHubCodeSnippetService {
         val repositoryId = repoRow[GitHubRepositoriesTable.id]
 
         // Get token
-        val connRow = newSuspendedTransaction {
+        val connRow = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubConnectionsTable.selectAll()
                 .where { GitHubConnectionsTable.id eq repoRow[GitHubRepositoriesTable.connectionId] }
                 .singleOrNull()
@@ -169,7 +169,7 @@ object GitHubCodeSnippetService {
         }
 
         // Check cache
-        val cached = newSuspendedTransaction {
+        val cached = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubCodeCacheTable.selectAll()
                 .where {
                     (GitHubCodeCacheTable.repositoryId eq repositoryId) and
@@ -206,7 +206,7 @@ object GitHubCodeSnippetService {
 
             // Cache the result
             if (content != null || isBinary) {
-                newSuspendedTransaction {
+                newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
                     GitHubCodeCacheTable.insertIgnore {
                         it[GitHubCodeCacheTable.repositoryId] = repositoryId
                         it[GitHubCodeCacheTable.commitSha] = commitSha
@@ -310,7 +310,7 @@ object GitHubCodeSnippetService {
     ): CodeReferenceInfo? {
         val parsed = parseCodeUrl(url) ?: return null
 
-        val repoRow = newSuspendedTransaction {
+        val repoRow = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubRepositoriesTable.selectAll()
                 .where {
                     (GitHubRepositoriesTable.workspaceId eq workspaceId) and
@@ -322,7 +322,7 @@ object GitHubCodeSnippetService {
         val repositoryId = repoRow[GitHubRepositoriesTable.id]
 
         // Resolve commit SHA for stability
-        val connRow = newSuspendedTransaction {
+        val connRow = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubConnectionsTable.selectAll()
                 .where { GitHubConnectionsTable.id eq repoRow[GitHubRepositoriesTable.connectionId] }
                 .singleOrNull()
@@ -343,7 +343,7 @@ object GitHubCodeSnippetService {
         } else ""
         val canonicalUrl = "https://github.com/${parsed.repoFullName}/blob/${commitSha ?: parsed.ref}/${parsed.filePath}$lineFragment"
 
-        val insertedId = newSuspendedTransaction {
+        val insertedId = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             GitHubCodeReferencesTable.insert {
                 it[GitHubCodeReferencesTable.workspaceId] = workspaceId
                 it[GitHubCodeReferencesTable.repositoryId] = repositoryId
@@ -380,7 +380,7 @@ object GitHubCodeSnippetService {
         workspaceId: Int,
         referenceType: String,
         referenceId: Int
-    ): List<CodeReferenceInfo> = newSuspendedTransaction {
+    ): List<CodeReferenceInfo> = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
         GitHubCodeReferencesTable.selectAll()
             .where {
                 (GitHubCodeReferencesTable.workspaceId eq workspaceId) and
@@ -406,7 +406,7 @@ object GitHubCodeSnippetService {
     }
 
     /** Delete a code reference (only by the creator). */
-    suspend fun deleteCodeReference(referenceId: Int, userId: Int): Boolean = newSuspendedTransaction {
+    suspend fun deleteCodeReference(referenceId: Int, userId: Int): Boolean = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
         val deleted = GitHubCodeReferencesTable.deleteWhere {
             (GitHubCodeReferencesTable.id eq referenceId) and
                 (GitHubCodeReferencesTable.createdByUserId eq userId)

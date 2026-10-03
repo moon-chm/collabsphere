@@ -954,7 +954,7 @@ fun Application.configureGitHubRoutes() {
                     val repoId = call.request.queryParameters["repositoryId"]?.toIntOrNull()
                     val pageSize = 20
 
-                    newSuspendedTransaction {
+                    dbQuery {
                         // Validate that requested repositoryId belongs to this workspace
                         val linkedRepoIds = GitHubRepositoriesTable.selectAll()
                             .where { GitHubRepositoriesTable.workspaceId eq access.workspaceId }
@@ -1009,7 +1009,7 @@ fun Application.configureGitHubRoutes() {
                         @kotlinx.serialization.Serializable
                         data class ToggleRequest(val taskId: Int, val repositoryId: Int, val issueNumber: Int, val enabled: Boolean)
                         val request = call.receive<ToggleRequest>()
-                        newSuspendedTransaction {
+                        dbQuery {
                             com.collabsphere.util.GitHubAssigneeSyncService.setSyncEnabled(
                                 request.taskId, request.repositoryId, request.issueNumber, request.enabled
                             )
@@ -1022,7 +1022,7 @@ fun Application.configureGitHubRoutes() {
                         val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
                         val taskId = call.parameters["taskId"]?.toIntOrNull()
                             ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid taskId")
-                        val syncRecords = newSuspendedTransaction {
+                        val syncRecords = dbQuery {
                             com.collabsphere.model.GitHubAssigneeSyncTable.selectAll()
                                 .where { com.collabsphere.model.GitHubAssigneeSyncTable.taskId eq taskId }
                                 .map {
@@ -1043,7 +1043,7 @@ fun Application.configureGitHubRoutes() {
                     /** Get identity mappings for the workspace. */
                     get("/identity-map") {
                         val access = call.resolveGitHubAccess(requireOwner = false) ?: return@get
-                        val mappings = newSuspendedTransaction {
+                        val mappings = dbQuery {
                             com.collabsphere.util.GitHubAssigneeSyncService.refreshIdentityMappings(access.workspaceId)
                             com.collabsphere.model.GitHubIdentityMappingTable.selectAll()
                                 .where { com.collabsphere.model.GitHubIdentityMappingTable.workspaceId eq access.workspaceId }

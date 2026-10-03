@@ -22,7 +22,7 @@ object GitHubActionService {
         val parsed = GitHubUnfurlService.parse(request.url) 
             ?: return GitHubActionResponse(GitHubActionResultStatus.ValidationFailed, "Invalid GitHub URL")
 
-        return newSuspendedTransaction {
+        return newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             // 2. Validate workspace connection and repository link
             val repoRow = GitHubRepositoriesTable.selectAll()
                 .where { (GitHubRepositoriesTable.workspaceId eq workspaceId) and 
@@ -189,7 +189,7 @@ object GitHubActionService {
                 when (statusCode) {
                     io.ktor.http.HttpStatusCode.OK -> {
                         if (updatedIssue != null) {
-                            newSuspendedTransaction {
+                            newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
                                 GitHubDataStore.saveIssue(repositoryId, updatedIssue.toRecord())
                             }
                             GitHubActionResponse(GitHubActionResultStatus.ActionSucceeded, "Issue successfully $newState", newState)
@@ -235,7 +235,7 @@ object GitHubActionService {
                                 url = updatedPr.html_url,
                                 headSha = updatedPr.head?.sha
                             )
-                            newSuspendedTransaction {
+                            newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
                                 GitHubDataStore.savePullRequest(repositoryId, prRecord)
                             }
                             GitHubActionResponse(GitHubActionResultStatus.ActionSucceeded, "Pull request successfully $newState", newState)
@@ -297,7 +297,7 @@ object GitHubActionService {
                                 url = updatedPr.html_url,
                                 headSha = updatedPr.head?.sha
                             )
-                            newSuspendedTransaction {
+                            newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
                                 GitHubDataStore.savePullRequest(repositoryId, prRecord)
                             }
                         }

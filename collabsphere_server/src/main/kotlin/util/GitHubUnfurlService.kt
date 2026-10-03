@@ -69,7 +69,7 @@ object GitHubUnfurlService {
         // Step 1: Look up in local DB and identify misses
         val misses = mutableListOf<Pair<String, ParsedUrl>>()
 
-        newSuspendedTransaction {
+        newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
             val workspaceRepos = GitHubRepositoriesTable.selectAll()
                 .where { GitHubRepositoriesTable.workspaceId eq workspaceId }
                 .associateBy { it[GitHubRepositoriesTable.fullName].lowercase() }
@@ -194,7 +194,7 @@ object GitHubUnfurlService {
 
         // Step 2: Fetch misses from GitHub and save
         if (misses.isNotEmpty()) {
-            val workspaceRepos = newSuspendedTransaction {
+            val workspaceRepos = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) {
                 GitHubRepositoriesTable.innerJoin(GitHubConnectionsTable)
                     .selectAll()
                     .where { GitHubRepositoriesTable.workspaceId eq workspaceId }
@@ -271,10 +271,10 @@ object GitHubUnfurlService {
                         url = prInfo.html_url,
                         headSha = prInfo.head?.sha
                     )
-                    newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.savePullRequest(repoId, prRecord) }
+                    newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.savePullRequest(repoId, prRecord) }
                     val headSha = prInfo.head?.sha
                     val ciStatus = if (headSha != null) {
-                        newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(headSha))[headSha] }
+                        newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(headSha))[headSha] }
                     } else null
 
                     return GitHubPreviewItem(
@@ -295,7 +295,7 @@ object GitHubUnfurlService {
                 val issueInfo = GitHubService.getIssue(token, repoFullName, parsed.number)
                 if (issueInfo != null) {
                     val issueRecord = issueInfo.toRecord()
-                    newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.saveIssue(repoId, issueRecord) }
+                    newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.saveIssue(repoId, issueRecord) }
                     return GitHubPreviewItem(
                         type = "ISSUE",
                         url = url,
@@ -319,8 +319,8 @@ object GitHubUnfurlService {
                         authorEmail = commitInfo.commit?.author?.email,
                         commitDate = com.collabsphere.util.parseGitHubTime(commitInfo.commit?.author?.date) ?: now
                     )
-                    newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.saveCommits(repoId, listOf(commitRecord)) }
-                    val ciStatus = newSuspendedTransaction { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(parsed.sha))[parsed.sha] }
+                    newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.saveCommits(repoId, listOf(commitRecord)) }
+                    val ciStatus = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(parsed.sha))[parsed.sha] }
 
                     return GitHubPreviewItem(
                         type = "COMMIT",

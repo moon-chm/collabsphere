@@ -120,34 +120,36 @@ object FcmService {
         timestamp: Long
     ) {
         if (!isInitialized) return
-        val token = getUserFcmToken(recipientUserId)
-        if (token.isNullOrBlank()) {
-            logger.debug("No FCM token for user $recipientUserId, skipping push")
-            return
-        }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val token = getUserFcmToken(recipientUserId)
+            if (token.isNullOrBlank()) {
+                logger.debug("No FCM token for user $recipientUserId, skipping push")
+                return@launch
+            }
 
-        try {
-            val message = Message.builder()
-                .setToken(token)
-                .putData("type", "DM")
-                .putData("sender_id", senderId.toString())
-                .putData("receiver_id", recipientUserId.toString())
-                .putData("sender_username", senderUsername)
-                .putData("workspace_id", workspaceId.toString())
-                .putData("id", messageId.toString())
-                .putData("content", content)
-                .putData("timestamp", timestamp.toString())
-                .setAndroidConfig(
-                    AndroidConfig.builder()
-                        .setPriority(AndroidConfig.Priority.HIGH)
-                        .build()
-                )
-                .build()
+            try {
+                val message = Message.builder()
+                    .setToken(token)
+                    .putData("type", "DM")
+                    .putData("sender_id", senderId.toString())
+                    .putData("receiver_id", recipientUserId.toString())
+                    .putData("sender_username", senderUsername)
+                    .putData("workspace_id", workspaceId.toString())
+                    .putData("id", messageId.toString())
+                    .putData("content", content)
+                    .putData("timestamp", timestamp.toString())
+                    .setAndroidConfig(
+                        AndroidConfig.builder()
+                            .setPriority(AndroidConfig.Priority.HIGH)
+                            .build()
+                    )
+                    .build()
 
-            val response = FirebaseMessaging.getInstance().send(message)
-            logger.info("Sent FCM DM push to user $recipientUserId (msgId: $response)")
-        } catch (e: Exception) {
-            logger.error("Failed to send FCM DM push to user $recipientUserId", e)
+                val response = FirebaseMessaging.getInstance().send(message)
+                logger.info("Sent FCM DM push to user $recipientUserId (msgId: $response)")
+            } catch (e: Exception) {
+                logger.error("Failed to send FCM DM push to user $recipientUserId", e)
+            }
         }
     }
 
@@ -165,36 +167,38 @@ object FcmService {
         actorAvatarUrl: String?
     ) {
         if (!isInitialized) return
-        val token = getUserFcmToken(recipientUserId)
-        if (token.isNullOrBlank()) {
-            logger.debug("No FCM token for user $recipientUserId, skipping push")
-            return
-        }
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val token = getUserFcmToken(recipientUserId)
+            if (token.isNullOrBlank()) {
+                logger.debug("No FCM token for user $recipientUserId, skipping push")
+                return@launch
+            }
 
-        try {
-            val builder = Message.builder()
-                .setToken(token)
-                .putData("type", type)
-                .putData("notification_id", notificationId.toString())
-                .putData("recipient_id", recipientUserId.toString())
-                .putData("title", title)
-                .putData("body", body)
-                .putData("created_at", System.currentTimeMillis().toString())
+            try {
+                val builder = Message.builder()
+                    .setToken(token)
+                    .putData("type", type)
+                    .putData("notification_id", notificationId.toString())
+                    .putData("recipient_id", recipientUserId.toString())
+                    .putData("title", title)
+                    .putData("body", body)
+                    .putData("created_at", System.currentTimeMillis().toString())
 
-            workspaceId?.let { builder.putData("workspace_id", it.toString()) }
-            actorUsername?.let { builder.putData("actor_username", it) }
-            actorAvatarUrl?.let { builder.putData("actor_avatar_url", it) }
+                workspaceId?.let { builder.putData("workspace_id", it.toString()) }
+                actorUsername?.let { builder.putData("actor_username", it) }
+                actorAvatarUrl?.let { builder.putData("actor_avatar_url", it) }
 
-            builder.setAndroidConfig(
-                AndroidConfig.builder()
-                    .setPriority(AndroidConfig.Priority.HIGH)
-                    .build()
-            )
+                builder.setAndroidConfig(
+                    AndroidConfig.builder()
+                        .setPriority(AndroidConfig.Priority.HIGH)
+                        .build()
+                )
 
-            val response = FirebaseMessaging.getInstance().send(builder.build())
-            logger.info("Sent FCM Generic push to user $recipientUserId: $title (msgId: $response)")
-        } catch (e: Exception) {
-            logger.error("Failed to send FCM generic push to user $recipientUserId", e)
+                val response = FirebaseMessaging.getInstance().send(builder.build())
+                logger.info("Sent FCM Generic push to user $recipientUserId: $title (msgId: $response)")
+            } catch (e: Exception) {
+                logger.error("Failed to send FCM generic push to user $recipientUserId", e)
+            }
         }
     }
 }
