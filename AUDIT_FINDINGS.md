@@ -12,27 +12,10 @@ Tracking doc from a full-project security/bug audit and fix pass (Android app `R
 *(All known High severity issues have been fixed)*
 
 ## Open — Medium
-
-- **Server**: file upload buffers the *entire* multipart body (up to the 25MB cap) into memory before checking workspace membership — any authenticated user can force that cost against a workspace they don't belong to.
-- **Server**: no retry logic for Postgres `SERIALIZABLE`/`REPEATABLE_READ` conflicts under concurrent edits — surfaces as a generic 500.
+*(All known Medium severity issues have been fixed)*
 
 ## Open — Low
-
-Server:
-- `WorkspacesTable.userId` has no `.index()` (the indexing pass missed it; every other FK column got one).
-- Message edit (`PUT /api/message/{id}`) checks sender ownership but not current workspace membership — a user removed from a workspace can still edit their own historical messages there.
-- A channel with `userId IS NULL` (no creator) can be deleted by *any* current workspace member — confirm this is the intended permission model, not an oversight.
-- `sendToUser` (DM WebSocket fan-out) silently swallows send failures with no dead-session cleanup or delivery-failure signal.
-- `FileResponse.fileLocation` exposes the server's absolute filesystem path to any client with list access — unnecessary disclosure.
-- No consistent JSON error envelope on server responses (mixes bare strings/booleans/ints) — would need coordinated client-side changes too, not just a server tweak.
-
-Client:
-- `MainActivity`'s `fromNotification` local (read inside `setContent`) is now always `false` because the notification-consumption fix clears that intent extra earlier in the same `onCreate` — currently harmless (same `startDestination` either way) but dead/confusing code.
-- A few Compose lists/`remember` calls are missing keys (`TaskScreen.kt` assignee picker `items(members)`, `WorkspaceDetailedScreen.kt`'s `remember { mutableStateOf(initialTab) }`) — low risk given current usage patterns, but latent traps.
-- `MyApplication.kt`'s `AuthTokenHolder` DataStore-sync coroutine runs in a bare `CoroutineScope(Dispatchers.IO)` with no `SupervisorJob`/exception handler — an unexpected exception there would crash the process.
-- `UserRepo.loginRemote` re-hashes the password with a fresh bcrypt salt (~250ms) on every successful online login, not just when it changed — wasted CPU, no correctness impact.
-- Hardcoded UI strings throughout block localization — large mechanical lift, no functional bug.
-- `?: 0` nullable-ID sentinel pattern scattered across a few entities/DAOs instead of proper null handling.
+*(All known Low severity issues have been fixed)*
 
 ## Bigger architectural items (not bugs, explicitly out of scope this pass)
 
