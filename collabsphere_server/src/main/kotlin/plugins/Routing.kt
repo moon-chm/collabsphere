@@ -118,21 +118,6 @@ private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: 
     )
 }
 
-private fun ResultRow.toMessageSyncResponse() = MessageSyncResponse(
-    id = this[MessageTable.id],
-    userId = this[MessageTable.userId],
-    workspaceId = this[MessageTable.workspaceId],
-    channelId = this[MessageTable.channelId],
-    userName = this[MessageTable.userName],
-    content = this[MessageTable.content],
-    status = this[MessageTable.status],
-    isDeleted = this[MessageTable.isDeleted],
-    updatedAt = this[MessageTable.updatedAt],
-    replyToId = this[MessageTable.replyToId],
-    mediaUrl = this[MessageTable.mediaUrl],
-    pinnedAt = this[MessageTable.pinnedAt]
-)
-
 private suspend fun broadcastChannelMessageChange(messageId: Int) {
     try {
         val (snapshot, memberIds) = dbQuery {
@@ -149,6 +134,7 @@ private suspend fun broadcastChannelMessageChange(messageId: Int) {
 
 private const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
 private const val DEFAULT_HISTORY_PAGE = 50
+private const val DM_CATCH_UP_PAGE = 500
 private const val MAX_HISTORY_PAGE = 100
 
 private fun ResultRow.toDmHistoryDto() = DmDto(
@@ -164,22 +150,6 @@ private fun ResultRow.toDmHistoryDto() = DmDto(
     replyToId = this[DirectMessagesTable.replyToId]
 )
 
-internal fun selectInitialDmHistory(rowsNewestFirst: List<DmDto>, userId: Int, perConversation: Int): List<DmDto> {
-    val counts = HashMap<Pair<Int, Int>, Int>()
-    return rowsNewestFirst.filter { dto ->
-        val partnerId = if (dto.senderId == userId) dto.receiverId else dto.senderId
-        val key = dto.workspaceId to partnerId
-        val seen = counts.getOrDefault(key, 0)
-        if (seen < perConversation) {
-            counts[key] = seen + 1
-            true
-        } else {
-            false
-        }
-    }.reversed()
-}
-private class UploadTooLargeException :
-    Exception("File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB upload limit")
 
 /** The caller's identity, established by a verified JWT. Only valid inside an `authenticate("auth-jwt")` block. */
 fun ApplicationCall.authenticatedUserId(): Int =
@@ -694,24 +664,24 @@ fun Application.configureRouting() {
             // ── UPLOAD avatar (stored permanently on Cloudinary) ───────────────
             post("/api/user/avatar") {
                 val avatarMaxBytes = 5L * 1024 * 1024 // 5 MB
+                var staged: File? = null
                 try {
                     val actingUserId = call.authenticatedUserId()
+                    if (call.declaredBodyExceeds(avatarMaxBytes)) throw UploadTooLargeException(avatarMaxBytes)
                     val multipart = call.receiveMultipart()
-                    var imageBytes: ByteArray? = null
 
                     multipart.forEachPart { part ->
-                        if (part is PartData.FileItem) {
-                            val bytes = part.streamProvider().readBytes()
-                            if (bytes.size > avatarMaxBytes) throw IllegalArgumentException("Avatar exceeds 5 MB limit")
-                            imageBytes = bytes
+                        if (part is PartData.FileItem && staged == null) {
+                            staged = part.stageToTempFile(avatarMaxBytes)
                         }
                         part.dispose()
                     }
 
-                    if (imageBytes != null) {
+                    val imageFile = staged
+                    if (imageFile != null) {
                         // publicId is stable per-user so re-uploads overwrite the old file automatically
                         val publicId = "avatar_$actingUserId"
-                        val cloudUrl = CloudinaryService.uploadAvatar(imageBytes!!, publicId)
+                        val cloudUrl = CloudinaryService.uploadAvatar(imageFile, publicId)
                         dbQuery {
                             UsersTable.update({ UsersTable.id eq actingUserId }) {
                                 it[avatarUrl] = cloudUrl
@@ -721,10 +691,13 @@ fun Application.configureRouting() {
                     } else {
                         call.respond(HttpStatusCode.BadRequest, "No file received")
                     }
-                } catch (e: IllegalArgumentException) {
+                } catch (e: UploadTooLargeException) {
                     call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed: ${e.message}")
+                    logger.error("[Avatar] Upload failed", e)
+                    call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed")
+                } finally {
+                    staged?.delete()
                 }
             }
 
@@ -1348,6 +1321,7 @@ fun Application.configureRouting() {
                             val dmRows = DirectMessagesTable.selectAll()
                                 .where {
                                     (DirectMessagesTable.workspaceId eq workspaceIdParam) and
+                                            (DirectMessagesTable.isDeleted eq false) and
                                             ((DirectMessagesTable.senderId eq actingUserId) or (DirectMessagesTable.receiverId eq actingUserId)) and
                                             (DirectMessagesTable.content.lowerCase() like pattern)
                                 }
@@ -1870,28 +1844,11 @@ fun Application.configureRouting() {
                 get("/sync/{userId}") {
                     try {
                         val actingUserId = call.authenticatedUserId()
-                        val sinceTimestamp = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
-
-                        val updates = dbQuery {
-                            (WorkspacesTable innerJoin WorkspaceMembersTable)
-                                .selectAll()
-                                .where {
-                                    (WorkspaceMembersTable.userId eq actingUserId) and
-                                            (WorkspacesTable.updatedAt greater sinceTimestamp)
-                                }
-                                .map {
-                                    WorkspaceSyncDto(
-                                        id = it[WorkspacesTable.id],
-                                        userId = it[WorkspacesTable.userId],
-                                        workspaceName = it[WorkspacesTable.workspaceName],
-                                        workspaceOwner = it[WorkspacesTable.workspaceOwner],
-                                        isDeleted = it[WorkspacesTable.isDeleted],
-                                        updatedAt = it[WorkspacesTable.updatedAt]
-                                    )
-                                }
-                        }
-                        call.respond(HttpStatusCode.OK, updates)
+                        val page = dbQuery { workspaceDeltaSync(actingUserId, call.syncRequest()) }
+                        call.appendSyncHeaders(page.nextCursor, page.reset)
+                        call.respond(HttpStatusCode.OK, page.rows)
                     } catch (e: Exception) {
+                        logger.error("[Sync] Workspace sync failed", e)
                         call.respond(HttpStatusCode.InternalServerError, "Sync Error")
                     }
                 }
@@ -2027,40 +1984,26 @@ fun Application.configureRouting() {
                     try {
                         val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
                         val actingUserId = call.authenticatedUserId()
-                        val sinceTimestamp = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
 
                         if (workspaceIdParam == null) {
                             call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
                             return@get
                         }
 
-                        val updates = dbQuery {
+                        val page = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            ChannelsTable.selectAll()
-                                .where {
-                                    (ChannelsTable.workspaceId eq workspaceIdParam) and
-                                            (ChannelsTable.updatedAt greater sinceTimestamp)
-                                }
-                                .map {
-                                    ChannelSyncResponse(
-                                        id = it[ChannelsTable.id],
-                                        userId = it[ChannelsTable.userId],
-                                        channelName = it[ChannelsTable.channelName],
-                                        workspaceId = it[ChannelsTable.workspaceId],
-                                        description = it[ChannelsTable.description],
-                                        isDeleted = it[ChannelsTable.isDeleted],
-                                        updatedAt = it[ChannelsTable.updatedAt]
-                                    )
-                                }
+                            channelDeltaSync(workspaceIdParam, call.syncRequest())
                         }
-                        if (updates == null) {
+                        if (page == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, updates)
+                            call.appendSyncHeaders(page.nextCursor, page.reset)
+                            call.respond(HttpStatusCode.OK, page.rows)
                         }
                     } catch (e: Exception) {
+                        logger.error("[Sync] Channel sync failed", e)
                         call.respond(HttpStatusCode.InternalServerError, "Sync Error")
                     }
                 }
@@ -2487,53 +2430,27 @@ fun Application.configureRouting() {
                     try {
                         val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
                         val actingUserId = call.authenticatedUserId()
-                        val sinceTimestamp = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
 
                         if (workspaceIdParam == null) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing structural context arguments."
-                            )
+                            call.respond(HttpStatusCode.BadRequest, "Missing structural context arguments.")
                             return@get
                         }
 
-                        val deltaUpdates = dbQuery {
+                        val page = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            TasksTable.selectAll()
-                                .where {
-                                    (TasksTable.workspaceId eq workspaceIdParam) and
-                                            (TasksTable.updatedAt greater sinceTimestamp)
-                                }
-                                .map {
-                                    TaskSyncResponse(
-                                        id = it[TasksTable.id],
-                                        createdByUserId = it[TasksTable.createdByUserId],
-                                        assignedToUserId = it[TasksTable.assignedToUserId],
-                                        workspaceId = it[TasksTable.workspaceId],
-                                        taskName = it[TasksTable.taskName],
-                                        taskDescription = it[TasksTable.taskDescription],
-                                        status = it[TasksTable.status],
-                                        isDeleted = it[TasksTable.isDeleted],
-                                        updatedAt = it[TasksTable.updatedAt],
-                                        dueDate = it[TasksTable.dueDate],
-                                        priority = it[TasksTable.priority],
-                                        checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
-                                        labels = TaskExtras.decodeLabels(it[TasksTable.labels])
-                                    )
-                                }
+                            taskDeltaSync(workspaceIdParam, call.syncRequest())
                         }
-                        if (deltaUpdates == null) {
+                        if (page == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, deltaUpdates)
+                            call.appendSyncHeaders(page.nextCursor, page.reset)
+                            call.respond(HttpStatusCode.OK, page.rows)
                         }
                     } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            "Sync Error processing delta operations query request loop."
-                        )
+                        logger.error("[Sync] Task sync failed", e)
+                        call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
                     }
                 }
             }
@@ -2747,48 +2664,27 @@ fun Application.configureRouting() {
                     try {
                         val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
                         val actingUserId = call.authenticatedUserId()
-                        val sinceTimestamp = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
 
                         if (workspaceIdParam == null) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing structural context arguments."
-                            )
+                            call.respond(HttpStatusCode.BadRequest, "Missing structural context arguments.")
                             return@get
                         }
 
-                        val deltaUpdates = dbQuery {
+                        val page = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            NotesTable.selectAll()
-                                .where {
-                                    (NotesTable.workspaceId eq workspaceIdParam) and
-                                            (NotesTable.updatedAt greater sinceTimestamp)
-                                }
-                                .map {
-                                    NotesSyncResponse(
-                                        id = it[NotesTable.id],
-                                        userId = it[NotesTable.userIdNotes],
-                                        workspaceId = it[NotesTable.workspaceId],
-                                        notesName = it[NotesTable.notesName],
-                                        description = it[NotesTable.notesDescription],
-                                        isDeleted = it[NotesTable.isDeleted],
-                                        updatedAt = it[NotesTable.updatedAt],
-                                        isPinned = it[NotesTable.isPinned]
-                                    )
-                                }
+                            noteDeltaSync(workspaceIdParam, call.syncRequest())
                         }
-                        if (deltaUpdates == null) {
+                        if (page == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, deltaUpdates)
+                            call.appendSyncHeaders(page.nextCursor, page.reset)
+                            call.respond(HttpStatusCode.OK, page.rows)
                         }
                     } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            "Sync Error processing delta operations query request loop."
-                        )
+                        logger.error("[Sync] Note sync failed", e)
+                        call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
                     }
                 }
             }
@@ -3311,11 +3207,14 @@ fun Application.configureRouting() {
                         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, MAX_HISTORY_PAGE) ?: DEFAULT_HISTORY_PAGE
                         val actingUserId = call.authenticatedUserId()
 
-                        val page = dbQuery {
+                        val result = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            MessageTable.selectAll()
+                            // Read under the same snapshot as the page, so a client loading its first
+                            // page can start cursor sync from here without missing anything in between.
+                            val snapshot = currentSyncSnapshot()
+                            val rows = MessageTable.selectAll()
                                 .where {
                                     var condition = (MessageTable.workspaceId eq workspaceIdParam) and
                                             (MessageTable.channelId eq channelIdParam) and
@@ -3327,27 +3226,14 @@ fun Application.configureRouting() {
                                 }
                                 .orderBy(MessageTable.id, SortOrder.DESC)
                                 .limit(limit)
-                                .map {
-                                    MessageSyncResponse(
-                                        id = it[MessageTable.id],
-                                        userId = it[MessageTable.userId],
-                                        workspaceId = it[MessageTable.workspaceId],
-                                        channelId = it[MessageTable.channelId],
-                                        userName = it[MessageTable.userName],
-                                        content = it[MessageTable.content],
-                                        status = it[MessageTable.status],
-                                        isDeleted = it[MessageTable.isDeleted],
-                                        updatedAt = it[MessageTable.updatedAt],
-                                        replyToId = it[MessageTable.replyToId],
-                                        mediaUrl = it[MessageTable.mediaUrl],
-                                        pinnedAt = it[MessageTable.pinnedAt]
-                                    )
-                                }
+                                .map { it.toMessageSyncResponse() }
+                            rows to snapshot.xmin
                         }
-                        if (page == null) {
+                        if (result == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, page)
+                            call.appendSyncHeaders(result.second)
+                            call.respond(HttpStatusCode.OK, result.first)
                         }
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.InternalServerError, "History Error")
@@ -3359,46 +3245,26 @@ fun Application.configureRouting() {
                         val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
                         val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
                         val actingUserId = call.authenticatedUserId()
-                        val sinceTimestamp = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
 
                         if (workspaceIdParam == null || channelIdParam == null) {
                             call.respond(HttpStatusCode.BadRequest, "Missing structural parameters")
                             return@get
                         }
 
-                        val updates = dbQuery {
+                        val page = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            MessageTable.selectAll()
-                                .where {
-                                    (MessageTable.workspaceId eq workspaceIdParam) and
-                                            (MessageTable.channelId eq channelIdParam) and
-                                            (MessageTable.updatedAt greater sinceTimestamp)
-                                }
-                                .map {
-                                    MessageSyncResponse(
-                                        id = it[MessageTable.id],
-                                        userId = it[MessageTable.userId],
-                                        workspaceId = it[MessageTable.workspaceId],
-                                        channelId = it[MessageTable.channelId],
-                                        userName = it[MessageTable.userName],
-                                        content = it[MessageTable.content],
-                                        status = it[MessageTable.status],
-                                        isDeleted = it[MessageTable.isDeleted],
-                                        updatedAt = it[MessageTable.updatedAt],
-                                        replyToId = it[MessageTable.replyToId],
-                                        mediaUrl = it[MessageTable.mediaUrl],
-                                        pinnedAt = it[MessageTable.pinnedAt]
-                                    )
-                                }
+                            messageDeltaSync(workspaceIdParam, channelIdParam, call.syncRequest())
                         }
-                        if (updates == null) {
+                        if (page == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, updates)
+                            call.appendSyncHeaders(page.nextCursor, page.reset)
+                            call.respond(HttpStatusCode.OK, page.rows)
                         }
                     } catch (e: Exception) {
+                        logger.error("[Sync] Message sync failed", e)
                         call.respond(HttpStatusCode.InternalServerError, "Sync Error")
                     }
                 }
@@ -3406,14 +3272,15 @@ fun Application.configureRouting() {
 
             route("/api/file") {
                 post {
+                    var staged: File? = null
                     try {
                         val actingUserId = call.authenticatedUserId()
+                        if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
                         val multipart = call.receiveMultipart()
                         var workspaceId: Int? = null
                         var userName: String? = null
                         var localpath: String? = null
 
-                        var fileBytes: ByteArray? = null
                         var fileName: String? = null
                         var contentType: String? = null
 
@@ -3456,21 +3323,9 @@ fun Application.configureRouting() {
                                         // so a malicious client-supplied filename can't escape uploadDir below.
                                         fileName = part.originalFileName?.let { File(it).name }?.ifBlank { null }
                                         contentType = part.contentType?.toString()
-                                        // Bounded read regardless of what Content-Length claims (chunked transfer has none) —
-                                        // caps memory use instead of buffering an arbitrarily large upload wholesale.
-                                        fileBytes = part.streamProvider().use { input ->
-                                            val buffer = java.io.ByteArrayOutputStream()
-                                            val chunk = ByteArray(8192)
-                                            var total = 0L
-                                            while (true) {
-                                                val read = input.read(chunk)
-                                                if (read == -1) break
-                                                total += read
-                                                if (total > MAX_UPLOAD_BYTES) throw UploadTooLargeException()
-                                                buffer.write(chunk, 0, read)
-                                            }
-                                            buffer.toByteArray()
-                                        }
+                                        // Streamed to disk with a hard cap regardless of what Content-Length claims
+                                        // (chunked transfer has none) — heap use stays flat whatever the file size.
+                                        if (staged == null) staged = part.stageToTempFile(MAX_UPLOAD_BYTES)
                                         part.dispose()
                                     }
                                 }
@@ -3483,11 +3338,12 @@ fun Application.configureRouting() {
                             return@post
                         }
 
-                        if (workspaceId == null || userName == null || fileBytes == null || fileName == null) {
+                        val stagedFile = staged
+                        if (workspaceId == null || userName == null || stagedFile == null || fileName == null) {
                             val missingFields = mutableListOf<String>()
                             if (workspaceId == null) missingFields.add("workspaceId")
                             if (userName == null) missingFields.add("userName")
-                            if (fileBytes == null) missingFields.add("fileBytes")
+                            if (stagedFile == null) missingFields.add("fileBytes")
                             if (fileName == null) missingFields.add("fileName")
 
                             call.respond(HttpStatusCode.BadRequest, "Missing multipart assets: ${missingFields.joinToString(", ")}")
@@ -3496,12 +3352,12 @@ fun Application.configureRouting() {
 
                         val uniqueFileName = "${UUID.randomUUID()}_$fileName"
                         val finalMimeType = contentType ?: "application/octet-stream"
-                        val fileSize = fileBytes!!.size.toLong()
+                        val fileSize = stagedFile.length()
 
                         val cloudLocation = if (CloudinaryService.isConfigured) {
                             try {
                                 CloudinaryService.uploadRawFile(
-                                    bytes = fileBytes!!,
+                                    file = stagedFile,
                                     folder = "workspace_files/$workspaceId",
                                     publicId = uniqueFileName.replace(Regex("[^A-Za-z0-9._-]"), "_"),
                                     fileName = fileName!!,
@@ -3521,7 +3377,11 @@ fun Application.configureRouting() {
                                 uploadDir.mkdirs()
                             }
                             val physicalFile = File(uploadDir, uniqueFileName)
-                            physicalFile.writeBytes(fileBytes!!)
+                            // A rename when the temp dir shares the volume, a copy-then-delete otherwise.
+                            java.nio.file.Files.move(
+                                stagedFile.toPath(), physicalFile.toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                            )
                             physicalFile.absolutePath
                         }
 
@@ -3530,20 +3390,31 @@ fun Application.configureRouting() {
                         val generatedUrl = "$scheme://$host/api/file/download/$uniqueFileName"
                         val currentTimeMil = System.currentTimeMillis()
 
-                        val insertedId = dbQuery {
-                            LocalFilesTable.insert {
-                                it[LocalFilesTable.userId] = actingUserId
-                                it[LocalFilesTable.workspaceId] = workspaceId!!
-                                it[LocalFilesTable.userName] = userName!!
-                                it[LocalFilesTable.url] = generatedUrl
-                                it[LocalFilesTable.mimeType] = finalMimeType
-                                it[LocalFilesTable.localPath] = localpath
-                                it[LocalFilesTable.fileName] = fileName!!
-                                it[LocalFilesTable.sizeBytes] = fileSize
-                                it[LocalFilesTable.fileLocation] = generatedFileLocation
-                                it[LocalFilesTable.updatedAt] = currentTimeMil
-                                it[LocalFilesTable.isDeleted] = false
-                            }[LocalFilesTable.id]
+                        val insertedId = try {
+                            dbQuery {
+                                LocalFilesTable.insert {
+                                    it[LocalFilesTable.userId] = actingUserId
+                                    it[LocalFilesTable.workspaceId] = workspaceId!!
+                                    it[LocalFilesTable.userName] = userName!!
+                                    it[LocalFilesTable.url] = generatedUrl
+                                    it[LocalFilesTable.storageKey] = uniqueFileName
+                                    it[LocalFilesTable.mimeType] = finalMimeType
+                                    it[LocalFilesTable.localPath] = localpath
+                                    it[LocalFilesTable.fileName] = fileName!!
+                                    it[LocalFilesTable.sizeBytes] = fileSize
+                                    it[LocalFilesTable.fileLocation] = generatedFileLocation
+                                    it[LocalFilesTable.updatedAt] = currentTimeMil
+                                    it[LocalFilesTable.isDeleted] = false
+                                }[LocalFilesTable.id]
+                            }
+                        } catch (e: Exception) {
+                            // No row will ever point at the stored copy — remove it instead of leaking it.
+                            if (CloudinaryService.isCloudinaryUrl(generatedFileLocation)) {
+                                CloudinaryService.deleteRawFile(generatedFileLocation)
+                            } else {
+                                File(generatedFileLocation).delete()
+                            }
+                            throw e
                         }
 
                         val response = FileResponse(
@@ -3562,8 +3433,11 @@ fun Application.configureRouting() {
                     } catch (e: UploadTooLargeException) {
                         call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        logger.error("[FileUpload] Upload failed", e)
                         call.respond(HttpStatusCode.InternalServerError, "File upload failed")
+                    } finally {
+                        // Already gone if it was moved into the upload dir; otherwise this is the temp copy.
+                        staged?.delete()
                     }
                 }
 
@@ -3609,44 +3483,29 @@ fun Application.configureRouting() {
                 get("/updates") {
                     try {
                         val workspaceIdParam = call.request.queryParameters["workspaceId"]?.toIntOrNull()
-                        val lastSyncTimeParam = call.request.queryParameters["lastSyncTime"]?.toLongOrNull()
+                        val syncRequest = call.syncRequest(sinceParam = "lastSyncTime")
+                        val hasLegacyWatermark = call.request.queryParameters["lastSyncTime"]?.toLongOrNull() != null
                         val actingUserId = call.authenticatedUserId()
 
-                        if (workspaceIdParam == null || lastSyncTimeParam == null) {
+                        if (workspaceIdParam == null || (syncRequest.cursor == null && !hasLegacyWatermark)) {
                             call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or lastSyncTime tracking values.")
                             return@get
                         }
 
-                        val deltaUpdatesList = dbQuery {
+                        val page = dbQuery {
                             if (!isMember(actingUserId, workspaceIdParam)) {
                                 return@dbQuery null
                             }
-                            LocalFilesTable.selectAll().where {
-                                (LocalFilesTable.workspaceId eq workspaceIdParam) and
-                                        (LocalFilesTable.updatedAt greater lastSyncTimeParam)
-                            }.map {
-                                FileSyncResponse(
-                                    id = it[LocalFilesTable.id],
-                                    userId = it[LocalFilesTable.userId],
-                                    workspaceId = it[LocalFilesTable.workspaceId],
-                                    userName = it[LocalFilesTable.userName],
-                                    url = it[LocalFilesTable.url],
-                                    mimeType = it[LocalFilesTable.mimeType],
-                                    localpath = it[LocalFilesTable.localPath],
-                                    fileName = it[LocalFilesTable.fileName],
-                                    sizebytes = it[LocalFilesTable.sizeBytes],
-                                    isDeleted = it[LocalFilesTable.isDeleted],
-                                    updatedAt = it[LocalFilesTable.updatedAt]
-                                )
-                            }
+                            fileDeltaSync(workspaceIdParam, syncRequest)
                         }
-                        if (deltaUpdatesList == null) {
+                        if (page == null) {
                             call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                         } else {
-                            call.respond(HttpStatusCode.OK, deltaUpdatesList)
+                            call.appendSyncHeaders(page.nextCursor, page.reset)
+                            call.respond(HttpStatusCode.OK, page.rows)
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        logger.error("[Sync] File sync failed", e)
                         call.respond(HttpStatusCode.InternalServerError, "Error fetching delta updates loop context.")
                     }
                 }
@@ -3664,7 +3523,7 @@ fun Application.configureRouting() {
                         val fileRow = dbQuery {
                             LocalFilesTable.selectAll()
                                 .where {
-                                    (LocalFilesTable.url like "%/${escapeLikeLiteral(fileNameParam)}") and (LocalFilesTable.isDeleted eq false)
+                                    (LocalFilesTable.storageKey eq fileNameParam) and (LocalFilesTable.isDeleted eq false)
                                 }
                                 .singleOrNull()
                         }
@@ -3800,7 +3659,8 @@ fun Application.configureRouting() {
                     val page = dbQuery {
                         DirectMessagesTable.selectAll()
                             .where {
-                                var condition = (DirectMessagesTable.workspaceId eq workspaceIdParam) and (
+                                var condition = (DirectMessagesTable.workspaceId eq workspaceIdParam) and
+                                    (DirectMessagesTable.isDeleted eq false) and (
                                     ((DirectMessagesTable.senderId eq actingUserId) and (DirectMessagesTable.receiverId eq partnerIdParam)) or
                                         ((DirectMessagesTable.senderId eq partnerIdParam) and (DirectMessagesTable.receiverId eq actingUserId))
                                     )
@@ -3819,36 +3679,49 @@ fun Application.configureRouting() {
                 }
             }
 
+            // ── DM delta sync: edits, read state and deletions (as tombstones) a device missed ──
+            get("/api/dm/sync") {
+                try {
+                    val actingUserId = call.authenticatedUserId()
+                    val cursor = call.request.queryParameters["cursor"]?.toLongOrNull()?.takeIf { it >= 0 }
+                    val knownUpToId = call.request.queryParameters["sinceId"]?.toIntOrNull() ?: 0
+                    val page = dbQuery { dmDeltaSync(actingUserId, cursor, knownUpToId) }
+                    call.appendSyncHeaders(page.nextCursor, page.reset)
+                    call.respond(HttpStatusCode.OK, page.rows)
+                } catch (e: Exception) {
+                    logger.error("[Sync] DM sync failed", e)
+                    call.respond(HttpStatusCode.InternalServerError, "Sync Error")
+                }
+            }
+
             post("/api/media/upload") {
                 val actingUserId = call.authenticatedUserId()
+                var staged: File? = null
                 try {
+                    // Checked before anything is read: a declared oversize body is refused outright, and an
+                    // undeclared (chunked) one is cut off by stageToTempFile the moment it passes the cap.
+                    if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
                     val multipart = call.receiveMultipart()
-                    var fileBytes: ByteArray? = null
-                    var mimeType = "image/jpeg"
-                    var fileName = "dm_media_${System.currentTimeMillis()}"
 
                     multipart.forEachPart { part ->
-                        if (part is io.ktor.http.content.PartData.FileItem) {
-                            mimeType = part.contentType?.toString() ?: mimeType
-                            fileName = part.originalFileName?.let {
-                                java.io.File(it).name // strip any path components
-                            } ?: fileName
-                            fileBytes = part.streamProvider().readBytes()
+                        if (part is PartData.FileItem && staged == null) {
+                            staged = part.stageToTempFile(MAX_UPLOAD_BYTES)
                         }
                         part.dispose()
                     }
 
-                    val bytes = fileBytes ?: return@post call.respond(HttpStatusCode.BadRequest, "No file provided")
-                    if (bytes.size > MAX_UPLOAD_BYTES) throw UploadTooLargeException()
+                    val mediaFile = staged ?: return@post call.respond(HttpStatusCode.BadRequest, "No file provided")
 
                     val publicId = "dm_${actingUserId}_${System.currentTimeMillis()}"
-                    val uploadedUrl = CloudinaryService.uploadAvatar(bytes, publicId)
+                    val uploadedUrl = CloudinaryService.uploadAvatar(mediaFile, publicId)
                     call.respond(HttpStatusCode.OK, mapOf("url" to uploadedUrl))
                 } catch (e: UploadTooLargeException) {
                     call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
                 } catch (e: Exception) {
-                    e.printStackTrace()
-                    call.respond(HttpStatusCode.InternalServerError, "Upload failed: ${e.message}")
+                    logger.error("[MediaUpload] Upload failed", e)
+                    call.respond(HttpStatusCode.InternalServerError, "Upload failed")
+                } finally {
+                    staged?.delete()
                 }
             }
 
@@ -3896,34 +3769,27 @@ fun Application.configureRouting() {
                     } catch (_: Exception) {}
 
                     try {
-                        val sinceIdParam = call.request.queryParameters["sinceId"]?.toIntOrNull()
-                        val initialHistoryPayloads = dbQuery {
-                            val involvesUser = (DirectMessagesTable.senderId eq userIdParam.toInt()) or
-                                    (DirectMessagesTable.receiverId eq userIdParam.toInt())
-                            when {
-                                sinceIdParam == null -> DirectMessagesTable.selectAll()
-                                    .where { involvesUser }
-                                    .map { it.toDmHistoryDto() }
-                                sinceIdParam > 0 -> DirectMessagesTable.selectAll()
-                                    .where { involvesUser and (DirectMessagesTable.id greater sinceIdParam) }
-                                    .orderBy(DirectMessagesTable.id, SortOrder.ASC)
-                                    .map { it.toDmHistoryDto() }
-                                else -> selectInitialDmHistory(
-                                    DirectMessagesTable.selectAll()
-                                        .where { involvesUser }
-                                        .orderBy(DirectMessagesTable.id, SortOrder.DESC)
-                                        .map { it.toDmHistoryDto() },
-                                    userIdParam.toInt(),
-                                    DEFAULT_HISTORY_PAGE
-                                )
+                        val sinceIdParam = call.request.queryParameters["sinceId"]?.toIntOrNull() ?: 0
+                        suspend fun sendHistory(rows: List<DmDto>) {
+                            rows.forEach { historyDto ->
+                                if (this.isActive) {
+                                    this.send(Frame.Text(Json.encodeToString(DmDto.serializer(), historyDto)))
+                                }
                             }
                         }
-
-                        initialHistoryPayloads.forEach { historyDto ->
-                            if (this.isActive) {
-                                val historyJson = Json.encodeToString(DmDto.serializer(), historyDto)
-                                this.send(Frame.Text(historyJson))
+                        if (sinceIdParam > 0) {
+                            // Catch up on everything newer than what the device holds, a bounded page at a
+                            // time — a device offline for months shouldn't pull its whole backlog into memory.
+                            var afterId = sinceIdParam
+                            while (this.isActive) {
+                                val page = dbQuery { dmCatchUpPage(userIdParam.toInt(), afterId, DM_CATCH_UP_PAGE) }
+                                sendHistory(page)
+                                if (page.size < DM_CATCH_UP_PAGE) break
+                                afterId = page.last().id ?: break
                             }
+                        } else {
+                            // Fresh device: only the newest page of each conversation, picked in SQL.
+                            sendHistory(dbQuery { initialDmHistory(userIdParam.toInt(), DEFAULT_HISTORY_PAGE) })
                         }
 
                         for (frame in incoming) {
@@ -3953,6 +3819,7 @@ fun Application.configureRouting() {
                                             val validReplyToId = requestedDto.replyToId?.takeIf { targetId ->
                                                 DirectMessagesTable.selectAll().where {
                                                     (DirectMessagesTable.id eq targetId) and
+                                                            (DirectMessagesTable.isDeleted eq false) and
                                                             (DirectMessagesTable.workspaceId eq requestedDto.workspaceId) and (
                                                             ((DirectMessagesTable.senderId eq requestedDto.senderId) and (DirectMessagesTable.receiverId eq requestedDto.receiverId)) or
                                                                     ((DirectMessagesTable.senderId eq requestedDto.receiverId) and (DirectMessagesTable.receiverId eq requestedDto.senderId))
@@ -4024,8 +3891,16 @@ fun Application.configureRouting() {
                                                 ?: return@dbQuery null
                                             if (existing[DirectMessagesTable.senderId] != userIdParam.toInt()) return@dbQuery null
                                             if (isDelete) {
-                                                DirectMessagesTable.deleteWhere { DirectMessagesTable.id eq messageId }
+                                                // Tombstone instead of a hard delete so the other participant's
+                                                // offline devices still learn about it via /api/dm/sync.
+                                                DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
+                                                    it[DirectMessagesTable.isDeleted] = true
+                                                    it[content] = ""
+                                                    it[mediaUrl] = null
+                                                }
+                                                DmReactionsTable.deleteWhere { DmReactionsTable.messageId eq messageId }
                                             } else {
+                                                if (existing[DirectMessagesTable.isDeleted]) return@dbQuery null
                                                 DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
                                                     it[content] = dmDto.content
                                                 }
@@ -4074,7 +3949,8 @@ fun Application.configureRouting() {
                                         if (messageId != 0 && emoji.isNotBlank()) {
                                             val reactionOutcome = dbQuery {
                                                 val existing = DirectMessagesTable.selectAll()
-                                                    .where { DirectMessagesTable.id eq messageId }.singleOrNull()
+                                                    .where { (DirectMessagesTable.id eq messageId) and (DirectMessagesTable.isDeleted eq false) }
+                                                    .singleOrNull()
                                                     ?: return@dbQuery null
                                                 // Only the two people in the conversation may react to (or see counts for) it.
                                                 val computedTarget = DmRules.partnerOf(

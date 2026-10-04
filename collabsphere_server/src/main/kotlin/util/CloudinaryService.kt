@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.io.OutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -30,54 +30,31 @@ object CloudinaryService {
     private val jsonParser = Json { ignoreUnknownKeys = true }
 
     /**
-     * Uploads raw image bytes to Cloudinary using their REST API:
+     * Uploads an image file to Cloudinary using their REST API:
      * POST https://api.cloudinary.com/v1_1/<cloud_name>/image/upload
      */
-    suspend fun uploadAvatar(bytes: ByteArray, publicId: String): String = withContext(Dispatchers.IO) {
+    suspend fun uploadAvatar(file: File, publicId: String): String = withContext(Dispatchers.IO) {
         val timestamp = (System.currentTimeMillis() / 1000).toString()
         val folder = "avatars"
 
-        // 1. Signature calculation: params sorted alphabetically (folder, overwrite, public_id, timestamp) + apiSecret
-        val stringToSign = "folder=$folder&overwrite=true&public_id=$publicId&timestamp=$timestamp$apiSecret"
-        val signature = sha1Hex(stringToSign)
+        // Signature calculation: params sorted alphabetically (folder, overwrite, public_id, timestamp) + apiSecret
+        val signature = sha1Hex("folder=$folder&overwrite=true&public_id=$publicId&timestamp=$timestamp$apiSecret")
 
-        val boundary = "Boundary-" + System.currentTimeMillis()
-        val url = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            doInput = true
-            useCaches = false
-            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-        }
-
-        conn.outputStream.use { os ->
-            // Write form text fields
-            writeFormField(os, boundary, "api_key", apiKey)
-            writeFormField(os, boundary, "timestamp", timestamp)
-            writeFormField(os, boundary, "public_id", publicId)
-            writeFormField(os, boundary, "folder", folder)
-            writeFormField(os, boundary, "overwrite", "true")
-            writeFormField(os, boundary, "signature", signature)
-
-            // Write image file bytes
-            writeFileField(os, boundary, "file", "$publicId.jpg", "image/jpeg", bytes)
-
-            // Write boundary end
-            os.write(("\r\n--$boundary--\r\n").toByteArray(Charsets.UTF_8))
-            os.flush()
-        }
-
-        val responseCode = conn.responseCode
-        if (responseCode in 200..299) {
-            val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
-            val element = jsonParser.parseToJsonElement(responseBody)
-            element.jsonObject["secure_url"]?.jsonPrimitive?.content
-                ?: error("Cloudinary response missing secure_url: $responseBody")
-        } else {
-            val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
-            error("Cloudinary upload failed (HTTP $responseCode): $errorBody")
-        }
+        postMultipart(
+            url = "https://api.cloudinary.com/v1_1/$cloudName/image/upload",
+            fields = listOf(
+                "api_key" to apiKey,
+                "timestamp" to timestamp,
+                "public_id" to publicId,
+                "folder" to folder,
+                "overwrite" to "true",
+                "signature" to signature
+            ),
+            fileName = "$publicId.jpg",
+            contentType = "image/jpeg",
+            file = file,
+            failureLabel = "Cloudinary upload"
+        )
     }
 
     /**
@@ -112,43 +89,78 @@ object CloudinaryService {
         get() = listOf("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")
             .all { !System.getenv(it).isNullOrBlank() }
 
-    suspend fun uploadRawFile(bytes: ByteArray, folder: String, publicId: String, fileName: String, contentType: String): String =
+    suspend fun uploadRawFile(file: File, folder: String, publicId: String, fileName: String, contentType: String): String =
         withContext(Dispatchers.IO) {
             val timestamp = (System.currentTimeMillis() / 1000).toString()
             val signature = sha1Hex("folder=$folder&public_id=$publicId&timestamp=$timestamp$apiSecret")
+            postMultipart(
+                url = "https://api.cloudinary.com/v1_1/$cloudName/raw/upload",
+                fields = listOf(
+                    "api_key" to apiKey,
+                    "timestamp" to timestamp,
+                    "public_id" to publicId,
+                    "folder" to folder,
+                    "signature" to signature
+                ),
+                fileName = fileName.replace("\"", ""),
+                contentType = contentType,
+                file = file,
+                failureLabel = "Cloudinary raw upload"
+            )
+        }
 
-            val boundary = "Boundary-" + System.currentTimeMillis()
-            val conn = (URL("https://api.cloudinary.com/v1_1/$cloudName/raw/upload").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                doInput = true
-                useCaches = false
-                connectTimeout = 30_000
-                readTimeout = 120_000
-                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+    /**
+     * POSTs [fields] plus [file] as multipart/form-data and returns the response's `secure_url`.
+     * The body is streamed from disk with a fixed Content-Length — without it HttpURLConnection
+     * buffers the entire request in memory to compute the length itself.
+     */
+    internal fun postMultipart(
+        url: String,
+        fields: List<Pair<String, String>>,
+        fileName: String,
+        contentType: String,
+        file: File,
+        failureLabel: String
+    ): String {
+        val boundary = "Boundary-" + System.currentTimeMillis()
+        val crlf = "\r\n"
+        val preamble = buildString {
+            fields.forEach { (name, value) ->
+                append("--$boundary${crlf}Content-Disposition: form-data; name=\"$name\"$crlf$crlf$value$crlf")
             }
+            append("--$boundary${crlf}Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"${crlf}")
+            append("Content-Type: $contentType$crlf$crlf")
+        }.toByteArray(Charsets.UTF_8)
+        val trailer = "$crlf--$boundary--$crlf".toByteArray(Charsets.UTF_8)
 
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            doInput = true
+            useCaches = false
+            connectTimeout = 30_000
+            readTimeout = 120_000
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            setFixedLengthStreamingMode(preamble.size + file.length() + trailer.size)
+        }
+        try {
             conn.outputStream.use { os ->
-                writeFormField(os, boundary, "api_key", apiKey)
-                writeFormField(os, boundary, "timestamp", timestamp)
-                writeFormField(os, boundary, "public_id", publicId)
-                writeFormField(os, boundary, "folder", folder)
-                writeFormField(os, boundary, "signature", signature)
-                writeFileField(os, boundary, "file", fileName.replace("\"", ""), contentType, bytes)
-                os.write(("\r\n--$boundary--\r\n").toByteArray(Charsets.UTF_8))
-                os.flush()
+                os.write(preamble)
+                file.inputStream().use { it.copyTo(os) }
+                os.write(trailer)
             }
-
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
                 val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
-                jsonParser.parseToJsonElement(responseBody).jsonObject["secure_url"]?.jsonPrimitive?.content
+                return jsonParser.parseToJsonElement(responseBody).jsonObject["secure_url"]?.jsonPrimitive?.content
                     ?: error("Cloudinary response missing secure_url: $responseBody")
-            } else {
-                val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
-                error("Cloudinary raw upload failed (HTTP $responseCode): $errorBody")
             }
+            val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+            error("$failureLabel failed (HTTP $responseCode): $errorBody")
+        } finally {
+            conn.disconnect()
         }
+    }
 
     suspend fun deleteRawFile(secureUrl: String): Unit = withContext(Dispatchers.IO) {
         runCatching {
@@ -184,16 +196,5 @@ object CloudinaryService {
         val md = MessageDigest.getInstance("SHA-1")
         val digest = md.digest(input.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun writeFormField(os: OutputStream, boundary: String, name: String, value: String) {
-        val part = "--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n"
-        os.write(part.toByteArray(Charsets.UTF_8))
-    }
-
-    private fun writeFileField(os: OutputStream, boundary: String, fieldName: String, fileName: String, contentType: String, bytes: ByteArray) {
-        val header = "--$boundary\r\nContent-Disposition: form-data; name=\"$fieldName\"; filename=\"$fileName\"\r\nContent-Type: $contentType\r\n\r\n"
-        os.write(header.toByteArray(Charsets.UTF_8))
-        os.write(bytes)
     }
 }
