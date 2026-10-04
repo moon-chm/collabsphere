@@ -12,6 +12,7 @@ import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -27,11 +28,11 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import com.collabsphere.DatabaseFactory
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
-
 private val logger = LoggerFactory.getLogger("Routing")
 
 /** Postgres SQLSTATE codes for transient conflicts worth retrying instead of surfacing as a 500. */
@@ -41,24 +42,40 @@ suspend fun <T> dbQuery(block: suspend () -> T): T {
     var attempt = 0
     while (true) {
         try {
-            return newSuspendedTransaction(Dispatchers.IO) { block() }
+            return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.writeDatabase) { block() }
         } catch (e: Exception) {
             val sqlState = (e as? java.sql.SQLException)?.sqlState
                 ?: (e.cause as? java.sql.SQLException)?.sqlState
             attempt++
             if (sqlState !in RETRYABLE_SQLSTATES || attempt >= 3) throw e
+            kotlinx.coroutines.delay(100L * attempt)
+        }
+    }
+}
+
+suspend fun <T> dbReadQuery(block: suspend () -> T): T {
+    var attempt = 0
+    while (true) {
+        try {
+            return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.readDatabase) { block() }
+        } catch (e: Exception) {
+            val sqlState = (e as? java.sql.SQLException)?.sqlState
+                ?: (e.cause as? java.sql.SQLException)?.sqlState
+            attempt++
+            if (sqlState !in RETRYABLE_SQLSTATES || attempt >= 3) throw e
+            kotlinx.coroutines.delay(100L * attempt)
         }
     }
 }
 
 /** Escapes LIKE wildcards in a literal so it can be safely embedded in a pattern (Postgres's default LIKE escape char is `\`). */
-private fun escapeLikeLiteral(value: String): String =
+internal fun escapeLikeLiteral(value: String): String =
     value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-// ── WebSocket session management ─────────────────────────────────────────────
+// â”€â”€ WebSocket session management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Delegated to WebSocketBroker which:
-//   • On single instance (current): identical behaviour to the previous ConcurrentHashMap approach
-//   • On multi-instance (future):   routes cross-instance messages via Redis pub/sub
+//   â€¢ On single instance (current): identical behaviour to the previous ConcurrentHashMap approach
+//   â€¢ On multi-instance (future):   routes cross-instance messages via Redis pub/sub
 //
 // The `activeDmSessions` reference is kept as a read-only shim so any external code
 // that only reads the map (e.g. presence checks) continues to compile.
@@ -70,23 +87,23 @@ private fun addDmSession(userId: Long, session: WebSocketServerSession) =
 private fun removeDmSession(userId: Long, session: WebSocketServerSession) =
     WebSocketBroker.removeSession(userId, session)
 
-private suspend fun sendToUser(userId: Long, text: String) =
+internal suspend fun sendToUser(userId: Long, text: String) =
     WebSocketBroker.sendToUser(userId, text, requireChannelCapable = false)
 
-private suspend fun sendToChannelCapableUser(userId: Long, text: String) =
+internal suspend fun sendToChannelCapableUser(userId: Long, text: String) =
     WebSocketBroker.sendToUser(userId, text, requireChannelCapable = true)
 
 /**
  * Returns workspace member user IDs.
- * L1: JVM cache (60 s TTL) — zero DB hit on warm cache.
- * L2: Redis cache (120 s TTL) — shared across instances when Redis configured.
- * L3: PostgreSQL — source of truth on full cache miss.
+ * L1: JVM cache (60 s TTL) â€” zero DB hit on warm cache.
+ * L2: Redis cache (120 s TTL) â€” shared across instances when Redis configured.
+ * L3: PostgreSQL â€” source of truth on full cache miss.
  * Must be called from inside an Exposed transaction / dbQuery block.
  */
-private fun workspaceMemberIds(workspaceId: Int): List<Int> =
+internal fun workspaceMemberIds(workspaceId: Int): List<Int> =
     WorkspaceMemberCache.getMembers(workspaceId)
 
-private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: Int): ChannelReactionSummary {
+internal fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: Int): ChannelReactionSummary {
     val reactors = ChannelReactionsTable.selectAll()
         .where { ChannelReactionsTable.messageId eq messageId }
         .groupBy({ it[ChannelReactionsTable.emoji] }, { it[ChannelReactionsTable.userId] })
@@ -98,7 +115,7 @@ private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: 
     )
 }
 
-private suspend fun broadcastChannelMessageChange(messageId: Int) {
+internal suspend fun broadcastChannelMessageChange(messageId: Int) {
     try {
         val (snapshot, memberIds) = dbQuery {
             val row = MessageTable.selectAll().where { MessageTable.id eq messageId }.singleOrNull()
@@ -112,12 +129,12 @@ private suspend fun broadcastChannelMessageChange(messageId: Int) {
     }
 }
 
-private const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
-private const val DEFAULT_HISTORY_PAGE = 50
-private const val DM_CATCH_UP_PAGE = 500
-private const val MAX_HISTORY_PAGE = 100
+internal const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
+internal const val DEFAULT_HISTORY_PAGE = 50
+internal const val DM_CATCH_UP_PAGE = 500
+internal const val MAX_HISTORY_PAGE = 100
 
-private fun ResultRow.toDmHistoryDto() = DmDto(
+internal fun ResultRow.toDmHistoryDto() = DmDto(
     action = "HISTORY",
     id = this[DirectMessagesTable.id],
     workspaceId = this[DirectMessagesTable.workspaceId],
@@ -137,8 +154,8 @@ fun ApplicationCall.authenticatedUserId(): Int =
 
 /**
  * Must be called from inside an existing `dbQuery`/transaction block.
- * L1: Redis cache (30s TTL) — zero DB hit on warm cache.
- * L2: PostgreSQL — source of truth on cache miss.
+ * L1: Redis cache (30s TTL) â€” zero DB hit on warm cache.
+ * L2: PostgreSQL â€” source of truth on cache miss.
  * Falls back to bare DB query when Redis is not configured (single-instance / no REDIS_URL).
  */
 internal fun isMember(userId: Int, workspaceId: Int): Boolean = isMemberCached(userId, workspaceId)
@@ -159,7 +176,7 @@ internal fun workspaceRole(userId: Int, workspaceId: Int): String? {
 }
 
 /** Regex to detect @username mentions in message content. */
-private val MENTION_REGEX = Regex("@(\\w{2,})") 
+internal val MENTION_REGEX = Regex("@(\\w{2,})") 
 
 /**
  * Inserts a notification row and, if the recipient has an active WebSocket session,
@@ -249,7 +266,7 @@ fun Application.configureRouting() {
             call.respond(HttpStatusCode.OK)
         }
 
-        // ── Public avatar endpoint (no auth required) ─────────────────────────
+        // â”€â”€ Public avatar endpoint (no auth required) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         get("/avatars/default/{userId}") {
             val userId = call.parameters["userId"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid userId")
@@ -261,12 +278,13 @@ fun Application.configureRouting() {
             call.respondText(svg, ContentType.parse("image/svg+xml"), HttpStatusCode.OK)
         }
 
-        // ── Legacy local-file avatar route — no longer used (Cloudinary stores avatars now) ──
+        // â”€â”€ Legacy local-file avatar route â€” no longer used (Cloudinary stores avatars now) â”€â”€
         get("/avatars/{filename}") {
-            call.respond(HttpStatusCode.Gone, "Local file serving removed — avatars are now served directly from Cloudinary")
+            call.respond(HttpStatusCode.Gone, "Local file serving removed â€” avatars are now served directly from Cloudinary")
         }
 
-        post("/api/login") {
+        rateLimit(RateLimitName("auth")) {
+            post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
                 val trimmedEmail = request.email.trim().lowercase()
@@ -528,13 +546,14 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
+        }
 
         authenticate("auth-jwt") {
 
-            // ── Register this device for push notifications ────────────────────
+            // â”€â”€ Register this device for push notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Backward-compatible: existing clients send {"fcmToken": "..."}.
             // New clients can additionally send {"deviceId": "..."} to enable per-device token rows.
-            // The token is always bound to the JWT user — any userId field in the body is ignored.
+            // The token is always bound to the JWT user â€” any userId field in the body is ignored.
             post("/api/user/fcm-token") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -547,7 +566,7 @@ fun Application.configureRouting() {
                         return@post
                     }
                     dbQuery {
-                        // ── Legacy single-token path (backward compat for all existing clients) ──
+                        // â”€â”€ Legacy single-token path (backward compat for all existing clients) â”€â”€
                         // Detach this token from any other account (handed-over phone), then assign to current user.
                         UsersTable.update({ (UsersTable.fcmToken eq fcmToken) and (UsersTable.id neq actingUserId) }) {
                             it[UsersTable.fcmToken] = null
@@ -556,7 +575,7 @@ fun Application.configureRouting() {
                             it[UsersTable.fcmToken] = fcmToken
                         }
 
-                        // ── Multi-device token path (when client supplies a deviceId) ──────────
+                        // â”€â”€ Multi-device token path (when client supplies a deviceId) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         if (!deviceId.isNullOrBlank()) {
                             // Remove this token from any OTHER user's device rows
                             // (hands-over: someone else's account used to own this device)
@@ -582,7 +601,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── Unregister this device (logout) ────────────────────────────────
+            // â”€â”€ Unregister this device (logout) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Clears both the legacy single-token and the per-device row (if deviceId supplied).
             delete("/api/user/fcm-token") {
                 try {
@@ -614,7 +633,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── GET own full profile ───────────────────────────────────────────
+            // â”€â”€ GET own full profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/user/profile") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -644,7 +663,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UPDATE own profile (username, bio, status, password) ───────────
+            // â”€â”€ UPDATE own profile (username, bio, status, password) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/profile") {
                 try {
                     val request = call.receive<UpdateProfileRequest>()
@@ -683,7 +702,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UPLOAD avatar (stored permanently on Cloudinary) ───────────────
+            // â”€â”€ UPLOAD avatar (stored permanently on Cloudinary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/avatar") {
                 val avatarMaxBytes = 5L * 1024 * 1024 // 5 MB
                 var staged: File? = null
@@ -723,7 +742,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── DELETE avatar (remove from Cloudinary + revert to generated default) ──
+            // â”€â”€ DELETE avatar (remove from Cloudinary + revert to generated default) â”€â”€
             delete("/api/user/avatar") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -740,7 +759,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UPDATE email (change email request) ───────────────────────────
+            // â”€â”€ UPDATE email (change email request) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             put("/api/user/email") {
                 try {
                     val request = call.receive<ChangeEmailRequest>()
@@ -875,7 +894,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── GET workspace active/online users ────────────────────────────
+            // â”€â”€ GET workspace active/online users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/presence/{workspaceId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -905,7 +924,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── CHANGE email ───────────────────────────────────────────────────
+            // â”€â”€ CHANGE email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             put("/api/user/email") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -935,7 +954,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── GET another user's public profile (privacy-aware) ─────────────
+            // â”€â”€ GET another user's public profile (privacy-aware) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/user/{userId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -969,7 +988,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── SEARCH users ───────────────────────────────────────────────────
+            // â”€â”€ SEARCH users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/user/search") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1006,7 +1025,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── DELETE own account ─────────────────────────────────────────────
+            // â”€â”€ DELETE own account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             delete("/api/user/account") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1029,7 +1048,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── BLOCK a user ───────────────────────────────────────────────────
+            // â”€â”€ BLOCK a user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/block/{targetUserId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1055,7 +1074,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UNBLOCK a user ─────────────────────────────────────────────────
+            // â”€â”€ UNBLOCK a user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             delete("/api/user/block/{targetUserId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1072,7 +1091,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── LIST blocked users ─────────────────────────────────────────────
+            // â”€â”€ LIST blocked users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/user/blocks") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1097,7 +1116,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── UPDATE privacy settings ────────────────────────────────────────
+            // â”€â”€ UPDATE privacy settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             put("/api/user/privacy") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1120,7 +1139,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── SEND email verification ────────────────────────────────────────
+            // â”€â”€ SEND email verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/verify-email/send") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1158,7 +1177,7 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ── CONFIRM email verification ─────────────────────────────────────
+            // â”€â”€ CONFIRM email verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/verify-email/confirm") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1182,7 +1201,7 @@ fun Application.configureRouting() {
                     when (result) {
                         "OK"          -> call.respond(HttpStatusCode.OK, "Email verified")
                         "WRONG_TOKEN" -> call.respond(HttpStatusCode.BadRequest, "Invalid token")
-                        "EXPIRED"     -> call.respond(HttpStatusCode.Gone, "Token expired — request a new one")
+                        "EXPIRED"     -> call.respond(HttpStatusCode.Gone, "Token expired â€” request a new one")
                         else          -> call.respond(HttpStatusCode.NotFound, "No pending verification")
                     }
                 } catch (e: Exception) {
@@ -1190,2700 +1209,30 @@ fun Application.configureRouting() {
                 }
             }
 
-            // ════════════════════════════════════════════════════════════════
-            // NOTIFICATIONS
-            // ════════════════════════════════════════════════════════════════
+            // â”€â”€ Notifications â”€â”€ extracted to plugins/routes/NotificationsRoutes.kt â”€â”€
+            notificationsRoutes()
 
-            route("/api/notifications") {
+            // â”€â”€ Workspace â”€â”€ extracted to plugins/routes/WorkspaceRoutes.kt â”€â”€
+            workspaceRoutes()
 
-                // ── LIST: GET /api/notifications?unread=true&limit=50&offset=0 ──
-                get {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val onlyUnread = call.request.queryParameters["unread"] == "true"
-                        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
-                        val offset = call.request.queryParameters["offset"]?.toLongOrNull() ?: 0L
+            // â”€â”€ Channels â”€â”€ extracted to plugins/routes/ChannelsRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€
+            channelsRoutes()
 
-                        val notifications = dbQuery {
-                            val query = NotificationsTable.selectAll()
-                                .where {
-                                    if (onlyUnread)
-                                        (NotificationsTable.recipientId eq actingUserId) and (NotificationsTable.isRead eq false)
-                                    else
-                                        NotificationsTable.recipientId eq actingUserId
-                                }
-                                .orderBy(NotificationsTable.createdAt, SortOrder.DESC)
-                                .limit(limit, offset)
+            // â”€â”€ Tasks â”€â”€ extracted to plugins/routes/TasksRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            tasksRoutes()
 
-                            query.map { row ->
-                                val aId = row[NotificationsTable.actorId]
-                                val actorRow = aId?.let {
-                                    UsersTable.selectAll().where { UsersTable.id eq it }.singleOrNull()
-                                }
-                                NotificationResponse(
-                                    id = row[NotificationsTable.id],
-                                    recipientId = row[NotificationsTable.recipientId],
-                                    actorId = aId,
-                                    actorUsername = actorRow?.get(UsersTable.username),
-                                    actorAvatarUrl = actorRow?.let { r -> AvatarGenerator.avatarUrlFor(r[UsersTable.id], r[UsersTable.avatarUrl]) },
-                                    type = row[NotificationsTable.type],
-                                    title = row[NotificationsTable.title],
-                                    body = row[NotificationsTable.body],
-                                    workspaceId = row[NotificationsTable.workspaceId],
-                                    referenceId = row[NotificationsTable.referenceId],
-                                    isRead = row[NotificationsTable.isRead],
-                                    createdAt = row[NotificationsTable.createdAt]
-                                )
-                            }
-                        }
-                        call.respond(HttpStatusCode.OK, notifications)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to fetch notifications")
-                    }
-                }
+            // â”€â”€ Notes â”€â”€ extracted to plugins/routes/NotesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            notesRoutes()
 
-                get("/mutes") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val mutes = dbQuery {
-                            NotificationMutesTable.selectAll()
-                                .where { NotificationMutesTable.userId eq actingUserId }
-                                .map {
-                                    MuteSetting(
-                                        workspaceId = it[NotificationMutesTable.workspaceId],
-                                        channelId = it[NotificationMutesTable.channelId].takeIf { id -> id > 0 }
-                                    )
-                                }
-                        }
-                        call.respond(HttpStatusCode.OK, mutes)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to load mute settings")
-                    }
-                }
 
-                put("/mutes") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<MuteRequest>()
-                        val channelKey = request.channelId?.takeIf { it > 0 } ?: 0
-                        val allowed = dbQuery {
-                            if (!isMember(actingUserId, request.workspaceId)) return@dbQuery false
-                            if (request.muted) {
-                                NotificationMutesTable.insertIgnore {
-                                    it[NotificationMutesTable.userId] = actingUserId
-                                    it[NotificationMutesTable.workspaceId] = request.workspaceId
-                                    it[NotificationMutesTable.channelId] = channelKey
-                                }
-                            } else {
-                                NotificationMutesTable.deleteWhere {
-                                    (NotificationMutesTable.userId eq actingUserId) and
-                                            (NotificationMutesTable.workspaceId eq request.workspaceId) and
-                                            (NotificationMutesTable.channelId eq channelKey)
-                                }
-                            }
-                            true
-                        }
-                        if (allowed) {
-                            call.respond(HttpStatusCode.OK, true)
-                        } else {
-                            call.respond(HttpStatusCode.Forbidden, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, false)
-                    }
-                }
+            // â”€â”€ Messages â”€â”€ extracted to plugins/routes/MessagesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€
+            messagesRoutes()
 
-                // ── COUNT: GET /api/notifications/count ───────────────────────
-                get("/count") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val total = dbQuery {
-                            NotificationsTable.selectAll()
-                                .where { NotificationsTable.recipientId eq actingUserId }.count().toInt()
-                        }
-                        val unread = dbQuery {
-                            NotificationsTable.selectAll()
-                                .where {
-                                    (NotificationsTable.recipientId eq actingUserId) and
-                                    (NotificationsTable.isRead eq false)
-                                }.count().toInt()
-                        }
-                        call.respond(HttpStatusCode.OK, NotificationCountResponse(total = total, unread = unread))
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to fetch notification count")
-                    }
-                }
+            // â”€â”€ Files â”€â”€ extracted to plugins/routes/FilesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            filesRoutes()
 
-                // ── MARK READ: PUT /api/notifications/read ────────────────────
-                put("/read") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<MarkReadRequest>()
-                        dbQuery {
-                            if (request.ids.isNullOrEmpty()) {
-                                // Mark all as read
-                                NotificationsTable.update({
-                                    NotificationsTable.recipientId eq actingUserId
-                                }) { it[NotificationsTable.isRead] = true }
-                            } else {
-                                // Mark specific ids as read (only own)
-                                NotificationsTable.update({
-                                    (NotificationsTable.recipientId eq actingUserId) and
-                                    (NotificationsTable.id inList request.ids)
-                                }) { it[NotificationsTable.isRead] = true }
-                            }
-                        }
-                        call.respond(HttpStatusCode.OK, "Marked as read")
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to mark notifications as read")
-                    }
-                }
-
-                // ── DELETE ONE: DELETE /api/notifications/{id} ────────────────
-                delete("/{id}") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val notifId = call.parameters["id"]?.toIntOrNull()
-                            ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
-                        val deleted = dbQuery {
-                            NotificationsTable.deleteWhere {
-                                (NotificationsTable.id eq notifId) and (NotificationsTable.recipientId eq actingUserId)
-                            }
-                        }
-                        if (deleted > 0) call.respond(HttpStatusCode.OK, "Deleted")
-                        else call.respond(HttpStatusCode.NotFound, "Notification not found")
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to delete notification")
-                    }
-                }
-
-                // ── CLEAR ALL: DELETE /api/notifications ──────────────────────
-                delete {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        dbQuery {
-                            NotificationsTable.deleteWhere { NotificationsTable.recipientId eq actingUserId }
-                        }
-                        call.respond(HttpStatusCode.OK, "All notifications cleared")
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to clear notifications")
-                    }
-                }
-            }
-
-            route("/api/workspace") {
-
-                delete("/{workspaceId}/members/{userId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val targetUserId = call.parameters["userId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || targetUserId == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId or userId")
-                            return@delete
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val outcome = dbQuery {
-                            val actorRole = workspaceRole(actingUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.Forbidden
-                            val targetRole = workspaceRole(targetUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.NotFound
-                            if (!WorkspaceRoles.canRemove(actorRole, targetRole, isSelf = actingUserId == targetUserId)) {
-                                return@dbQuery HttpStatusCode.Forbidden
-                            }
-                            WorkspaceMembersTable.deleteWhere {
-                                (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq targetUserId)
-                            }
-                            NotificationMutesTable.deleteWhere {
-                                (NotificationMutesTable.workspaceId eq workspaceIdParam) and (NotificationMutesTable.userId eq targetUserId)
-                            }
-                            WorkspaceMemberCache.invalidate(workspaceIdParam)
-                            MembershipCache.invalidate(targetUserId, workspaceIdParam)
-                            HttpStatusCode.OK
-                        }
-                        call.respond(outcome, outcome == HttpStatusCode.OK)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                put("/{workspaceId}/members/{userId}/role") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val targetUserId = call.parameters["userId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || targetUserId == null) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@put
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val requestedRole = call.receive<RoleRequest>().role.trim().uppercase()
-                        if (requestedRole != WorkspaceRoles.ADMIN && requestedRole != WorkspaceRoles.MEMBER) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@put
-                        }
-                        val outcome = dbQuery {
-                            if (workspaceRole(actingUserId, workspaceIdParam) != WorkspaceRoles.OWNER) return@dbQuery HttpStatusCode.Forbidden
-                            val targetRole = workspaceRole(targetUserId, workspaceIdParam) ?: return@dbQuery HttpStatusCode.NotFound
-                            if (targetRole == WorkspaceRoles.OWNER) return@dbQuery HttpStatusCode.BadRequest
-                            WorkspaceMembersTable.update({
-                                (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq targetUserId)
-                            }) {
-                                it[WorkspaceMembersTable.role] = requestedRole
-                            }
-                            HttpStatusCode.OK
-                        }
-                        call.respond(outcome, outcome == HttpStatusCode.OK)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, false)
-                    }
-                }
-
-                get("/{workspaceId}/search") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
-                            return@get
-                        }
-                        val query = call.request.queryParameters["q"].orEmpty().trim().take(SearchText.MAX_QUERY_LENGTH)
-                        if (query.length < SearchText.MIN_QUERY_LENGTH) {
-                            call.respond(HttpStatusCode.OK, WorkspaceSearchResponse(query = query))
-                            return@get
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val pattern = "%${escapeLikeLiteral(query.lowercase())}%"
-                        val perTypeLimit = 20
-
-                        val result = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-
-                            val messages = (MessageTable innerJoin ChannelsTable)
-                                .selectAll()
-                                .where {
-                                    (MessageTable.workspaceId eq workspaceIdParam) and
-                                            (MessageTable.isDeleted eq false) and
-                                            (ChannelsTable.isDeleted eq false) and
-                                            (MessageTable.content.lowerCase() like pattern)
-                                }
-                                .orderBy(MessageTable.id, SortOrder.DESC)
-                                .limit(perTypeLimit)
-                                .map {
-                                    SearchMessageHit(
-                                        id = it[MessageTable.id],
-                                        channelId = it[MessageTable.channelId],
-                                        channelName = it[ChannelsTable.channelName],
-                                        userName = it[MessageTable.userName],
-                                        content = SearchText.snippet(it[MessageTable.content], query)
-                                    )
-                                }
-
-                            val dmRows = DirectMessagesTable.selectAll()
-                                .where {
-                                    (DirectMessagesTable.workspaceId eq workspaceIdParam) and
-                                            (DirectMessagesTable.isDeleted eq false) and
-                                            ((DirectMessagesTable.senderId eq actingUserId) or (DirectMessagesTable.receiverId eq actingUserId)) and
-                                            (DirectMessagesTable.content.lowerCase() like pattern)
-                                }
-                                .orderBy(DirectMessagesTable.id, SortOrder.DESC)
-                                .limit(perTypeLimit)
-                                .toList()
-                            val partnerIds = dmRows.map {
-                                if (it[DirectMessagesTable.senderId] == actingUserId) it[DirectMessagesTable.receiverId] else it[DirectMessagesTable.senderId]
-                            }.toSet()
-                            val partnerNames = if (partnerIds.isEmpty()) emptyMap() else UsersTable.selectAll()
-                                .where { UsersTable.id inList partnerIds }
-                                .associate { it[UsersTable.id] to it[UsersTable.username] }
-                            val directMessages = dmRows.map { row ->
-                                val partnerId = if (row[DirectMessagesTable.senderId] == actingUserId) row[DirectMessagesTable.receiverId] else row[DirectMessagesTable.senderId]
-                                SearchDmHit(
-                                    id = row.toDmHistoryDto().id ?: 0,
-                                    partnerId = partnerId,
-                                    partnerName = partnerNames[partnerId] ?: "User $partnerId",
-                                    content = SearchText.snippet(row[DirectMessagesTable.content], query),
-                                    timestamp = row[DirectMessagesTable.timestamp]
-                                )
-                            }
-
-                            val tasks = TasksTable.selectAll()
-                                .where {
-                                    (TasksTable.workspaceId eq workspaceIdParam) and
-                                            (TasksTable.isDeleted eq false) and
-                                            ((TasksTable.taskName.lowerCase() like pattern) or (TasksTable.taskDescription.lowerCase() like pattern))
-                                }
-                                .orderBy(TasksTable.id, SortOrder.DESC)
-                                .limit(perTypeLimit)
-                                .map { SearchTaskHit(it[TasksTable.id], it[TasksTable.taskName], it[TasksTable.status]) }
-
-                            val notes = NotesTable.selectAll()
-                                .where {
-                                    (NotesTable.workspaceId eq workspaceIdParam) and
-                                            (NotesTable.isDeleted eq false) and
-                                            ((NotesTable.notesName.lowerCase() like pattern) or (NotesTable.notesDescription.lowerCase() like pattern))
-                                }
-                                .orderBy(NotesTable.id, SortOrder.DESC)
-                                .limit(perTypeLimit)
-                                .map {
-                                    SearchNoteHit(
-                                        id = it[NotesTable.id],
-                                        notesName = it[NotesTable.notesName],
-                                        snippet = SearchText.snippet(it[NotesTable.notesDescription], query)
-                                    )
-                                }
-
-                            val files = LocalFilesTable.selectAll()
-                                .where {
-                                    (LocalFilesTable.workspaceId eq workspaceIdParam) and
-                                            (LocalFilesTable.isDeleted eq false) and
-                                            (LocalFilesTable.fileName.lowerCase() like pattern)
-                                }
-                                .orderBy(LocalFilesTable.id, SortOrder.DESC)
-                                .limit(perTypeLimit)
-                                .map { SearchFileHit(it[LocalFilesTable.id], it[LocalFilesTable.fileName], it[LocalFilesTable.mimeType]) }
-
-                            WorkspaceSearchResponse(query, messages, directMessages, tasks, notes, files)
-                        }
-
-                        if (result == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, result)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        call.respond(HttpStatusCode.InternalServerError, "Search failed")
-                    }
-                }
-
-                post("/create") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<WorkspaceRequest>()
-
-                        val response = dbQuery {
-                            val insertedId = WorkspacesTable.insert {
-                                it[userId] = actingUserId
-                                it[workspaceName] = request.workspaceName
-                                it[workspaceOwner] = request.workspaceOwner
-                                it[workspacePassword] = PasswordHasher.hash(request.workspacePassword)
-                                it[isDeleted] = false
-                                it[updatedAt] = System.currentTimeMillis()
-                            }[WorkspacesTable.id]
-
-                            WorkspaceMembersTable.insert {
-                                it[workspaceId] = insertedId
-                                it[userId] = actingUserId
-                            }
-                            // New workspace — no stale cache exists, but invalidate defensively
-                            WorkspaceMemberCache.invalidate(insertedId)
-
-                            WorkspaceResponse(
-                                id = insertedId,
-                                userId = actingUserId,
-                                workspaceName = request.workspaceName,
-                                workspaceOwner = request.workspaceOwner
-                            )
-                        }
-
-                        call.respond(HttpStatusCode.Created, response)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Database error")
-                    }
-                }
-
-                post("/members/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                            ?: return@post call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing workspaceId"
-                            )
-                        val actingUserId = call.authenticatedUserId()
-
-                        val request = call.receive<AddMemberRequest>()
-
-                        val response = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery "FORBIDDEN"
-                            }
-
-                            val targetUserRow = UsersTable
-                                .selectAll()
-                                .where { UsersTable.email eq request.email }
-                                .singleOrNull()
-
-                            if (targetUserRow == null) {
-                                null
-                            } else {
-                                val targetUserId = targetUserRow[UsersTable.id]
-                                val targetUserName = targetUserRow[UsersTable.username]
-                                val targetUserEmail = targetUserRow[UsersTable.email]
-
-                                val alreadyMember = WorkspaceMembersTable
-                                    .selectAll()
-                                    .where {
-                                        (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and
-                                                (WorkspaceMembersTable.userId eq targetUserId)
-                                    }
-                                    .count() > 0
-
-                                if (!alreadyMember) {
-                                    WorkspaceMembersTable.insert {
-                                        it[workspaceId] = workspaceIdParam
-                                        it[userId] = targetUserId
-                                    }
-                                    WorkspacesTable.update({ WorkspacesTable.id eq workspaceIdParam }) {
-                                        it[updatedAt] = System.currentTimeMillis()
-                                    }
-                                    WorkspaceMemberCache.invalidate(workspaceIdParam)
-                                    MembershipCache.invalidate(targetUserId, workspaceIdParam)
-                                }
-
-                                MemberResponse(
-                                    workspaceId = workspaceIdParam,
-                                    userId = targetUserId,
-                                    userName = targetUserName,
-                                    email = targetUserEmail,
-                                    avatarUrl = dbQuery {
-                                        UsersTable
-                                            .selectAll()
-                                            .where { UsersTable.id eq targetUserId }
-                                            .firstOrNull()
-                                            ?.get(UsersTable.avatarUrl)
-                                    }
-                                )
-                            }
-                        }
-
-                        when (response) {
-                            "FORBIDDEN" -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                            null -> call.respond(HttpStatusCode.NotFound, "No user found with email: ${request.email}")
-                            else -> call.respond(HttpStatusCode.Created, response)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Error adding member")
-                    }
-                }
-
-                post("/invitations/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<SendInvitationRequest>()
-                        val trimmedEmail = request.email.trim().lowercase()
-
-                        if (trimmedEmail.isBlank()) {
-                            return@post call.respond(HttpStatusCode.BadRequest, "Email cannot be blank")
-                        }
-
-                        val wsInfo = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
-                            val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq workspaceIdParam }.singleOrNull()
-                            val inviter = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                            if (ws != null && inviter != null) {
-                                Pair(ws[WorkspacesTable.workspaceName], inviter[UsersTable.username])
-                            } else null
-                        } ?: return@post call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-
-                        val (workspaceName, inviterName) = wsInfo
-
-                        // Check if already a member
-                        val alreadyMember = dbQuery {
-                            val userRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
-                            if (userRow != null) {
-                                WorkspaceMembersTable.selectAll().where {
-                                    (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq userRow[UsersTable.id])
-                                }.count() > 0
-                            } else false
-                        }
-
-                        if (alreadyMember) {
-                            return@post call.respond(HttpStatusCode.Conflict, "User is already a member of this workspace")
-                        }
-
-                        // Generate unique 6-character alphanumeric code
-                        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-                        val inviteCode = (1..6).map { chars.random() }.joinToString("")
-                        val expiresAt = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // 7 days
-
-                        val insertedInvitation = dbQuery {
-                            val invId = WorkspaceInvitationsTable.insert {
-                                it[workspaceId] = workspaceIdParam
-                                it[inviterUserId] = actingUserId
-                                it[inviteeEmail] = trimmedEmail
-                                it[WorkspaceInvitationsTable.inviteCode] = inviteCode
-                                it[status] = "PENDING"
-                                it[WorkspaceInvitationsTable.expiresAt] = expiresAt
-                            }[WorkspaceInvitationsTable.id]
-
-                            // If recipient is already a registered user, send an in-app notification too
-                            val recipientRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
-                            if (recipientRow != null) {
-                                NotificationsTable.insert {
-                                    it[recipientId] = recipientRow[UsersTable.id]
-                                    it[actorId] = actingUserId
-                                    it[type] = "WORKSPACE_INVITE"
-                                    it[title] = "Workspace Invitation"
-                                    it[body] = "$inviterName invited you to join $workspaceName (Code: $inviteCode)"
-                                    it[workspaceId] = workspaceIdParam
-                                    it[referenceId] = invId
-                                }
-                            }
-
-                            InvitationResponse(
-                                id = invId,
-                                workspaceId = workspaceIdParam,
-                                workspaceName = workspaceName,
-                                inviterName = inviterName,
-                                inviteeEmail = trimmedEmail,
-                                inviteCode = inviteCode,
-                                status = "PENDING",
-                                createdAt = System.currentTimeMillis()
-                            )
-                        }
-
-                        EmailService.sendWorkspaceInvitation(trimmedEmail, workspaceName, inviterName, inviteCode)
-                        call.respond(HttpStatusCode.Created, insertedInvitation)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Failed to send invitation: ${e.message}")
-                    }
-                }
-
-                get("/invitations/pending") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val userEmail = dbQuery {
-                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
-                        } ?: return@get call.respond(HttpStatusCode.Unauthorized, "User not found")
-
-                        val pendingInvites = dbQuery {
-                            (WorkspaceInvitationsTable innerJoin WorkspacesTable innerJoin UsersTable)
-                                .selectAll()
-                                .where {
-                                    (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) and
-                                    (WorkspaceInvitationsTable.status eq "PENDING") and
-                                    (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
-                                }
-                                .map {
-                                    InvitationResponse(
-                                        id = it[WorkspaceInvitationsTable.id],
-                                        workspaceId = it[WorkspaceInvitationsTable.workspaceId],
-                                        workspaceName = it[WorkspacesTable.workspaceName],
-                                        inviterName = it[UsersTable.username],
-                                        inviteeEmail = it[WorkspaceInvitationsTable.inviteeEmail],
-                                        inviteCode = it[WorkspaceInvitationsTable.inviteCode],
-                                        status = it[WorkspaceInvitationsTable.status],
-                                        createdAt = it[WorkspaceInvitationsTable.createdAt]
-                                    )
-                                }
-                        }
-                        call.respond(HttpStatusCode.OK, pendingInvites)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Failed to fetch invitations")
-                    }
-                }
-
-                post("/invitations/{id}/accept") {
-                    try {
-                        val invId = call.parameters["id"]?.toIntOrNull()
-                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing invitation id")
-                        val actingUserId = call.authenticatedUserId()
-
-                        val userEmail = dbQuery {
-                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
-                        } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
-
-                        val acceptResult = dbQuery {
-                            val invRow = WorkspaceInvitationsTable.selectAll()
-                                .where { (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) }
-                                .singleOrNull() ?: return@dbQuery "NOT_FOUND"
-
-                            if (invRow[WorkspaceInvitationsTable.status] != "PENDING") {
-                                return@dbQuery "ALREADY_PROCESSED"
-                            }
-
-                            if (System.currentTimeMillis() > invRow[WorkspaceInvitationsTable.expiresAt]) {
-                                return@dbQuery "EXPIRED"
-                            }
-
-                            val wsId = invRow[WorkspaceInvitationsTable.workspaceId]
-
-                            val alreadyMember = WorkspaceMembersTable.selectAll().where {
-                                (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
-                            }.count() > 0
-
-                            if (!alreadyMember) {
-                                WorkspaceMembersTable.insert {
-                                    it[workspaceId] = wsId
-                                    it[userId] = actingUserId
-                                }
-                                WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
-                                    it[updatedAt] = System.currentTimeMillis()
-                                }
-                            }
-
-                            WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invId }) {
-                                it[status] = "ACCEPTED"
-                            }
-                            
-                            val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.single()
-                            MemberResponse(
-                                workspaceId = wsId,
-                                userId = actingUserId,
-                                userName = userRow[UsersTable.username],
-                                email = userRow[UsersTable.email],
-                                avatarUrl = userRow[UsersTable.avatarUrl],
-                                role = WorkspaceRoles.MEMBER
-                            )
-                        }
-
-                        when (acceptResult) {
-                            is MemberResponse -> call.respond(HttpStatusCode.OK, acceptResult)
-                            "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, "Invitation expired")
-                            "ALREADY_PROCESSED" -> call.respond(HttpStatusCode.BadRequest, "Invitation already processed")
-                            else -> call.respond(HttpStatusCode.NotFound, "Invitation not found")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Failed to accept invitation")
-                    }
-                }
-
-                post("/invitations/{id}/decline") {
-                    try {
-                        val invId = call.parameters["id"]?.toIntOrNull()
-                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing invitation id")
-                        val actingUserId = call.authenticatedUserId()
-
-                        val userEmail = dbQuery {
-                            UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
-                        } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
-
-                        val declined = dbQuery {
-                            val updated = WorkspaceInvitationsTable.update({
-                                (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase())
-                            }) {
-                                it[status] = "DECLINED"
-                            }
-                            updated > 0
-                        }
-
-                        if (declined) {
-                            call.respond(HttpStatusCode.OK, mapOf("status" to "success", "message" to "Invitation declined"))
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, "Invitation not found")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Failed to decline invitation")
-                    }
-                }
-
-                post("/join-by-code") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<JoinWorkspaceByCodeRequest>()
-                        val trimmedCode = request.inviteCode.trim().uppercase()
-
-                        if (trimmedCode.isBlank()) {
-                            return@post call.respond(HttpStatusCode.BadRequest, "Invite code cannot be blank")
-                        }
-
-                        val joinedWorkspace = dbQuery {
-                            val invRow = WorkspaceInvitationsTable.selectAll()
-                                .where {
-                                    (WorkspaceInvitationsTable.inviteCode eq trimmedCode) and
-                                    (WorkspaceInvitationsTable.status eq "PENDING") and
-                                    (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
-                                }
-                                .singleOrNull()
-
-                            val wsId = if (invRow != null) {
-                                invRow[WorkspaceInvitationsTable.workspaceId]
-                            } else {
-                                null
-                            }
-
-                            if (wsId == null) return@dbQuery null
-
-                            val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq wsId }.singleOrNull()
-                                ?: return@dbQuery null
-
-                            val alreadyMember = WorkspaceMembersTable.selectAll().where {
-                                (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
-                            }.count() > 0
-
-                            if (!alreadyMember) {
-                                WorkspaceMembersTable.insert {
-                                    it[workspaceId] = wsId
-                                    it[userId] = actingUserId
-                                }
-                                WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
-                                    it[updatedAt] = System.currentTimeMillis()
-                                }
-                                WorkspaceMemberCache.invalidate(wsId)
-                                MembershipCache.invalidate(actingUserId, wsId)
-                            }
-
-                            if (invRow != null) {
-                                WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invRow[WorkspaceInvitationsTable.id] }) {
-                                    it[status] = "ACCEPTED"
-                                }
-                            }
-
-                            val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.single()
-                            MemberResponse(
-                                workspaceId = wsId,
-                                userId = actingUserId,
-                                userName = userRow[UsersTable.username],
-                                email = userRow[UsersTable.email],
-                                avatarUrl = userRow[UsersTable.avatarUrl],
-                                role = WorkspaceRoles.MEMBER
-                            )
-                        }
-
-                        if (joinedWorkspace != null) {
-                            call.respond(HttpStatusCode.OK, joinedWorkspace)
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, "Invalid or expired invite code")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Failed to join workspace: ${e.message}")
-                    }
-                }
-
-                get("/user/{userId}") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-
-                        val workspaces = dbQuery {
-                            (WorkspacesTable innerJoin WorkspaceMembersTable)
-                                .selectAll()
-                                .where {
-                                    (WorkspaceMembersTable.userId eq actingUserId) and
-                                            (WorkspacesTable.isDeleted eq false)
-                                }
-                                .map {
-                                    WorkspaceResponse(
-                                        id = it[WorkspacesTable.id],
-                                        userId = it[WorkspacesTable.userId],
-                                        workspaceName = it[WorkspacesTable.workspaceName],
-                                        workspaceOwner = it[WorkspacesTable.workspaceOwner]
-                                    )
-                                }
-                                .distinctBy { it.id }
-                        }
-
-                        call.respond(HttpStatusCode.OK, workspaces)
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error fetching user workspaces")
-                    }
-                }
-
-                get("/members/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
-                        val actingUserId = call.authenticatedUserId()
-
-                        val members = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            val ownerId = workspaceOwnerId(workspaceIdParam)
-                            (WorkspaceMembersTable innerJoin UsersTable)
-                                .selectAll()
-                                .where { WorkspaceMembersTable.workspaceId eq workspaceIdParam }
-                                .map {
-                                    MemberResponse(
-                                        workspaceId = workspaceIdParam,
-                                        userId = it[UsersTable.id],
-                                        userName = it[UsersTable.username],
-                                        email = it[UsersTable.email],
-                                        avatarUrl = it[UsersTable.avatarUrl],
-                                        role = if (it[UsersTable.id] == ownerId) WorkspaceRoles.OWNER else it[WorkspaceMembersTable.role]
-                                    )
-                                }
-                        }
-
-                        if (members == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, members)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            "Error fetching workspace members"
-                        )
-                    }
-                }
-
-                get("/sync/{userId}") {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val page = dbQuery { workspaceDeltaSync(actingUserId, call.syncRequest()) }
-                        call.appendSyncHeaders(page.nextCursor, page.reset)
-                        call.respond(HttpStatusCode.OK, page.rows)
-                    } catch (e: Exception) {
-                        logger.error("[Sync] Workspace sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Sync Error")
-                    }
-                }
-
-                delete("/delete") {
-                    try {
-                        val workspaceId = call.request.queryParameters["workspaceId"]?.toIntOrNull()
-                        val workspaceName = call.request.queryParameters["workspaceName"]
-
-                        if (workspaceId == null && workspaceName.isNullOrBlank()) {
-                            return@delete call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing workspaceId or workspaceName"
-                            )
-                        }
-
-                        val actingUserId = call.authenticatedUserId()
-
-                        val password = call.request.headers["X-Workspace-Password"]
-                            ?: call.request.queryParameters["workspacePassword"]
-                            ?: return@delete call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing password"
-                            )
-
-                        val deletedIds = dbQuery {
-                            val condition = if (workspaceId != null) {
-                                (WorkspacesTable.id eq workspaceId) and (WorkspacesTable.userId eq actingUserId)
-                            } else {
-                                (WorkspacesTable.workspaceName eq workspaceName!!) and (WorkspacesTable.userId eq actingUserId)
-                            }
-
-                            val matchingIds = WorkspacesTable.selectAll()
-                                .where { condition }
-                                .filter { PasswordHasher.matches(password, it[WorkspacesTable.workspacePassword]) }
-                                .map { it[WorkspacesTable.id] }
-
-                            if (matchingIds.isNotEmpty()) {
-                                WorkspacesTable.update({ WorkspacesTable.id inList matchingIds }) {
-                                    it[isDeleted] = true
-                                    it[updatedAt] = System.currentTimeMillis()
-                                }
-                            }
-                            matchingIds
-                        }
-
-                        if (deletedIds.isNotEmpty()) {
-                            call.respond(HttpStatusCode.OK, DeleteWorkspaceResponse(deletedIds))
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, DeleteWorkspaceResponse(emptyList()))
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, DeleteWorkspaceResponse(emptyList()))
-                    }
-                }
-            }
-
-            route("/api/channels") {
-                post {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<ChannelRequest>()
-
-                        val response = dbQuery {
-                            if (!isMember(actingUserId, request.workspaceId)) {
-                                return@dbQuery null
-                            }
-                            val insertedId = ChannelsTable.insert {
-                                it[userId] = actingUserId
-                                it[channelName] = request.channelName
-                                it[workspaceId] = request.workspaceId
-                                it[description] = request.description
-                                it[updatedAt] = System.currentTimeMillis()
-                                it[isDeleted] = false
-                            }[ChannelsTable.id]
-
-                            ChannelResponse(
-                                id = insertedId,
-                                userId = actingUserId,
-                                channelName = request.channelName,
-                                workspaceId = request.workspaceId,
-                                description = request.description
-                            )
-                        }
-                        if (response == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.Created, response)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Failed to create channel")
-                    }
-                }
-
-                delete("/{channelName}/{workspaceId}/{userId}") {
-                    try {
-                        val channelNameParam = call.parameters["channelName"]
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (channelNameParam == null || workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing parameters")
-                            return@delete
-                        }
-
-                        val updatedRows = dbQuery {
-                            val role = workspaceRole(actingUserId, workspaceIdParam) ?: return@dbQuery -1
-                            val channel = ChannelsTable.selectAll().where {
-                                (ChannelsTable.channelName eq channelNameParam) and
-                                        (ChannelsTable.workspaceId eq workspaceIdParam) and
-                                        (ChannelsTable.isDeleted eq false)
-                            }.firstOrNull() ?: return@dbQuery 0
-                            if (!WorkspaceRoles.canModerate(role) && channel[ChannelsTable.userId] != actingUserId) {
-                                return@dbQuery -1
-                            }
-                            ChannelsTable.update({ ChannelsTable.id eq channel[ChannelsTable.id] }) {
-                                it[isDeleted] = true
-                                it[updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        when {
-                            updatedRows == -1 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updatedRows > 0 -> call.respond(HttpStatusCode.OK, true)
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                get("/sync/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
-                            return@get
-                        }
-
-                        val page = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            channelDeltaSync(workspaceIdParam, call.syncRequest())
-                        }
-                        if (page == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(page.nextCursor, page.reset)
-                            call.respond(HttpStatusCode.OK, page.rows)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("[Sync] Channel sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Sync Error")
-                    }
-                }
-
-                get("/workspace/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
-                            return@get
-                        }
-
-                        val channels = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            ChannelsTable.selectAll()
-                                .where {
-                                    (ChannelsTable.workspaceId eq workspaceIdParam) and
-                                            (ChannelsTable.isDeleted eq false)
-                                }
-                                .map {
-                                    ChannelResponse(
-                                        id = it[ChannelsTable.id],
-                                        userId = it[ChannelsTable.userId],
-                                        channelName = it[ChannelsTable.channelName],
-                                        workspaceId = it[ChannelsTable.workspaceId],
-                                        description = it[ChannelsTable.description]
-                                    )
-                                }
-                        }
-                        if (channels == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, channels)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error retrieving channels")
-                    }
-                }
-            }
-
-            route("/api/tasks") {
-
-                post {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<TaskRequest>()
-
-                        val newTask = dbQuery {
-                            if (!isMember(actingUserId, request.workspaceId)) {
-                                return@dbQuery null
-                            }
-                            if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
-                                throw IllegalArgumentException("Assignee is not a member of the workspace")
-                            }
-
-                            // A WorkManager retry after a successful-but-lost create response re-sends
-                            // the same idempotencyKey — return the existing row instead of inserting again.
-                            val existing = request.idempotencyKey?.let { key ->
-                                TasksTable.selectAll().where { TasksTable.idempotencyKey eq key }.singleOrNull()
-                            }
-                            if (existing != null) {
-                                return@dbQuery TaskResponse(
-                                    id = existing[TasksTable.id],
-                                    createdByUserId = existing[TasksTable.createdByUserId],
-                                    assignedToUserId = existing[TasksTable.assignedToUserId],
-                                    workspaceId = existing[TasksTable.workspaceId],
-                                    taskName = existing[TasksTable.taskName],
-                                    taskDescription = existing[TasksTable.taskDescription],
-                                    status = existing[TasksTable.status],
-                                    dueDate = existing[TasksTable.dueDate],
-                                    priority = existing[TasksTable.priority],
-                                    checklist = TaskExtras.decodeChecklist(existing[TasksTable.checklist]),
-                                    labels = TaskExtras.decodeLabels(existing[TasksTable.labels])
-                                )
-                            }
-
-                            val newDueDate = request.dueDate?.takeIf { it > 0 }
-                            val newPriority = TaskPriorities.normalize(request.priority) ?: "MEDIUM"
-                            val newChecklist = TaskExtras.normalizeChecklist(request.checklist.orEmpty())
-                            val newLabels = TaskExtras.normalizeLabels(request.labels.orEmpty())
-                            val insertedId = TasksTable.insert {
-                                it[createdByUserId] = actingUserId
-                                it[assignedToUserId] = request.assignedToUserId
-                                it[workspaceId] = request.workspaceId
-                                it[taskName] = request.taskName
-                                it[taskDescription] = request.taskDescription
-                                it[status] = request.status
-                                it[dueDate] = newDueDate
-                                it[priority] = newPriority
-                                it[checklist] = TaskExtras.encodeChecklist(newChecklist)
-                                it[labels] = TaskExtras.encodeLabels(newLabels)
-                                it[isDeleted] = false
-                                it[updatedAt] = System.currentTimeMillis()
-                                it[idempotencyKey] = request.idempotencyKey
-                            }[TasksTable.id]
-
-                            TaskResponse(
-                                id = insertedId,
-                                createdByUserId = actingUserId,
-                                assignedToUserId = request.assignedToUserId,
-                                workspaceId = request.workspaceId,
-                                taskName = request.taskName,
-                                taskDescription = request.taskDescription,
-                                status = request.status,
-                                dueDate = newDueDate,
-                                priority = newPriority,
-                                checklist = newChecklist,
-                                labels = newLabels
-                            )
-                        }
-                        if (newTask == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.Created, newTask)
-                            // ── Notification: task assigned ───────────────────────────────────
-                            val assigneeId = request.assignedToUserId
-                            if (assigneeId != null && assigneeId != actingUserId) {
-                                val creatorName = dbQuery {
-                                    UsersTable.selectAll().where { UsersTable.id eq actingUserId }
-                                        .singleOrNull()?.get(UsersTable.username) ?: "Someone"
-                                }
-                                createAndPushNotification(
-                                    recipientId = assigneeId,
-                                    actorId = actingUserId,
-                                    type = "TASK_ASSIGNED",
-                                    title = "$creatorName assigned you a task",
-                                    body = "\"${request.taskName}\" — ${request.taskDescription.take(120)}",
-                                    workspaceId = request.workspaceId,
-                                    referenceId = newTask.id
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.BadRequest,
-                            "Foreign key violation: Verify workspaceId and userIds exist."
-                        )
-                    }
-                }
-
-                get("/user/{userId}") {
-                    try {
-                        val userIdParam = call.parameters["userId"]?.toIntOrNull()
-                        if (userIdParam == null) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing or invalid userId path parameter"
-                            )
-                            return@get
-                        }
-                        val actingUserId = call.authenticatedUserId()
-
-                        val userTasks = dbQuery {
-                            val memberWorkspaceIds = WorkspaceMembersTable.selectAll()
-                                .where { WorkspaceMembersTable.userId eq actingUserId }
-                                .map { it[WorkspaceMembersTable.workspaceId] }
-
-                            if (memberWorkspaceIds.isEmpty()) {
-                                emptyList()
-                            } else {
-                                TasksTable.selectAll()
-                                    .where {
-                                        (TasksTable.assignedToUserId eq userIdParam) and
-                                                (TasksTable.isDeleted eq false) and
-                                                (TasksTable.workspaceId inList memberWorkspaceIds)
-                                    }
-                                    .map {
-                                        TaskResponse(
-                                            id = it[TasksTable.id],
-                                            createdByUserId = it[TasksTable.createdByUserId],
-                                            assignedToUserId = it[TasksTable.assignedToUserId],
-                                            workspaceId = it[TasksTable.workspaceId],
-                                            taskName = it[TasksTable.taskName],
-                                            taskDescription = it[TasksTable.taskDescription],
-                                            status = it[TasksTable.status],
-                                            dueDate = it[TasksTable.dueDate],
-                                            priority = it[TasksTable.priority],
-                                            checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
-                                            labels = TaskExtras.decodeLabels(it[TasksTable.labels])
-                                        )
-                                    }
-                            }
-                        }
-                        call.respond(HttpStatusCode.OK, userTasks)
-                    } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            "Failed to retrieve user tasks"
-                        )
-                    }
-                }
-
-                delete("/{taskId}") {
-                    try {
-                        val taskIdParam = call.parameters["taskId"]?.toIntOrNull()
-                        if (taskIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid taskId")
-                            return@delete
-                        }
-                        val actingUserId = call.authenticatedUserId()
-
-                        val updatedRows = dbQuery {
-                            val task = TasksTable.selectAll().where { TasksTable.id eq taskIdParam }.singleOrNull()
-                                ?: return@dbQuery -1
-                            if (!isMember(actingUserId, task[TasksTable.workspaceId])) {
-                                return@dbQuery -2
-                            }
-                            TasksTable.update({ TasksTable.id eq taskIdParam }) {
-                                it[isDeleted] = true
-                                it[updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        when {
-                            updatedRows == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updatedRows > 0 -> call.respond(HttpStatusCode.OK, true)
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                put("/{taskId}") {
-                    val taskId = call.parameters["taskId"]?.toIntOrNull()
-                    if (taskId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Missing or invalid taskId")
-                        return@put
-                    }
-                    val actingUserId = call.authenticatedUserId()
-
-                    val request = try {
-                        call.receive<TaskRequest>()
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid request body")
-                        return@put
-                    }
-
-                    var previousStatus: String? = null
-                    val updateResult = dbQuery {
-                        val existingTask = TasksTable.selectAll().where { TasksTable.id eq taskId }.singleOrNull()
-                            ?: return@dbQuery -1
-                        previousStatus = existingTask[TasksTable.status]
-                        if (!isMember(actingUserId, existingTask[TasksTable.workspaceId]) ||
-                            !isMember(actingUserId, request.workspaceId)
-                        ) {
-                            return@dbQuery -2
-                        }
-                        if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
-                            return@dbQuery -4
-                        }
-
-                        // Mirror the client's business rules server-side: without this, any workspace
-                        // member could bypass the UI's assignee/creator restrictions by calling the API directly.
-                        val reassigning = request.assignedToUserId != existingTask[TasksTable.assignedToUserId]
-                        val editingContentOrStatus = request.taskName != existingTask[TasksTable.taskName] ||
-                                request.taskDescription != existingTask[TasksTable.taskDescription] ||
-                                request.status != existingTask[TasksTable.status]
-
-                        val currentDueDate = existingTask[TasksTable.dueDate]
-                        val currentPriority = existingTask[TasksTable.priority]
-                        val nextDueDate = when (val requested = request.dueDate) {
-                            null -> currentDueDate
-                            else -> requested.takeIf { it > 0 }
-                        }
-                        val nextPriority = TaskPriorities.normalize(request.priority) ?: currentPriority
-                        val currentChecklist = TaskExtras.decodeChecklist(existingTask[TasksTable.checklist])
-                        val currentLabels = TaskExtras.decodeLabels(existingTask[TasksTable.labels])
-                        val nextChecklist = request.checklist?.let { TaskExtras.normalizeChecklist(it) } ?: currentChecklist
-                        val nextLabels = request.labels?.let { TaskExtras.normalizeLabels(it) } ?: currentLabels
-                        val editingPlanning = nextDueDate != currentDueDate || nextPriority != currentPriority ||
-                                nextChecklist != currentChecklist || nextLabels != currentLabels
-
-                        if (reassigning && actingUserId != existingTask[TasksTable.createdByUserId]) {
-                            return@dbQuery -3
-                        }
-                        if (editingContentOrStatus && actingUserId != existingTask[TasksTable.assignedToUserId]) {
-                            return@dbQuery -3
-                        }
-                        if (editingPlanning &&
-                            actingUserId != existingTask[TasksTable.assignedToUserId] &&
-                            actingUserId != existingTask[TasksTable.createdByUserId]
-                        ) {
-                            return@dbQuery -3
-                        }
-
-                        TasksTable.update({ TasksTable.id eq taskId }) {
-                            it[taskName] = request.taskName
-                            it[taskDescription] = request.taskDescription
-                            it[assignedToUserId] = request.assignedToUserId
-                            it[workspaceId] = request.workspaceId
-                            it[status] = request.status
-                            it[dueDate] = nextDueDate
-                            it[priority] = nextPriority
-                            it[checklist] = TaskExtras.encodeChecklist(nextChecklist)
-                            it[labels] = TaskExtras.encodeLabels(nextLabels)
-                            if (nextDueDate != currentDueDate) {
-                                it[reminderSentAt] = null
-                            }
-                            it[updatedAt] = System.currentTimeMillis()
-                        }
-                    }
-
-                    if (updateResult == -1) {
-                        call.respond(HttpStatusCode.NotFound, "Task not found")
-                        return@put
-                    }
-                    if (updateResult == -2) {
-                        call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        return@put
-                    }
-                    if (updateResult == -3) {
-                        call.respond(HttpStatusCode.Forbidden, "Only the assignee can edit or move this task; only the creator can reassign it; due date and priority can be changed by the creator or assignee")
-                        return@put
-                    }
-                    if (updateResult == -4) {
-                        call.respond(HttpStatusCode.BadRequest, "Assignee is not a member of the workspace")
-                        return@put
-                    }
-
-                    val updatedTask = dbQuery {
-                        TasksTable.selectAll()
-                            .where { TasksTable.id eq taskId }
-                            .map {
-                                TaskResponse(
-                                    id = it[TasksTable.id],
-                                    createdByUserId = it[TasksTable.createdByUserId],
-                                    assignedToUserId = it[TasksTable.assignedToUserId],
-                                    workspaceId = it[TasksTable.workspaceId],
-                                    taskName = it[TasksTable.taskName],
-                                    taskDescription = it[TasksTable.taskDescription],
-                                    status = it[TasksTable.status],
-                                    dueDate = it[TasksTable.dueDate],
-                                    priority = it[TasksTable.priority],
-                                    checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
-                                    labels = TaskExtras.decodeLabels(it[TasksTable.labels])
-                                )
-                            }.singleOrNull()
-                    }
-
-                    if (updatedTask == null) {
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            "Failed to retrieve updated task"
-                        )
-                    } else {
-                        call.respond(HttpStatusCode.OK, updatedTask)
-                        syncLinkedIssuesWithTask(updatedTask.id, previousStatus, updatedTask.status)
-                        // Feature E: Sync assignee to linked GitHub issues
-                        call.application.launch {
-                            try {
-                                com.collabsphere.util.GitHubAssigneeSyncService.syncToGitHub(
-                                    updatedTask.id, updatedTask.workspaceId, updatedTask.assignedToUserId
-                                )
-                            } catch (e: Exception) {
-                                logger.warn("[GitHub] Assignee sync to GitHub failed", e)
-                            }
-                        }
-                        // ── Notification: task updated ────────────────────────────────────
-                        val assigneeId = updatedTask.assignedToUserId
-                        if (assigneeId != null && assigneeId != actingUserId) {
-                            val updaterName = dbQuery {
-                                UsersTable.selectAll().where { UsersTable.id eq actingUserId }
-                                    .singleOrNull()?.get(UsersTable.username) ?: "Someone"
-                            }
-                            createAndPushNotification(
-                                recipientId = assigneeId,
-                                actorId = actingUserId,
-                                type = "TASK_UPDATED",
-                                title = "$updaterName updated your task",
-                                body = "\"${updatedTask.taskName}\" is now ${updatedTask.status}",
-                                workspaceId = updatedTask.workspaceId,
-                                referenceId = updatedTask.id
-                            )
-                        }
-                    }
-                }
-
-                get("/workspace/{workspaceId}") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Missing workspaceId")
-                        return@get
-                    }
-                    val actingUserId = call.authenticatedUserId()
-
-                    try {
-                        val workspaceTasks = dbQuery {
-                            if (!isMember(actingUserId, workspaceId)) {
-                                return@dbQuery null
-                            }
-                            TasksTable.selectAll()
-                                .where { (TasksTable.workspaceId eq workspaceId) and (TasksTable.isDeleted eq false) }
-                                .map {
-                                    TaskResponse(
-                                        id = it[TasksTable.id],
-                                        createdByUserId = it[TasksTable.createdByUserId],
-                                        assignedToUserId = it[TasksTable.assignedToUserId],
-                                        workspaceId = it[TasksTable.workspaceId],
-                                        taskName = it[TasksTable.taskName],
-                                        taskDescription = it[TasksTable.taskDescription],
-                                        status = it[TasksTable.status],
-                                        dueDate = it[TasksTable.dueDate],
-                                        priority = it[TasksTable.priority],
-                                        checklist = TaskExtras.decodeChecklist(it[TasksTable.checklist]),
-                                        labels = TaskExtras.decodeLabels(it[TasksTable.labels])
-                                    )
-                                }
-                        }
-                        if (workspaceTasks == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, workspaceTasks)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error retrieving tasks")
-                    }
-                }
-
-                get("/sync/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing structural context arguments.")
-                            return@get
-                        }
-
-                        val page = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            taskDeltaSync(workspaceIdParam, call.syncRequest())
-                        }
-                        if (page == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(page.nextCursor, page.reset)
-                            call.respond(HttpStatusCode.OK, page.rows)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("[Sync] Task sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
-                    }
-                }
-            }
-
-            route("/api/notes") {
-                post {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<NotesRequest>()
-                        val newNotes = dbQuery {
-                            if (!isMember(actingUserId, request.workspaceId)) {
-                                return@dbQuery null
-                            }
-
-                            // A WorkManager retry after a successful-but-lost create response re-sends
-                            // the same idempotencyKey — return the existing row instead of inserting again.
-                            val existing = request.idempotencyKey?.let { key ->
-                                NotesTable.selectAll().where { NotesTable.idempotencyKey eq key }.singleOrNull()
-                            }
-                            if (existing != null) {
-                                return@dbQuery NotesResponse(
-                                    id = existing[NotesTable.id],
-                                    userId = existing[NotesTable.userIdNotes],
-                                    notesName = existing[NotesTable.notesName],
-                                    workspaceId = existing[NotesTable.workspaceId],
-                                    description = existing[NotesTable.notesDescription],
-                                    isPinned = existing[NotesTable.isPinned]
-                                )
-                            }
-
-                            val insertedId = NotesTable.insert {
-                                it[NotesTable.userIdNotes] = actingUserId
-                                it[NotesTable.workspaceId] = request.workspaceId
-                                it[NotesTable.notesName] = request.notesName
-                                it[NotesTable.notesDescription] = request.description
-                                it[NotesTable.isDeleted] = false
-                                it[NotesTable.updatedAt] = System.currentTimeMillis()
-                                it[NotesTable.idempotencyKey] = request.idempotencyKey
-                            }[NotesTable.id]
-
-                            NotesResponse(
-                                id = insertedId,
-                                userId = actingUserId,
-                                notesName = request.notesName,
-                                workspaceId = request.workspaceId,
-                                description = request.description
-                            )
-                        }
-                        if (newNotes == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.Created, newNotes)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.BadRequest,
-                            "Database structure mismatch or missing foreign row."
-                        )
-                    }
-                }
-
-                post("/{noteId}/pin") {
-                    try {
-                        val noteIdParam = call.parameters["noteId"]?.toIntOrNull()
-                        if (noteIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@post
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<PinRequest>()
-                        val updated = dbQuery {
-                            val note = NotesTable.selectAll()
-                                .where { (NotesTable.id eq noteIdParam) and (NotesTable.isDeleted eq false) }
-                                .singleOrNull() ?: return@dbQuery -1
-                            if (!isMember(actingUserId, note[NotesTable.workspaceId])) {
-                                return@dbQuery -2
-                            }
-                            NotesTable.update({ NotesTable.id eq noteIdParam }) {
-                                it[NotesTable.isPinned] = request.pinned
-                                it[NotesTable.updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-                        when {
-                            updated == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updated > 0 -> call.respond(HttpStatusCode.OK, true)
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                put("/{noteId}") {
-                    try {
-                        val noteIdParam = call.parameters["noteId"]?.toIntOrNull()
-                        if (noteIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid noteId")
-                            return@put
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<NotesRequest>()
-
-                        val updateResult = dbQuery {
-                            val existingNote = NotesTable.selectAll().where { NotesTable.id eq noteIdParam }.singleOrNull()
-                                ?: return@dbQuery -1
-                            if (!isMember(actingUserId, existingNote[NotesTable.workspaceId]) ||
-                                !isMember(actingUserId, request.workspaceId)
-                            ) {
-                                return@dbQuery -2
-                            }
-                            NotesTable.update({ NotesTable.id eq noteIdParam }) {
-                                it[NotesTable.notesName] = request.notesName
-                                it[NotesTable.workspaceId] = request.workspaceId
-                                it[NotesTable.notesDescription] = request.description
-                                it[NotesTable.updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        when {
-                            updateResult == -1 -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
-                            updateResult == -2 -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                            updateResult > 0 -> call.respond(
-                                HttpStatusCode.OK,
-                                NotesResponse(
-                                    id = noteIdParam,
-                                    userId = actingUserId,
-                                    notesName = request.notesName,
-                                    workspaceId = request.workspaceId,
-                                    description = request.description
-                                )
-                            )
-                            else -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error updating note")
-                    }
-                }
-
-                delete("/{noteId}") {
-                    try {
-                        val noteIdParam = call.parameters["noteId"]?.toIntOrNull()
-
-                        if (noteIdParam == null) {
-                            call.respond(
-                                HttpStatusCode.BadRequest,
-                                "Missing or invalid noteId parameter"
-                            )
-                            return@delete
-                        }
-                        val actingUserId = call.authenticatedUserId()
-
-                        val updatedRows = dbQuery {
-                            val existingNote = NotesTable.selectAll().where { NotesTable.id eq noteIdParam }.singleOrNull()
-                                ?: return@dbQuery -1
-                            if (!isMember(actingUserId, existingNote[NotesTable.workspaceId])) {
-                                return@dbQuery -2
-                            }
-                            NotesTable.update({ NotesTable.id eq noteIdParam }) {
-                                it[NotesTable.isDeleted] = true
-                                it[NotesTable.updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        when {
-                            updatedRows == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updatedRows > 0 -> call.respond(HttpStatusCode.OK, true)
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                get("/workspace/{workspaceId}") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    if (workspaceId == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId")
-                        return@get
-                    }
-                    val actingUserId = call.authenticatedUserId()
-
-                    try {
-                        val workspaceNotes = dbQuery {
-                            if (!isMember(actingUserId, workspaceId)) {
-                                return@dbQuery null
-                            }
-                            NotesTable.selectAll()
-                                .where { (NotesTable.workspaceId eq workspaceId) and (NotesTable.isDeleted eq false) }
-                                .map {
-                                    NotesResponse(
-                                        id = it[NotesTable.id],
-                                        userId = it[NotesTable.userIdNotes],
-                                        workspaceId = it[NotesTable.workspaceId],
-                                        notesName = it[NotesTable.notesName],
-                                        description = it[NotesTable.notesDescription],
-                                        isPinned = it[NotesTable.isPinned]
-                                    )
-                                }
-                        }
-                        if (workspaceNotes == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, workspaceNotes)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error retrieving notes")
-                    }
-                }
-
-                get("/sync/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing structural context arguments.")
-                            return@get
-                        }
-
-                        val page = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            noteDeltaSync(workspaceIdParam, call.syncRequest())
-                        }
-                        if (page == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(page.nextCursor, page.reset)
-                            call.respond(HttpStatusCode.OK, page.rows)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("[Sync] Note sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
-                    }
-                }
-            }
-
-
-            route("/api/message") {
-                post {
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<MessageRequest>()
-                        val newMessage = dbQuery {
-                            if (!isMember(actingUserId, request.workspaceId)) {
-                                return@dbQuery null
-                            }
-                            val validReplyToId = request.replyToId?.takeIf { targetId ->
-                                MessageTable.selectAll().where {
-                                    (MessageTable.id eq targetId) and
-                                            (MessageTable.workspaceId eq request.workspaceId) and
-                                            (MessageTable.channelId eq request.channelId)
-                                }.count() > 0
-                            }
-                            val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
-                            val insertedId = MessageTable.insert {
-                                it[MessageTable.userId] = actingUserId
-                                it[MessageTable.workspaceId] = request.workspaceId
-                                it[MessageTable.channelId] = request.channelId
-                                it[MessageTable.userName] = request.userName
-                                it[MessageTable.content] = request.content
-                                it[MessageTable.replyToId] = validReplyToId
-                                it[MessageTable.mediaUrl] = validMediaUrl
-                                it[MessageTable.status] = request.status
-                                it[MessageTable.isDeleted] = false
-                                it[MessageTable.updatedAt] = System.currentTimeMillis()
-                            }[MessageTable.id]
-
-                            MessageResponse(
-                                id = insertedId,
-                                userId = actingUserId,
-                                workspaceId = request.workspaceId,
-                                channelId = request.channelId,
-                                userName = request.userName,
-                                content = request.content,
-                                status = request.status,
-                                replyToId = validReplyToId,
-                                mediaUrl = validMediaUrl
-                            )
-                        }
-                        if (newMessage == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.Created, newMessage)
-                            broadcastChannelMessageChange(newMessage.id)
-                            // ── Notification hooks ────────────────────────────────────────────
-                            val senderRow = dbQuery {
-                                UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                            }
-                            val senderName = senderRow?.get(UsersTable.username) ?: "Someone"
-
-                            val notificationBody = request.content.ifBlank { if (newMessage.mediaUrl != null) "📷 Photo" else "" }.take(200)
-                            // Parse @mentions from content
-                            val mentionedUsernames = MENTION_REGEX.findAll(request.content)
-                                .map { it.groupValues[1].lowercase() }.toSet()
-
-                            // Find all channel members (excluding sender)
-                            val channelMembers = dbQuery {
-                                (WorkspaceMembersTable innerJoin UsersTable)
-                                    .selectAll()
-                                    .where { WorkspaceMembersTable.workspaceId eq request.workspaceId }
-                                    .filter { it[UsersTable.id] != actingUserId }
-                                    .map { it[UsersTable.id] to it[UsersTable.username].lowercase() }
-                            }
-
-                            val mutedMemberIds = dbQuery {
-                                NotificationMutesTable
-                                    .select(NotificationMutesTable.userId)
-                                    .where {
-                                        (NotificationMutesTable.workspaceId eq request.workspaceId) and
-                                                ((NotificationMutesTable.channelId eq 0) or (NotificationMutesTable.channelId eq request.channelId))
-                                    }
-                                    .map { it[NotificationMutesTable.userId] }
-                                    .toSet()
-                            }
-
-                            channelMembers.forEach { (memberId, memberUsername) ->
-                                val isMentioned = memberUsername in mentionedUsernames
-                                if (!isMentioned && memberId in mutedMemberIds) return@forEach
-                                if (isMentioned) {
-                                    createAndPushNotification(
-                                        recipientId = memberId,
-                                        actorId = actingUserId,
-                                        type = "MENTION",
-                                        title = "$senderName mentioned you",
-                                        body = notificationBody,
-                                        workspaceId = request.workspaceId,
-                                        referenceId = newMessage.id
-                                    )
-                                } else {
-                                    createAndPushNotification(
-                                        recipientId = memberId,
-                                        actorId = actingUserId,
-                                        type = "CHANNEL_MESSAGE",
-                                        title = "New message from $senderName",
-                                        body = notificationBody,
-                                        workspaceId = request.workspaceId,
-                                        referenceId = newMessage.id
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        call.respond(
-                            HttpStatusCode.BadRequest,
-                            "Failed to insert message. Ensure parent references exist."
-                        )
-                    }
-                }
-
-                get("/workspace/{workspaceId}/channels/{channelId}") {
-                    val workspaceId = call.parameters["workspaceId"]?.toIntOrNull()
-                    val channelId = call.parameters["channelId"]?.toIntOrNull()
-                    val actingUserId = call.authenticatedUserId()
-
-                    if (workspaceId == null || channelId == null) {
-                        call.respond(
-                            HttpStatusCode.BadRequest,
-                            "Missing or invalid workspaceId or channelId"
-                        )
-                        return@get
-                    }
-
-                    val channelmessage = dbQuery {
-                        if (!isMember(actingUserId, workspaceId)) {
-                            return@dbQuery null
-                        }
-                        MessageTable.selectAll()
-                            .where {
-                                (MessageTable.workspaceId eq workspaceId) and
-                                        (MessageTable.channelId eq channelId) and
-                                        (MessageTable.isDeleted eq false)
-                            }
-                            .map {
-                                MessageResponse(
-                                    id = it[MessageTable.id],
-                                    userId = it[MessageTable.userId],
-                                    workspaceId = it[MessageTable.workspaceId],
-                                    channelId = it[MessageTable.channelId],
-                                    userName = it[MessageTable.userName],
-                                    content = it[MessageTable.content],
-                                    status = it[MessageTable.status],
-                                    replyToId = it[MessageTable.replyToId],
-                                    mediaUrl = it[MessageTable.mediaUrl],
-                                    pinnedAt = it[MessageTable.pinnedAt]
-                                )
-                            }
-                    }
-                    if (channelmessage == null) {
-                        call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                    } else {
-                        call.respond(HttpStatusCode.OK, channelmessage)
-                    }
-                }
-
-                put("/{messageId}") {
-                    try {
-                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
-                        if (messageIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid messageId")
-                            return@put
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<MessageRequest>()
-
-                        val updateResult = dbQuery {
-                            val existing = MessageTable.selectAll().where { MessageTable.id eq messageIdParam }.singleOrNull()
-                                ?: return@dbQuery -1
-                            if (existing[MessageTable.userId] != actingUserId) {
-                                return@dbQuery -2
-                            }
-                            if (!isMember(actingUserId, existing[MessageTable.workspaceId])) {
-                                return@dbQuery -2
-                            }
-                            MessageTable.update({ MessageTable.id eq messageIdParam }) {
-                                it[MessageTable.content] = request.content
-                                it[MessageTable.status] = request.status
-                                it[MessageTable.updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        when {
-                            updateResult == -1 -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
-                            updateResult == -2 -> call.respond(HttpStatusCode.Forbidden, "Only the sender can edit this message")
-                            updateResult > 0 -> {
-                                call.respond(
-                                    HttpStatusCode.OK,
-                                    MessageResponse(
-                                        id = messageIdParam,
-                                        userId = actingUserId,
-                                        workspaceId = request.workspaceId,
-                                        channelId = request.channelId,
-                                        userName = request.userName,
-                                        content = request.content,
-                                        status = request.status
-                                    )
-                                )
-                                broadcastChannelMessageChange(messageIdParam)
-                            }
-                            else -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error updating message")
-                    }
-                }
-
-                delete("/{messageId}/{userId}/{workspaceId}/{channelId}") {
-                    try {
-                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (messageIdParam == null || workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@delete
-                        }
-
-                        val updatedRows = dbQuery {
-                            MessageTable.update({
-                                (MessageTable.id eq messageIdParam) and
-                                        (MessageTable.userId eq actingUserId) and
-                                        (MessageTable.workspaceId eq workspaceIdParam) and
-                                        (MessageTable.channelId eq channelIdParam)
-                            }) {
-                                it[MessageTable.isDeleted] = true
-                                it[MessageTable.updatedAt] = System.currentTimeMillis()
-                            }
-                        }
-
-                        if (updatedRows > 0) {
-                            call.respond(HttpStatusCode.OK, true)
-                            broadcastChannelMessageChange(messageIdParam)
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                post("/{messageId}/pin") {
-                    try {
-                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
-                        if (messageIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@post
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<PinRequest>()
-                        val updated = dbQuery {
-                            val message = MessageTable.selectAll()
-                                .where { (MessageTable.id eq messageIdParam) and (MessageTable.isDeleted eq false) }
-                                .singleOrNull() ?: return@dbQuery -1
-                            if (!isMember(actingUserId, message[MessageTable.workspaceId])) {
-                                return@dbQuery -2
-                            }
-                            val now = System.currentTimeMillis()
-                            MessageTable.update({ MessageTable.id eq messageIdParam }) {
-                                it[MessageTable.pinnedAt] = if (request.pinned) now else null
-                                it[MessageTable.pinnedByUserId] = if (request.pinned) actingUserId else null
-                                it[MessageTable.updatedAt] = now
-                            }
-                        }
-                        when {
-                            updated == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updated > 0 -> {
-                                call.respond(HttpStatusCode.OK, true)
-                                broadcastChannelMessageChange(messageIdParam)
-                            }
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-
-                post("/read/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, false)
-                            return@post
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<ChannelReadRequest>()
-
-                        val event = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
-                            val messageExists = MessageTable.selectAll().where {
-                                (MessageTable.id eq request.lastReadMessageId) and
-                                        (MessageTable.workspaceId eq workspaceIdParam) and
-                                        (MessageTable.channelId eq channelIdParam)
-                            }.count() > 0
-                            if (!messageExists) return@dbQuery null
-                            val existing = ChannelReadStateTable.selectAll().where {
-                                (ChannelReadStateTable.userId eq actingUserId) and (ChannelReadStateTable.channelId eq channelIdParam)
-                            }.singleOrNull()
-                            val previous = existing?.get(ChannelReadStateTable.lastReadMessageId) ?: 0
-                            if (request.lastReadMessageId <= previous) return@dbQuery null
-                            val now = System.currentTimeMillis()
-                            if (existing == null) {
-                                ChannelReadStateTable.insert {
-                                    it[ChannelReadStateTable.userId] = actingUserId
-                                    it[ChannelReadStateTable.channelId] = channelIdParam
-                                    it[ChannelReadStateTable.lastReadMessageId] = request.lastReadMessageId
-                                    it[ChannelReadStateTable.updatedAt] = now
-                                }
-                            } else {
-                                ChannelReadStateTable.update({
-                                    (ChannelReadStateTable.userId eq actingUserId) and (ChannelReadStateTable.channelId eq channelIdParam)
-                                }) {
-                                    it[ChannelReadStateTable.lastReadMessageId] = request.lastReadMessageId
-                                    it[ChannelReadStateTable.updatedAt] = now
-                                }
-                            }
-                            val userName = UsersTable.selectAll().where { UsersTable.id eq actingUserId }
-                                .singleOrNull()?.get(UsersTable.username) ?: "Someone"
-                            ChannelReadState(
-                                workspaceId = workspaceIdParam,
-                                channelId = channelIdParam,
-                                userId = actingUserId,
-                                userName = userName,
-                                lastReadMessageId = request.lastReadMessageId
-                            ) to workspaceMemberIds(workspaceIdParam)
-                        }
-
-                        call.respond(HttpStatusCode.OK, true)
-                        if (event != null) {
-                            val json = Json.encodeToString(event.first)
-                            event.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.BadRequest, false)
-                    }
-                }
-
-                get("/read/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
-                            return@get
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val states = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
-                            (ChannelReadStateTable innerJoin UsersTable)
-                                .selectAll()
-                                .where { ChannelReadStateTable.channelId eq channelIdParam }
-                                .map {
-                                    ChannelReadState(
-                                        workspaceId = workspaceIdParam,
-                                        channelId = channelIdParam,
-                                        userId = it[ChannelReadStateTable.userId],
-                                        userName = it[UsersTable.username],
-                                        lastReadMessageId = it[ChannelReadStateTable.lastReadMessageId]
-                                    )
-                                }
-                        }
-                        if (states == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, states)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Read state error")
-                    }
-                }
-
-                get("/pinned/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
-                            return@get
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val pinned = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            MessageTable.selectAll()
-                                .where {
-                                    (MessageTable.workspaceId eq workspaceIdParam) and
-                                            (MessageTable.channelId eq channelIdParam) and
-                                            (MessageTable.isDeleted eq false) and
-                                            MessageTable.pinnedAt.isNotNull()
-                                }
-                                .orderBy(MessageTable.pinnedAt, SortOrder.DESC)
-                                .limit(MAX_HISTORY_PAGE)
-                                .map { it.toMessageSyncResponse() }
-                        }
-                        if (pinned == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, pinned)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Pinned Error")
-                    }
-                }
-
-                post("/{messageId}/reactions") {
-                    try {
-                        val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
-                        if (messageIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid messageId")
-                            return@post
-                        }
-                        val actingUserId = call.authenticatedUserId()
-                        val request = call.receive<ChannelReactionRequest>()
-                        val emoji = request.emoji.trim()
-                        if (emoji.isEmpty() || emoji.length > 16) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid emoji")
-                            return@post
-                        }
-
-                        val summary = dbQuery {
-                            val message = MessageTable.selectAll()
-                                .where { (MessageTable.id eq messageIdParam) and (MessageTable.isDeleted eq false) }
-                                .singleOrNull() ?: return@dbQuery null
-                            val workspaceId = message[MessageTable.workspaceId]
-                            if (!isMember(actingUserId, workspaceId)) {
-                                return@dbQuery null
-                            }
-                            if (request.add) {
-                                ChannelReactionsTable.insertIgnore {
-                                    it[ChannelReactionsTable.messageId] = messageIdParam
-                                    it[ChannelReactionsTable.userId] = actingUserId
-                                    it[ChannelReactionsTable.emoji] = emoji
-                                }
-                            } else {
-                                ChannelReactionsTable.deleteWhere {
-                                    (ChannelReactionsTable.messageId eq messageIdParam) and
-                                            (ChannelReactionsTable.userId eq actingUserId) and
-                                            (ChannelReactionsTable.emoji eq emoji)
-                                }
-                            }
-                            channelReactionSummary(messageIdParam, message[MessageTable.channelId], workspaceId) to
-                                    workspaceMemberIds(workspaceId)
-                        }
-
-                        if (summary == null) {
-                            call.respond(HttpStatusCode.NotFound, "Message not found")
-                            return@post
-                        }
-                        call.respond(HttpStatusCode.OK, summary.first)
-                        if (summary.first.workspaceId > 0) {
-                            val json = Json.encodeToString(summary.first)
-                            summary.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Reaction failed")
-                    }
-                }
-
-                get("/reactions/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
-                            return@get
-                        }
-                        val fromId = call.request.queryParameters["fromId"]?.toIntOrNull() ?: 0
-                        val actingUserId = call.authenticatedUserId()
-
-                        val summaries = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            (ChannelReactionsTable innerJoin MessageTable)
-                                .selectAll()
-                                .where {
-                                    (MessageTable.workspaceId eq workspaceIdParam) and
-                                            (MessageTable.channelId eq channelIdParam) and
-                                            (MessageTable.isDeleted eq false) and
-                                            (MessageTable.id greaterEq fromId)
-                                }
-                                .groupBy { it[ChannelReactionsTable.messageId] }
-                                .map { (messageId, rows) ->
-                                    ChannelReactionSummary(
-                                        messageId = messageId,
-                                        channelId = channelIdParam,
-                                        workspaceId = workspaceIdParam,
-                                        reactors = rows.groupBy({ it[ChannelReactionsTable.emoji] }, { it[ChannelReactionsTable.userId] })
-                                    )
-                                }
-                        }
-                        if (summaries == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, summaries)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Reactions Error")
-                    }
-                }
-
-                get("/history/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or channelId")
-                            return@get
-                        }
-                        val beforeId = call.request.queryParameters["before"]?.toIntOrNull()
-                        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, MAX_HISTORY_PAGE) ?: DEFAULT_HISTORY_PAGE
-                        val actingUserId = call.authenticatedUserId()
-
-                        val result = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            // Read under the same snapshot as the page, so a client loading its first
-                            // page can start cursor sync from here without missing anything in between.
-                            val snapshot = currentSyncSnapshot()
-                            val rows = MessageTable.selectAll()
-                                .where {
-                                    var condition = (MessageTable.workspaceId eq workspaceIdParam) and
-                                            (MessageTable.channelId eq channelIdParam) and
-                                            (MessageTable.isDeleted eq false)
-                                    if (beforeId != null) {
-                                        condition = condition and (MessageTable.id less beforeId)
-                                    }
-                                    condition
-                                }
-                                .orderBy(MessageTable.id, SortOrder.DESC)
-                                .limit(limit)
-                                .map { it.toMessageSyncResponse() }
-                            rows to snapshot.xmin
-                        }
-                        if (result == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(result.second)
-                            call.respond(HttpStatusCode.OK, result.first)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "History Error")
-                    }
-                }
-
-                get("/sync/{workspaceId}/{channelId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val channelIdParam = call.parameters["channelId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (workspaceIdParam == null || channelIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing structural parameters")
-                            return@get
-                        }
-
-                        val page = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            messageDeltaSync(workspaceIdParam, channelIdParam, call.syncRequest())
-                        }
-                        if (page == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(page.nextCursor, page.reset)
-                            call.respond(HttpStatusCode.OK, page.rows)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("[Sync] Message sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Sync Error")
-                    }
-                }
-            }
-
-            route("/api/file") {
-                post {
-                    var staged: File? = null
-                    try {
-                        val actingUserId = call.authenticatedUserId()
-                        if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
-                        val multipart = call.receiveMultipart()
-                        var workspaceId: Int? = null
-                        var userName: String? = null
-                        var localpath: String? = null
-
-                        var fileName: String? = null
-                        var contentType: String? = null
-
-                        // The client always sends workspaceId before the file part (see FileApiService.uploadFile's
-                        // formData order) — checked as soon as it arrives so a non-member's file bytes are never
-                        // buffered at all, instead of paying that cost before finding out the request is rejected.
-                        //
-                        // Defence-in-depth: if a malicious client reorders parts and sends file bytes BEFORE
-                        // workspaceId, the file data is disposed immediately (not buffered) and the request is
-                        // rejected after all parts have been consumed, closing a potential memory-DoS window.
-                        var isForbidden = false
-                        var membershipVerified = false
-
-                        multipart.forEachPart { part ->
-                            when (part) {
-                                is PartData.FormItem -> {
-                                    when (part.name) {
-                                        "workspaceId" -> {
-                                            workspaceId = part.value.toIntOrNull()
-                                            workspaceId?.let { wsId ->
-                                                if (!dbQuery { isMember(actingUserId, wsId) }) {
-                                                    isForbidden = true
-                                                } else {
-                                                    membershipVerified = true
-                                                }
-                                            }
-                                        }
-                                        "userName" -> userName = part.value
-                                        "localpath" -> localpath = part.value
-                                    }
-                                    part.dispose()
-                                }
-                                is PartData.FileItem -> {
-                                    if (isForbidden || !membershipVerified) {
-                                        // Either explicitly forbidden or workspaceId hasn't arrived yet —
-                                        // refuse to buffer potentially 25 MB of unauthorized file data.
-                                        part.dispose()
-                                    } else {
-                                        // File(...).name strips any directory components (e.g. "../../etc/passwd" -> "passwd"),
-                                        // so a malicious client-supplied filename can't escape uploadDir below.
-                                        fileName = part.originalFileName?.let { File(it).name }?.ifBlank { null }
-                                        contentType = part.contentType?.toString()
-                                        // Streamed to disk with a hard cap regardless of what Content-Length claims
-                                        // (chunked transfer has none) — heap use stays flat whatever the file size.
-                                        if (staged == null) staged = part.stageToTempFile(MAX_UPLOAD_BYTES)
-                                        part.dispose()
-                                    }
-                                }
-                                else -> part.dispose()
-                            }
-                        }
-
-                        if (isForbidden) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                            return@post
-                        }
-
-                        val stagedFile = staged
-                        if (workspaceId == null || userName == null || stagedFile == null || fileName == null) {
-                            val missingFields = mutableListOf<String>()
-                            if (workspaceId == null) missingFields.add("workspaceId")
-                            if (userName == null) missingFields.add("userName")
-                            if (stagedFile == null) missingFields.add("fileBytes")
-                            if (fileName == null) missingFields.add("fileName")
-
-                            call.respond(HttpStatusCode.BadRequest, "Missing multipart assets: ${missingFields.joinToString(", ")}")
-                            return@post
-                        }
-
-                        val uniqueFileName = "${UUID.randomUUID()}_$fileName"
-                        val finalMimeType = contentType ?: "application/octet-stream"
-                        val fileSize = stagedFile.length()
-
-                        val cloudLocation = if (CloudinaryService.isConfigured) {
-                            try {
-                                CloudinaryService.uploadRawFile(
-                                    file = stagedFile,
-                                    folder = "workspace_files/$workspaceId",
-                                    publicId = uniqueFileName.replace(Regex("[^A-Za-z0-9._-]"), "_"),
-                                    fileName = fileName!!,
-                                    contentType = finalMimeType
-                                )
-                            } catch (e: Exception) {
-                                logger.warn("[FileUpload] Cloudinary upload failed, storing on local disk", e)
-                                null
-                            }
-                        } else {
-                            null
-                        }
-
-                        val generatedFileLocation = cloudLocation ?: run {
-                            val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
-                            if (!uploadDir.exists()) {
-                                uploadDir.mkdirs()
-                            }
-                            val physicalFile = File(uploadDir, uniqueFileName)
-                            // A rename when the temp dir shares the volume, a copy-then-delete otherwise.
-                            java.nio.file.Files.move(
-                                stagedFile.toPath(), physicalFile.toPath(),
-                                java.nio.file.StandardCopyOption.REPLACE_EXISTING
-                            )
-                            physicalFile.absolutePath
-                        }
-
-                        val scheme = call.request.headers["X-Forwarded-Proto"] ?: "http"
-                        val host = call.request.headers["Host"] ?: "127.0.0.1:8080"
-                        val generatedUrl = "$scheme://$host/api/file/download/$uniqueFileName"
-                        val currentTimeMil = System.currentTimeMillis()
-
-                        val insertedId = try {
-                            dbQuery {
-                                LocalFilesTable.insert {
-                                    it[LocalFilesTable.userId] = actingUserId
-                                    it[LocalFilesTable.workspaceId] = workspaceId!!
-                                    it[LocalFilesTable.userName] = userName!!
-                                    it[LocalFilesTable.url] = generatedUrl
-                                    it[LocalFilesTable.storageKey] = uniqueFileName
-                                    it[LocalFilesTable.mimeType] = finalMimeType
-                                    it[LocalFilesTable.localPath] = localpath
-                                    it[LocalFilesTable.fileName] = fileName!!
-                                    it[LocalFilesTable.sizeBytes] = fileSize
-                                    it[LocalFilesTable.fileLocation] = generatedFileLocation
-                                    it[LocalFilesTable.updatedAt] = currentTimeMil
-                                    it[LocalFilesTable.isDeleted] = false
-                                }[LocalFilesTable.id]
-                            }
-                        } catch (e: Exception) {
-                            // No row will ever point at the stored copy — remove it instead of leaking it.
-                            if (CloudinaryService.isCloudinaryUrl(generatedFileLocation)) {
-                                CloudinaryService.deleteRawFile(generatedFileLocation)
-                            } else {
-                                File(generatedFileLocation).delete()
-                            }
-                            throw e
-                        }
-
-                        val response = FileResponse(
-                            id = insertedId,
-                            userId = actingUserId,
-                            workspaceId = workspaceId!!,
-                            userName = userName!!,
-                            url = generatedUrl,
-                            mimeType = finalMimeType,
-                            localpath = localpath,
-                            fileName = fileName!!,
-                            sizebytes = fileSize,
-                            fileLocation = generatedFileLocation
-                        )
-
-                        call.respond(HttpStatusCode.Created, response)
-                    } catch (e: UploadTooLargeException) {
-                        call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
-                    } catch (e: Exception) {
-                        logger.error("[FileUpload] Upload failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "File upload failed")
-                    } finally {
-                        // Already gone if it was moved into the upload dir; otherwise this is the temp copy.
-                        staged?.delete()
-                    }
-                }
-
-                get("/workspace/{workspaceId}") {
-                    try {
-                        val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                        val actingUserId = call.authenticatedUserId()
-                        if (workspaceIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
-                            return@get
-                        }
-
-                        val filesList = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            LocalFilesTable.selectAll().where {
-                                (LocalFilesTable.workspaceId eq workspaceIdParam) and (LocalFilesTable.isDeleted eq false)
-                            }.map {
-                                FileResponse(
-                                    id = it[LocalFilesTable.id],
-                                    userId = it[LocalFilesTable.userId],
-                                    workspaceId = it[LocalFilesTable.workspaceId],
-                                    userName = it[LocalFilesTable.userName],
-                                    url = it[LocalFilesTable.url],
-                                    mimeType = it[LocalFilesTable.mimeType],
-                                    localpath = it[LocalFilesTable.localPath],
-                                    fileName = it[LocalFilesTable.fileName],
-                                    sizebytes = it[LocalFilesTable.sizeBytes],
-                                    fileLocation = it[LocalFilesTable.fileLocation]
-                                )
-                            }
-                        }
-                        if (filesList == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.respond(HttpStatusCode.OK, filesList)
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error retrieving files list")
-                    }
-                }
-
-                get("/updates") {
-                    try {
-                        val workspaceIdParam = call.request.queryParameters["workspaceId"]?.toIntOrNull()
-                        val syncRequest = call.syncRequest(sinceParam = "lastSyncTime")
-                        val hasLegacyWatermark = call.request.queryParameters["lastSyncTime"]?.toLongOrNull() != null
-                        val actingUserId = call.authenticatedUserId()
-
-                        if (workspaceIdParam == null || (syncRequest.cursor == null && !hasLegacyWatermark)) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or lastSyncTime tracking values.")
-                            return@get
-                        }
-
-                        val page = dbQuery {
-                            if (!isMember(actingUserId, workspaceIdParam)) {
-                                return@dbQuery null
-                            }
-                            fileDeltaSync(workspaceIdParam, syncRequest)
-                        }
-                        if (page == null) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                        } else {
-                            call.appendSyncHeaders(page.nextCursor, page.reset)
-                            call.respond(HttpStatusCode.OK, page.rows)
-                        }
-                    } catch (e: Exception) {
-                        logger.error("[Sync] File sync failed", e)
-                        call.respond(HttpStatusCode.InternalServerError, "Error fetching delta updates loop context.")
-                    }
-                }
-
-                get("/download/{fileName}") {
-                    try {
-                        val rawFileNameParam = call.parameters["fileName"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing filename")
-                        // Strip any directory components a crafted path segment might smuggle in (e.g. "..%2F..%2Fetc%2Fpasswd").
-                        val fileNameParam = File(rawFileNameParam).name
-                        if (fileNameParam.isBlank()) {
-                            return@get call.respond(HttpStatusCode.BadRequest, "Invalid filename")
-                        }
-                        val actingUserId = call.authenticatedUserId()
-
-                        val fileRow = dbQuery {
-                            LocalFilesTable.selectAll()
-                                .where {
-                                    (LocalFilesTable.storageKey eq fileNameParam) and (LocalFilesTable.isDeleted eq false)
-                                }
-                                .singleOrNull()
-                        }
-
-                        if (fileRow == null) {
-                            call.respond(HttpStatusCode.NotFound, "File not found")
-                            return@get
-                        }
-
-                        val allowed = dbQuery { isMember(actingUserId, fileRow[LocalFilesTable.workspaceId]) }
-                        if (!allowed) {
-                            call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                            return@get
-                        }
-
-                        val storedLocation = fileRow[LocalFilesTable.fileLocation]
-                        if (CloudinaryService.isCloudinaryUrl(storedLocation)) {
-                            // Generate a short-lived signed URL and redirect — avoids piping bytes
-                            // through the server. The client (or CDN) fetches directly from Cloudinary.
-                            // This cuts server egress bandwidth to ~0 for cloud-stored files.
-                            val signedUrl = CloudinaryService.signedDownloadUrl(
-                                originalUrl = storedLocation,
-                                expiresInSeconds = 1800  // 30 minutes — ample for a download to start
-                            )
-                            call.respondRedirect(signedUrl, permanent = false)
-                            return@get
-                        }
-
-                        val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload").canonicalFile
-                        val file = File(uploadDir, fileNameParam).canonicalFile
-                        if (!file.path.startsWith(uploadDir.path + File.separator)) {
-                            return@get call.respond(HttpStatusCode.BadRequest, "Invalid filename")
-                        }
-
-                        if (file.exists()) {
-                            call.respondFile(file)
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, "File not found on server")
-                        }
-                    } catch (e: Exception) {
-                        call.respond(HttpStatusCode.InternalServerError, "Error downloading file")
-                    }
-                }
-
-                delete("/{fileId}") {
-                    try {
-                        val fileIdParam = call.parameters["fileId"]?.toLongOrNull()
-                        if (fileIdParam == null) {
-                            call.respond(HttpStatusCode.BadRequest, "Missing or invalid fileId parameter")
-                            return@delete
-                        }
-                        val actingUserId = call.authenticatedUserId()
-
-                        val (updatedRows, fileLocation) = dbQuery {
-                            val fileRow = LocalFilesTable.selectAll().where { LocalFilesTable.id eq fileIdParam }.singleOrNull()
-                                ?: return@dbQuery -1 to null
-                            if (!isMember(actingUserId, fileRow[LocalFilesTable.workspaceId])) {
-                                return@dbQuery -2 to null
-                            }
-                            val updated = LocalFilesTable.update({ LocalFilesTable.id eq fileIdParam }) {
-                                it[LocalFilesTable.isDeleted] = true
-                                it[LocalFilesTable.updatedAt] = System.currentTimeMillis()
-                            }
-                            updated to fileRow[LocalFilesTable.fileLocation]
-                        }
-
-                        when {
-                            updatedRows == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                            updatedRows > 0 -> {
-                                // Best-effort physical cleanup — the row is already soft-deleted either way.
-                                call.respond(HttpStatusCode.OK, true)
-                                fileLocation?.let { location ->
-                                    if (CloudinaryService.isCloudinaryUrl(location)) {
-                                        CloudinaryService.deleteRawFile(location)
-                                    } else {
-                                        runCatching { File(location).delete() }
-                                    }
-                                }
-                            }
-                            else -> call.respond(HttpStatusCode.NotFound, false)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        call.respond(HttpStatusCode.InternalServerError, false)
-                    }
-                }
-            }
-
-            // ── DM Media Upload ────────────────────────────────────────────────────────
-            get("/api/link-preview") {
-                val url = call.request.queryParameters["url"]?.trim()
-                if (url.isNullOrEmpty() || url.length > 2048) {
-                    call.respond(HttpStatusCode.BadRequest, "Missing or invalid url")
-                    return@get
-                }
-                val preview = com.collabsphere.util.LinkPreviewService.preview(url)
-                if (preview == null) {
-                    call.respond(HttpStatusCode.NoContent)
-                } else {
-                    call.respond(HttpStatusCode.OK, preview)
-                }
-            }
-
-            get("/api/dm/history/{workspaceId}/{partnerId}") {
-                try {
-                    val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
-                    val partnerIdParam = call.parameters["partnerId"]?.toIntOrNull()
-                    if (workspaceIdParam == null || partnerIdParam == null) {
-                        call.respond(HttpStatusCode.BadRequest, "Missing or invalid workspaceId or partnerId")
-                        return@get
-                    }
-                    val beforeId = call.request.queryParameters["before"]?.toIntOrNull()
-                    val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, MAX_HISTORY_PAGE) ?: DEFAULT_HISTORY_PAGE
-                    val actingUserId = call.authenticatedUserId()
-
-                    val page = dbQuery {
-                        DirectMessagesTable.selectAll()
-                            .where {
-                                var condition = (DirectMessagesTable.workspaceId eq workspaceIdParam) and
-                                    (DirectMessagesTable.isDeleted eq false) and (
-                                    ((DirectMessagesTable.senderId eq actingUserId) and (DirectMessagesTable.receiverId eq partnerIdParam)) or
-                                        ((DirectMessagesTable.senderId eq partnerIdParam) and (DirectMessagesTable.receiverId eq actingUserId))
-                                    )
-                                if (beforeId != null) {
-                                    condition = condition and (DirectMessagesTable.id less beforeId)
-                                }
-                                condition
-                            }
-                            .orderBy(DirectMessagesTable.id, SortOrder.DESC)
-                            .limit(limit)
-                            .map { it.toDmHistoryDto() }
-                    }
-                    call.respond(HttpStatusCode.OK, page)
-                } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, "History Error")
-                }
-            }
-
-            // ── DM delta sync: edits, read state and deletions (as tombstones) a device missed ──
-            get("/api/dm/sync") {
-                try {
-                    val actingUserId = call.authenticatedUserId()
-                    val cursor = call.request.queryParameters["cursor"]?.toLongOrNull()?.takeIf { it >= 0 }
-                    val knownUpToId = call.request.queryParameters["sinceId"]?.toIntOrNull() ?: 0
-                    val page = dbQuery { dmDeltaSync(actingUserId, cursor, knownUpToId) }
-                    call.appendSyncHeaders(page.nextCursor, page.reset)
-                    call.respond(HttpStatusCode.OK, page.rows)
-                } catch (e: Exception) {
-                    logger.error("[Sync] DM sync failed", e)
-                    call.respond(HttpStatusCode.InternalServerError, "Sync Error")
-                }
-            }
-
-            post("/api/media/upload") {
-                val actingUserId = call.authenticatedUserId()
-                var staged: File? = null
-                try {
-                    // Checked before anything is read: a declared oversize body is refused outright, and an
-                    // undeclared (chunked) one is cut off by stageToTempFile the moment it passes the cap.
-                    if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
-                    val multipart = call.receiveMultipart()
-
-                    multipart.forEachPart { part ->
-                        if (part is PartData.FileItem && staged == null) {
-                            staged = part.stageToTempFile(MAX_UPLOAD_BYTES)
-                        }
-                        part.dispose()
-                    }
-
-                    val mediaFile = staged ?: return@post call.respond(HttpStatusCode.BadRequest, "No file provided")
-
-                    val publicId = "dm_${actingUserId}_${System.currentTimeMillis()}"
-                    val uploadedUrl = CloudinaryService.uploadAvatar(mediaFile, publicId)
-                    call.respond(HttpStatusCode.OK, mapOf("url" to uploadedUrl))
-                } catch (e: UploadTooLargeException) {
-                    call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
-                } catch (e: Exception) {
-                    logger.error("[MediaUpload] Upload failed", e)
-                    call.respond(HttpStatusCode.InternalServerError, "Upload failed")
-                } finally {
-                    staged?.delete()
-                }
-            }
+            // â”€â”€ DMs & Media â”€â”€ extracted to plugins/routes/DmRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            dmRoutes()
 
             route("/ws") {
                 webSocket("/dm") {
@@ -3892,7 +1241,7 @@ fun Application.configureRouting() {
                         ?.split(",")
                         ?.any { it.trim() == "channel" } == true
 
-                    // Register session — passes supportsChannelEvents so only one registration happens
+                    // Register session â€” passes supportsChannelEvents so only one registration happens
                     WebSocketBroker.addSession(userIdParam, this, supportsChannelEvents = supportsChannelEvents)
                     var cachedUsername: String? = null
 
@@ -3937,7 +1286,7 @@ fun Application.configureRouting() {
                         }
                         if (sinceIdParam > 0) {
                             // Catch up on everything newer than what the device holds, a bounded page at a
-                            // time — a device offline for months shouldn't pull its whole backlog into memory.
+                            // time â€” a device offline for months shouldn't pull its whole backlog into memory.
                             var afterId = sinceIdParam
                             while (this.isActive) {
                                 val page = dbQuery { dmCatchUpPage(userIdParam.toInt(), afterId, DM_CATCH_UP_PAGE) }
@@ -4021,7 +1370,7 @@ fun Application.configureRouting() {
                                                 this.send(Frame.Text(senderJson))
                                             }
 
-                                            // ── Notification: DM received ─────────────────────────────────
+                                            // â”€â”€ Notification: DM received â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                                             val senderUsername = dbQuery {
                                                 UsersTable.selectAll()
                                                     .where { UsersTable.id eq savedMessageDto.senderId }
@@ -4041,7 +1390,7 @@ fun Application.configureRouting() {
                                         val isDelete = dmDto.action == "DELETE_MESSAGE"
                                         val messageId = dmDto.id
                                         // Only the original sender may edit/delete, and the fan-out target is always the stored
-                                        // recipient — never the client-supplied receiverId, which could point at anyone.
+                                        // recipient â€” never the client-supplied receiverId, which could point at anyone.
                                         val isValidRequest = messageId != null && messageId != 0 &&
                                             (isDelete || dmDto.content.length <= DmRules.MAX_CONTENT_LENGTH)
                                         val targetReceiverId: Int? = if (!isValidRequest) null else dbQuery {
@@ -4179,7 +1528,7 @@ fun Application.configureRouting() {
                     } catch (_: Exception) {
                     } finally {
                         WebSocketBroker.removeSession(userIdParam, this)
-                        // No separate channelCapableSessions.remove needed — removeDmSession delegates to WebSocketBroker.removeSession which handles it
+                        // No separate channelCapableSessions.remove needed â€” removeDmSession delegates to WebSocketBroker.removeSession which handles it
 
                         // If no other live sessions remain for this user, broadcast USER_OFFLINE to teammates
                         val hasRemainingSessions = WebSocketBroker.isUserConnected(userIdParam)

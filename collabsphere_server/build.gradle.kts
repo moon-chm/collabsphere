@@ -55,6 +55,7 @@ dependencies {
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
     implementation("io.ktor:ktor-server-rate-limit:${ktor_version}")
+    implementation("io.ktor:ktor-server-forwarded-header:${ktor_version}")
 
     // ── Optional Redis (graceful degradation — disabled when REDIS_URL is absent) ──
     // Used for: WebSocket cross-instance fan-out, membership cache, workspace member cache

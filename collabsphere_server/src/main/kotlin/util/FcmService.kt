@@ -132,6 +132,9 @@ object FcmService {
         }
     }
 
+    private val fcmSuccessCounter = io.micrometer.core.instrument.Metrics.counter("fcm.push.success")
+    private val fcmFailureCounter = io.micrometer.core.instrument.Metrics.counter("fcm.push.failure")
+
     /**
      * Builds and sends an FCM message with the given [data] to each token in [tokens].
      * Returns the count of successfully delivered messages.
@@ -149,13 +152,16 @@ object FcmService {
                     .build()
                 FirebaseMessaging.getInstance().send(msg)
                 sent++
+                fcmSuccessCounter.increment()
             } catch (e: com.google.firebase.messaging.FirebaseMessagingException) {
+                fcmFailureCounter.increment()
                 if (e.messagingErrorCode?.name == "UNREGISTERED") {
                     logger.info("[FCM] Stale token (UNREGISTERED) skipped: ${token.take(20)}...")
                 } else {
                     logger.error("[FCM] Failed to send to token ${token.take(20)}...: ${e.message}")
                 }
             } catch (e: Exception) {
+                fcmFailureCounter.increment()
                 logger.error("[FCM] Unexpected error for token ${token.take(20)}...: ${e.message}")
             }
         }
