@@ -29,6 +29,7 @@ internal object MembershipCache {
         return try {
             RedisFactory.async?.get(redisKey(userId, workspaceId))?.get()?.let { it == "1" }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.debug("[MembershipCache] Redis get failed: ${e.message}")
             null
         }
@@ -43,6 +44,7 @@ internal object MembershipCache {
         try {
             RedisFactory.async?.setex(redisKey(userId, workspaceId), TTL_SECONDS, if (isMember) "1" else "0")
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.debug("[MembershipCache] Redis set failed: ${e.message}")
         }
     }
@@ -56,6 +58,7 @@ internal object MembershipCache {
         try {
             RedisFactory.async?.del(redisKey(userId, workspaceId))
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.debug("[MembershipCache] Redis del failed: ${e.message}")
         }
     }
@@ -72,6 +75,7 @@ internal object MembershipCache {
             val keys = RedisFactory.async?.keys("mbr:*:$workspaceId")?.get() ?: return
             if (keys.isNotEmpty()) RedisFactory.async?.del(*keys.toTypedArray())
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.debug("[MembershipCache] Redis invalidateWorkspace failed: ${e.message}")
         }
     }

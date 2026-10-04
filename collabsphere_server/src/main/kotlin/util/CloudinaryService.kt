@@ -239,6 +239,7 @@ object CloudinaryService {
                 else -> originalUrl
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             originalUrl   // safe fallback: unsigned URL still works for public assets
         }
     }

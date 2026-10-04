@@ -98,6 +98,7 @@ object GitHubActionService {
                         it[this.createdAt] = now
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     // Unique constraint violation means another thread just inserted it
                     return@newSuspendedTransaction GitHubActionResponse(
                         GitHubActionResultStatus.RateLimited, 
@@ -110,6 +111,7 @@ object GitHubActionService {
             val result = try {
                 executeGitHubMutation(token, parsed, request, repoRow[GitHubRepositoriesTable.id])
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 GitHubActionResponse(
                     GitHubActionResultStatus.UnknownFailure, 
                     "Network error occurred"

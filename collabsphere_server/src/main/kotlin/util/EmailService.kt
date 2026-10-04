@@ -237,6 +237,7 @@ object EmailService {
                 if (ok) return@withContext true
                 logger.warn("[EmailService] Gmail API returned unsuccessful response, falling back...")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[EmailService] Gmail API failed, falling back...", e)
             }
         }
@@ -248,6 +249,7 @@ object EmailService {
                 if (ok) return@withContext true
                 logger.warn("[EmailService] SMTP dispatch failed, falling back...")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[EmailService] SMTP failed, falling back...", e)
             }
         }

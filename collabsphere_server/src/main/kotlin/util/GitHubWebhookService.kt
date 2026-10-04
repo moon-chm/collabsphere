@@ -75,6 +75,7 @@ object GitHubWebhookService {
             val expected = "sha256=" + mac.doFinal(payload).joinToString("") { "%02x".format(it) }
             MessageDigest.isEqual(expected.toByteArray(), signatureHeader.toByteArray())
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Webhook signature check failed", e)
             false
         }
@@ -84,6 +85,7 @@ object GitHubWebhookService {
         val payload = try {
             json.parseToJsonElement(payloadJson).jsonObject
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to parse webhook JSON", e)
             return emptyList()
         }
@@ -180,6 +182,7 @@ object GitHubWebhookService {
         val issue = try {
             json.decodeFromJsonElement(GitHubIssueInfo.serializer(), issueJson)
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to parse issue payload", e)
             return emptyList()
         }
@@ -210,6 +213,7 @@ object GitHubWebhookService {
                         GitHubAssigneeSyncService.refreshIdentityMappings(workspaceId)
                         GitHubAssigneeSyncService.syncFromGitHub(repositoryId, record.number, assigneeIds, workspaceId)
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.warn("[GitHub] Assignee sync from GitHub failed", e)
                     }
                 }

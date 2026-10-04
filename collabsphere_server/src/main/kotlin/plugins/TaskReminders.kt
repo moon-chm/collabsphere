@@ -38,6 +38,7 @@ fun Application.startTaskReminderScheduler() {
             try {
                 sendDueTaskReminders(System.currentTimeMillis())
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[TaskReminders] Reminder run failed", e)
             }
             delay(REMINDER_CHECK_INTERVAL_MS)

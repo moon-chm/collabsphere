@@ -415,6 +415,7 @@ object GitHubSyncManager {
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[GitHub] Sync failed for $repoFullName", e)
                 newSuspendedTransaction(Dispatchers.IO) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {

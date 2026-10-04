@@ -117,6 +117,7 @@ object DatabaseFactory {
                 exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (lower(email))")
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error(
                 "[DatabaseFactory] Could not create unique index on lower(users.email) — duplicate emails exist " +
                     "and must be merged manually. Registration still checks for duplicates, but concurrent sign-ups can race.",
@@ -165,6 +166,7 @@ object DatabaseFactory {
                     username = dbUser
                     password = dbPass
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     logger.error("Failed to parse $envUrlKey, falling back to raw string: ${e.message}")
                     jdbcUrl = rawDatabaseUrl
                 }

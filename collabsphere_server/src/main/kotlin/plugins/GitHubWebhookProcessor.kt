@@ -45,6 +45,7 @@ fun Application.startGitHubWebhookProcessor() {
             try {
                 processNextWebhookBatch()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[GitHub] Webhook processor error", e)
             }
             delay(POLL_INTERVAL_MS)
@@ -63,6 +64,7 @@ private suspend fun processNextWebhookBatch() {
             processGitHubActivities(activities)
             dbQuery { completeWebhook(event) }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to process webhook delivery ${event.deliveryId}", e)
             dbQuery { failWebhook(event, e.message, System.currentTimeMillis()) }
         }

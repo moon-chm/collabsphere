@@ -126,6 +126,7 @@ internal fun Route.messagesRoutes() {
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(
                     HttpStatusCode.BadRequest,
                     "Failed to insert message. Ensure parent references exist."
@@ -225,6 +226,7 @@ internal fun Route.messagesRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error updating message")
             }
         }
@@ -260,6 +262,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -296,6 +299,7 @@ internal fun Route.messagesRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -357,6 +361,7 @@ internal fun Route.messagesRoutes() {
                     event.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, false)
             }
         }
@@ -391,6 +396,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.OK, states)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Read state error")
             }
         }
@@ -425,6 +431,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.OK, pinned)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Pinned Error")
             }
         }
@@ -479,6 +486,7 @@ internal fun Route.messagesRoutes() {
                     summary.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Reaction failed")
             }
         }
@@ -522,6 +530,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.OK, summaries)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Reactions Error")
             }
         }
@@ -567,6 +576,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.OK, result.first)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "History Error")
             }
         }
@@ -595,6 +605,7 @@ internal fun Route.messagesRoutes() {
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] Message sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Sync Error")
             }

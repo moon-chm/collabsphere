@@ -49,6 +49,7 @@ object FcmService {
                 )
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("Failed to initialize Firebase Admin SDK", e)
         }
     }
@@ -94,6 +95,7 @@ object FcmService {
                 logger.info("Using Application Default Credentials for Firebase.")
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -127,6 +129,7 @@ object FcmService {
                 tokens.toList()
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("Error looking up FCM tokens for user $userId", e)
             emptyList()
         }
@@ -161,6 +164,7 @@ object FcmService {
                     logger.error("[FCM] Failed to send to token ${token.take(20)}...: ${e.message}")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 fcmFailureCounter.increment()
                 logger.error("[FCM] Unexpected error for token ${token.take(20)}...: ${e.message}")
             }

@@ -55,6 +55,7 @@ internal fun Route.channelsRoutes() {
                     call.respond(HttpStatusCode.Created, response)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Failed to create channel")
             }
         }
@@ -93,6 +94,7 @@ internal fun Route.channelsRoutes() {
                     else              -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -121,6 +123,7 @@ internal fun Route.channelsRoutes() {
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] Channel sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Sync Error")
             }
@@ -161,6 +164,7 @@ internal fun Route.channelsRoutes() {
                     call.respond(HttpStatusCode.OK, channels)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error retrieving channels")
             }
         }

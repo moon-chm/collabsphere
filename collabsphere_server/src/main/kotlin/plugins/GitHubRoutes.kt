@@ -358,6 +358,7 @@ fun Application.configureGitHubRoutes() {
                         true
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     logger.error("[GitHub] Failed to save connection", e)
                     null
                 }
@@ -398,6 +399,7 @@ fun Application.configureGitHubRoutes() {
                 }
                 call.respond(HttpStatusCode.Accepted)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[GitHub] Webhook enqueue failed", e)
                 call.respond(HttpStatusCode.InternalServerError)
             }
@@ -435,6 +437,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, available)
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.error("[GitHub] Error fetching available repos", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to fetch repos")
                     }
@@ -488,6 +491,7 @@ fun Application.configureGitHubRoutes() {
                             }
                         }
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.error("[GitHub] Error linking repo", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to link repo")
                     }
@@ -552,6 +556,7 @@ fun Application.configureGitHubRoutes() {
                     val request = try {
                         call.receive<GitHubNotifyChannelRequest>()
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                         return@post
                     }
@@ -706,6 +711,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, mapOf("status" to "unlinked"))
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.error("[GitHub] Error unlinking repo", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to unlink repo")
                     }
@@ -730,6 +736,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, mapOf("status" to "disconnected"))
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.error("[GitHub] Error disconnecting GitHub", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to disconnect GitHub")
                     }

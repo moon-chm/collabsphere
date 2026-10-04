@@ -57,6 +57,7 @@ internal fun Route.notificationsRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, notifications)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to fetch notifications")
             }
         }
@@ -76,6 +77,7 @@ internal fun Route.notificationsRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, mutes)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to load mute settings")
             }
         }
@@ -108,6 +110,7 @@ internal fun Route.notificationsRoutes() {
                     call.respond(HttpStatusCode.Forbidden, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, false)
             }
         }
@@ -129,6 +132,7 @@ internal fun Route.notificationsRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, NotificationCountResponse(total = total, unread = unread))
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to fetch notification count")
             }
         }
@@ -154,6 +158,7 @@ internal fun Route.notificationsRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, "Marked as read")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to mark notifications as read")
             }
         }
@@ -172,6 +177,7 @@ internal fun Route.notificationsRoutes() {
                 if (deleted > 0) call.respond(HttpStatusCode.OK, "Deleted")
                 else call.respond(HttpStatusCode.NotFound, "Notification not found")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to delete notification")
             }
         }
@@ -185,6 +191,7 @@ internal fun Route.notificationsRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, "All notifications cleared")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to clear notifications")
             }
         }

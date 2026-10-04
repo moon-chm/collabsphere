@@ -51,6 +51,7 @@ object GitHubAuthService {
         try {
             parsePrivateKey()
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.warn("[GitHub] App private key unavailable, falling back to user tokens", e)
             null
         }
@@ -135,6 +136,7 @@ object GitHubAuthService {
             installationTokens[installationId] = CachedToken(body.token, expiresAt)
             return body.token
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to get installation token for installation $installationId", e)
             return null
         }
@@ -162,6 +164,7 @@ object GitHubAuthService {
                 logger.warn("[GitHub] Revoking user grant failed: ${response.status}")
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.warn("[GitHub] Revoking user grant failed", e)
         }
     }
@@ -181,6 +184,7 @@ object GitHubAuthService {
             }
             return null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Code exchange failed", e)
             return null
         }

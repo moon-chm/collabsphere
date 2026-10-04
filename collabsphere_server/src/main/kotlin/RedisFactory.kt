@@ -58,6 +58,7 @@ object RedisFactory {
             isAvailable = true
             logger.info("[Redis] Connected to Redis at ${uri.host}:${uri.port}")
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.warn("[Redis] Failed to connect to Redis — running without it. " +
                 "WebSocket fan-out and caches will use in-memory fallback. Error: ${e.message}")
             // Clean up any partial state
@@ -75,6 +76,7 @@ object RedisFactory {
      */
     fun newPubSubConnection() = if (isAvailable) {
         try { client?.connectPubSub() } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.warn("[Redis] Could not open pub/sub connection: ${e.message}")
             null
         }

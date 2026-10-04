@@ -56,6 +56,7 @@ object CryptoService {
             
             String(cipher.doFinal(encrypted))
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[CryptoService] Decryption failed", e)
             null
         }

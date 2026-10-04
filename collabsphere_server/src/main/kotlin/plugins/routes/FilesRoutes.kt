@@ -114,6 +114,7 @@ internal fun Route.filesRoutes() {
                             contentType = finalMimeType
                         )
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.warn("[FileUpload] Cloudinary upload failed, storing on local disk", e)
                         null
                     }
@@ -158,6 +159,7 @@ internal fun Route.filesRoutes() {
                         }[LocalFilesTable.id]
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     // No row will ever point at the stored copy — remove it instead of leaking it.
                     if (CloudinaryService.isCloudinaryUrl(generatedFileLocation)) {
                         CloudinaryService.deleteRawFile(generatedFileLocation)
@@ -184,6 +186,7 @@ internal fun Route.filesRoutes() {
             } catch (e: UploadTooLargeException) {
                 call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[FileUpload] Upload failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "File upload failed")
             } finally {
@@ -228,6 +231,7 @@ internal fun Route.filesRoutes() {
                     call.respond(HttpStatusCode.OK, filesList)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error retrieving files list")
             }
         }
@@ -257,6 +261,7 @@ internal fun Route.filesRoutes() {
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] File sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Error fetching delta updates loop context.")
             }
@@ -316,6 +321,7 @@ internal fun Route.filesRoutes() {
                     call.respond(HttpStatusCode.NotFound, "File not found on server")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error downloading file")
             }
         }
@@ -358,6 +364,7 @@ internal fun Route.filesRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 e.printStackTrace()
                 call.respond(HttpStatusCode.InternalServerError, false)
             }

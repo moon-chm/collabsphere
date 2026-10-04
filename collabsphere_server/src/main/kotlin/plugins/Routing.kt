@@ -44,6 +44,7 @@ suspend fun <T> dbQuery(block: suspend () -> T): T {
         try {
             return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.writeDatabase) { block() }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             val sqlState = (e as? java.sql.SQLException)?.sqlState
                 ?: (e.cause as? java.sql.SQLException)?.sqlState
             attempt++
@@ -59,6 +60,7 @@ suspend fun <T> dbReadQuery(block: suspend () -> T): T {
         try {
             return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.readDatabase) { block() }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             val sqlState = (e as? java.sql.SQLException)?.sqlState
                 ?: (e.cause as? java.sql.SQLException)?.sqlState
             attempt++
@@ -125,6 +127,7 @@ internal suspend fun broadcastChannelMessageChange(messageId: Int) {
         val json = Json.encodeToString(ChannelMessageEvent(message = snapshot))
         memberIds.forEach { sendToChannelCapableUser(it.toLong(), json) }
     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
         logger.error("[broadcastChannelMessageChange] Failed for messageId=$messageId", e)
     }
 }
@@ -332,6 +335,7 @@ fun Application.configureRouting() {
                 )
                 call.respond(HttpStatusCode.OK, response)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Malformed request body or server error")
             }
         }
@@ -390,6 +394,7 @@ fun Application.configureRouting() {
                     )
                 )
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Server Error: ${e.message}")
             }
         }
@@ -433,6 +438,7 @@ fun Application.configureRouting() {
                     else -> call.respond(HttpStatusCode.NotFound, AuthMessageResponse(false, "Account not found."))
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
@@ -474,6 +480,7 @@ fun Application.configureRouting() {
                 EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)
                 call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "A new 6-digit verification code has been sent to your email."))
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
@@ -507,6 +514,7 @@ fun Application.configureRouting() {
 
                 call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "If an account exists for $trimmedEmail, a reset code has been sent."))
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
@@ -543,6 +551,7 @@ fun Application.configureRouting() {
                     else -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset request."))
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
             }
         }
@@ -596,6 +605,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     logger.warn("[FCM] Token registration failed", e)
                     call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                 }
@@ -629,6 +639,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success")) // idempotent logout
                 }
             }
@@ -659,6 +670,7 @@ fun Application.configureRouting() {
                     if (profile != null) call.respond(HttpStatusCode.OK, profile)
                     else call.respond(HttpStatusCode.NotFound, "User not found")
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Error fetching profile")
                 }
             }
@@ -698,6 +710,7 @@ fun Application.configureRouting() {
                     if (isSuccess) call.respond(HttpStatusCode.OK, true)
                     else call.respond(HttpStatusCode.BadRequest, false)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, false)
                 }
             }
@@ -735,6 +748,7 @@ fun Application.configureRouting() {
                 } catch (e: UploadTooLargeException) {
                     call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     logger.error("[Avatar] Upload failed", e)
                     call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed")
                 } finally {
@@ -755,6 +769,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = AvatarGenerator.avatarUrlFor(actingUserId, null)))
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to remove avatar")
                 }
             }
@@ -791,6 +806,7 @@ fun Application.configureRouting() {
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
@@ -818,6 +834,7 @@ fun Application.configureRouting() {
                     EmailService.sendVerificationOtp(emailTarget, otp)
                     call.respond(HttpStatusCode.OK, "Verification email sent")
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to send email")
                 }
             }
@@ -862,6 +879,7 @@ fun Application.configureRouting() {
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
@@ -890,6 +908,7 @@ fun Application.configureRouting() {
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
@@ -920,6 +939,7 @@ fun Application.configureRouting() {
                         call.respond(HttpStatusCode.OK, onlineMemberIds)
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, emptyList<Int>())
                 }
             }
@@ -950,6 +970,7 @@ fun Application.configureRouting() {
                         else           -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to update email")
                 }
             }
@@ -984,6 +1005,7 @@ fun Application.configureRouting() {
                     if (response != null) call.respond(HttpStatusCode.OK, response)
                     else call.respond(HttpStatusCode.NotFound, "User not found or you are blocked")
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Error fetching profile")
                 }
             }
@@ -1021,6 +1043,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, results)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Error searching users")
                 }
             }
@@ -1044,6 +1067,7 @@ fun Application.configureRouting() {
                         else             -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to delete account")
                 }
             }
@@ -1070,6 +1094,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, BlockUserResponse(actingUserId, targetId, "blocked"))
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to block user")
                 }
             }
@@ -1087,6 +1112,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, BlockUserResponse(actingUserId, targetId, "unblocked"))
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to unblock user")
                 }
             }
@@ -1112,6 +1138,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, blocked)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to fetch blocked users")
                 }
             }
@@ -1135,6 +1162,7 @@ fun Application.configureRouting() {
                     }
                     call.respond(HttpStatusCode.OK, "Privacy settings updated")
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to update privacy settings")
                 }
             }
@@ -1173,6 +1201,7 @@ fun Application.configureRouting() {
                         call.respond(HttpStatusCode.BadGateway, "Couldn't send the verification email. Please try again.")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to send verification")
                 }
             }
@@ -1205,6 +1234,7 @@ fun Application.configureRouting() {
                         else          -> call.respond(HttpStatusCode.NotFound, "No pending verification")
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to confirm verification")
                 }
             }

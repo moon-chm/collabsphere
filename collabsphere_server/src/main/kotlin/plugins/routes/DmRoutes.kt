@@ -66,6 +66,7 @@ internal fun Route.dmRoutes() {
             }
             call.respond(HttpStatusCode.OK, page)
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             call.respond(HttpStatusCode.InternalServerError, "History Error")
         }
     }
@@ -80,6 +81,7 @@ internal fun Route.dmRoutes() {
             call.appendSyncHeaders(page.nextCursor, page.reset)
             call.respond(HttpStatusCode.OK, page.rows)
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[Sync] DM sync failed", e)
             call.respond(HttpStatusCode.InternalServerError, "Sync Error")
         }
@@ -109,6 +111,7 @@ internal fun Route.dmRoutes() {
         } catch (e: UploadTooLargeException) {
             call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[MediaUpload] Upload failed", e)
             call.respond(HttpStatusCode.InternalServerError, "Upload failed")
         } finally {

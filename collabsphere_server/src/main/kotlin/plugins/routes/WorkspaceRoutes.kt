@@ -47,6 +47,7 @@ internal fun Route.workspaceRoutes() {
                 }
                 call.respond(outcome, outcome == HttpStatusCode.OK)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -78,6 +79,7 @@ internal fun Route.workspaceRoutes() {
                 }
                 call.respond(outcome, outcome == HttpStatusCode.OK)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, false)
             }
         }
@@ -195,6 +197,7 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.OK, result)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 e.printStackTrace()
                 call.respond(HttpStatusCode.InternalServerError, "Search failed")
             }
@@ -232,6 +235,7 @@ internal fun Route.workspaceRoutes() {
 
                 call.respond(HttpStatusCode.Created, response)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Database error")
             }
         }
@@ -306,6 +310,7 @@ internal fun Route.workspaceRoutes() {
                     else -> call.respond(HttpStatusCode.Created, response)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Error adding member")
             }
         }
@@ -391,6 +396,7 @@ internal fun Route.workspaceRoutes() {
                 EmailService.sendWorkspaceInvitation(trimmedEmail, workspaceName, inviterName, inviteCode)
                 call.respond(HttpStatusCode.Created, insertedInvitation)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Failed to send invitation: ${e.message}")
             }
         }
@@ -425,6 +431,7 @@ internal fun Route.workspaceRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, pendingInvites)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to fetch invitations")
             }
         }
@@ -490,6 +497,7 @@ internal fun Route.workspaceRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, "Invitation not found")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Failed to accept invitation")
             }
         }
@@ -519,6 +527,7 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.NotFound, "Invitation not found")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Failed to decline invitation")
             }
         }
@@ -592,6 +601,7 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.NotFound, "Invalid or expired invite code")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Failed to join workspace: ${e.message}")
             }
         }
@@ -620,6 +630,7 @@ internal fun Route.workspaceRoutes() {
 
                 call.respond(HttpStatusCode.OK, workspaces)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error fetching user workspaces")
             }
         }
@@ -656,6 +667,7 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.OK, members)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(
                     HttpStatusCode.InternalServerError,
                     "Error fetching workspace members"
@@ -670,6 +682,7 @@ internal fun Route.workspaceRoutes() {
                 call.appendSyncHeaders(page.nextCursor, page.reset)
                 call.respond(HttpStatusCode.OK, page.rows)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] Workspace sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Sync Error")
             }
@@ -723,6 +736,7 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.NotFound, DeleteWorkspaceResponse(emptyList()))
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, DeleteWorkspaceResponse(emptyList()))
             }
         }

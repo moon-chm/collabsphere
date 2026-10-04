@@ -162,6 +162,7 @@ fun Application.module() {
                 plugins.dbQuery { 1 }
                 true
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 application.environment.log.error("[Health] DB check failed", e)
                 false
             }

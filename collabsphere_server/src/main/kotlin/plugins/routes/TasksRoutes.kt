@@ -113,6 +113,7 @@ internal fun Route.tasksRoutes() {
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Foreign key violation: Verify workspaceId and userIds exist.")
             }
         }
@@ -152,6 +153,7 @@ internal fun Route.tasksRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, userTasks)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Failed to retrieve user tasks")
             }
         }
@@ -177,6 +179,7 @@ internal fun Route.tasksRoutes() {
                     else              -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -189,6 +192,7 @@ internal fun Route.tasksRoutes() {
             val request = try {
                 call.receive<TaskRequest>()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                 return@put
             }
@@ -284,6 +288,7 @@ internal fun Route.tasksRoutes() {
                             updatedTask.id, updatedTask.workspaceId, updatedTask.assignedToUserId
                         )
                     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                         logger.warn("[GitHub] Assignee sync to GitHub failed", e)
                     }
                 }
@@ -336,6 +341,7 @@ internal fun Route.tasksRoutes() {
                 if (workspaceTasks == null) call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 else call.respond(HttpStatusCode.OK, workspaceTasks)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error retrieving tasks")
             }
         }
@@ -356,6 +362,7 @@ internal fun Route.tasksRoutes() {
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] Task sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
             }

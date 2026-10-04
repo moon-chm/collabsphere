@@ -66,6 +66,7 @@ internal fun Route.notesRoutes() {
                 if (newNotes == null) call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 else call.respond(HttpStatusCode.Created, newNotes)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Database structure mismatch or missing foreign row.")
             }
         }
@@ -93,6 +94,7 @@ internal fun Route.notesRoutes() {
                     else         -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -130,6 +132,7 @@ internal fun Route.notesRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error updating note")
             }
         }
@@ -155,6 +158,7 @@ internal fun Route.notesRoutes() {
                     else              -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)
             }
         }
@@ -183,6 +187,7 @@ internal fun Route.notesRoutes() {
                 if (workspaceNotes == null) call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 else call.respond(HttpStatusCode.OK, workspaceNotes)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Error retrieving notes")
             }
         }
@@ -203,6 +208,7 @@ internal fun Route.notesRoutes() {
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[Sync] Note sync failed", e)
                 call.respond(HttpStatusCode.InternalServerError, "Sync Error processing delta operations query request loop.")
             }

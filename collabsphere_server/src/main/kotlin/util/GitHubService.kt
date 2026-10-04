@@ -115,6 +115,7 @@ object GitHubService {
             }
             return null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to get user installations", e)
             return null
         }
@@ -127,6 +128,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body<GitHubUser>() else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to get authenticated user", e)
             null
         }
@@ -174,6 +176,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to fetch repository pages", e)
             throw Exception("Failed to fetch repository pages", e)
         }
@@ -190,6 +193,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to get commits for $repoFullName", e)
             emptyList()
         }
@@ -204,6 +208,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to get issues for $repoFullName", e)
             emptyList()
         }
@@ -222,6 +227,7 @@ object GitHubService {
                 null to response.status
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to create issue in $repoFullName", e)
             null to null
         }
@@ -238,6 +244,7 @@ object GitHubService {
             }
             response.status.isSuccess()
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to set issue state for #$number in $repoFullName", e)
             false
         }
@@ -259,6 +266,7 @@ object GitHubService {
                 Pair(null, response.status)
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             Pair(null, HttpStatusCode.InternalServerError)
         }
@@ -276,6 +284,7 @@ object GitHubService {
                 Pair(null, response.status)
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             Pair(null, HttpStatusCode.InternalServerError)
         }
@@ -293,6 +302,7 @@ object GitHubService {
                 Pair(null, response.status)
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             Pair(null, HttpStatusCode.InternalServerError)
         }
@@ -306,6 +316,7 @@ object GitHubService {
             }
             response.status
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             HttpStatusCode.InternalServerError
         }
@@ -329,6 +340,7 @@ object GitHubService {
                 Pair(null, response.status)
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             Pair(null, HttpStatusCode.InternalServerError)
         }
@@ -343,6 +355,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             emptyList()
         }
@@ -354,6 +367,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body() else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 
@@ -364,6 +378,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body() else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 
@@ -374,6 +389,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body() else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 
@@ -393,6 +409,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body() else emptyList()
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             emptyList()
         }
 
@@ -419,6 +436,7 @@ object GitHubService {
                 assignees
             } else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             null
         }
@@ -436,6 +454,7 @@ object GitHubService {
             }
             response.status.isSuccess()
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to add assignees to issue #$number in $repoFullName", e)
             false
         }
@@ -453,6 +472,7 @@ object GitHubService {
             }
             response.status.isSuccess()
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to remove assignees from issue #$number in $repoFullName", e)
             false
         }
@@ -506,6 +526,7 @@ object GitHubService {
                         val decoded = try {
                             String(java.util.Base64.getMimeDecoder().decode(file.content))
                         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                             null // Binary file — can't decode as UTF-8
                         }
                         val isBinary = decoded == null || decoded.contains('\u0000')
@@ -516,6 +537,7 @@ object GitHubService {
                 }
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             e.printStackTrace()
             null
         }
@@ -531,6 +553,7 @@ object GitHubService {
                 response.body<GitHubCommitInfo>().sha
             } else null
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 }

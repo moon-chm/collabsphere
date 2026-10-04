@@ -56,6 +56,7 @@ object JwtConfig {
         val workspaceId = decoded.getClaim("workspaceId").asInt()
         if (userId != null && workspaceId != null) userId to workspaceId else null
     } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
         null
     }
 

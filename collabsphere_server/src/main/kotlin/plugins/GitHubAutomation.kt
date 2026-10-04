@@ -79,6 +79,7 @@ fun Application.startGitHubDigestScheduler() {
             try {
                 postDueDigests(System.currentTimeMillis())
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[GitHub] Weekly digest run failed", e)
             }
             delay(DIGEST_CHECK_INTERVAL_MS)
@@ -189,6 +190,7 @@ suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
                 is GitHubCheckSuiteActivity -> handleCheckSuite(repo, activity)
             }
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Automation failed for repository ${activity.repositoryId}", e)
         }
     }

@@ -106,6 +106,7 @@ internal object WebSocketBroker {
                 session.send(Frame.Text(text))
                 delivered = true
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[WS] Send failed for userId=$userId — removing dead session: ${e.message}")
                 removeSession(userId, session)
             }
@@ -117,6 +118,7 @@ internal object WebSocketBroker {
         try {
             RedisFactory.async?.publish("$REDIS_WS_PREFIX$userId", message)
         } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             logger.warn("[WS] Redis publish failed for userId=$userId: ${e.message}")
         }
     }

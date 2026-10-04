@@ -58,6 +58,7 @@ internal object WorkspaceMemberCache {
             val cached = try {
                 RedisFactory.async?.get("$REDIS_KEY_PREFIX$workspaceId")?.get()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[WMCache] Redis read failed for workspaceId=$workspaceId: ${e.message}")
                 null
             }
@@ -84,6 +85,7 @@ internal object WorkspaceMemberCache {
             try {
                 RedisFactory.async?.del("$REDIS_KEY_PREFIX$workspaceId")
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[WMCache] Redis del failed for workspaceId=$workspaceId: ${e.message}")
             }
         }
@@ -109,6 +111,7 @@ internal object WorkspaceMemberCache {
                     ids.joinToString(",")
                 )
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[WMCache] Redis set failed for workspaceId=$workspaceId: ${e.message}")
             }
         }
