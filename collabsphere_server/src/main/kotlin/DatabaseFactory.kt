@@ -98,6 +98,7 @@ object DatabaseFactory {
             }
             SchemaUtils.createMissingTablesAndColumns(
                 UsersTable,
+                UserFcmTokensTable,
                 WorkspacesTable,
                 ChannelsTable,
                 LocalFilesTable,

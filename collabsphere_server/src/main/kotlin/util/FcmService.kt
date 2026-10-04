@@ -99,24 +99,72 @@ object FcmService {
     }
 
     /**
-     * Retrieves the FCM token for a given user from the database.
+     * Collects ALL active FCM tokens for a given user — both the legacy single-token
+     * column ([UsersTable.fcmToken]) and any rows in [UserFcmTokensTable].
+     *
+     * De-duplicated: if the same token appears in both sources it is sent only once.
+     * Returns an empty list if the user has no registered devices.
      */
-    private fun getUserFcmToken(userId: Int): String? {
+    private fun getAllFcmTokens(userId: Int): List<String> {
         return try {
             transaction {
+                val tokens = mutableSetOf<String>()
+
+                // Legacy column — always check for backward compat
                 UsersTable.slice(UsersTable.fcmToken)
                     .select { UsersTable.id eq userId }
                     .firstOrNull()
                     ?.get(UsersTable.fcmToken)
+                    ?.let { tokens.add(it) }
+
+                // Multi-device table — new registrations from device-aware clients
+                com.collabsphere.model.UserFcmTokensTable
+                    .slice(com.collabsphere.model.UserFcmTokensTable.token)
+                    .select { com.collabsphere.model.UserFcmTokensTable.userId eq userId }
+                    .mapNotNull { it[com.collabsphere.model.UserFcmTokensTable.token].takeIf { t -> t.isNotBlank() } }
+                    .forEach { tokens.add(it) }
+
+                tokens.toList()
             }
         } catch (e: Exception) {
-            logger.error("Error looking up FCM token for user $userId", e)
-            null
+            logger.error("Error looking up FCM tokens for user $userId", e)
+            emptyList()
         }
     }
 
     /**
-     * Dispatches a real-time high-priority Direct Message push notification to the recipient device.
+     * Builds and sends an FCM message with the given [data] to each token in [tokens].
+     * Returns the count of successfully delivered messages.
+     * UNREGISTERED tokens are skipped silently (stale devices); other errors are logged.
+     */
+    private fun sendAll(tokens: List<String>, data: Map<String, String>, androidPriority: AndroidConfig.Priority): Int {
+        var sent = 0
+        val androidConfig = AndroidConfig.builder().setPriority(androidPriority).build()
+        for (token in tokens) {
+            try {
+                val msg = Message.builder()
+                    .setToken(token)
+                    .setAndroidConfig(androidConfig)
+                    .apply { data.forEach { (k, v) -> putData(k, v) } }
+                    .build()
+                FirebaseMessaging.getInstance().send(msg)
+                sent++
+            } catch (e: com.google.firebase.messaging.FirebaseMessagingException) {
+                if (e.messagingErrorCode?.name == "UNREGISTERED") {
+                    logger.info("[FCM] Stale token (UNREGISTERED) skipped: ${token.take(20)}...")
+                } else {
+                    logger.error("[FCM] Failed to send to token ${token.take(20)}...: ${e.message}")
+                }
+            } catch (e: Exception) {
+                logger.error("[FCM] Unexpected error for token ${token.take(20)}...: ${e.message}")
+            }
+        }
+        return sent
+    }
+
+    /**
+     * Dispatches a real-time high-priority Direct Message push notification to ALL
+     * registered devices of the recipient (multi-device fan-out).
      */
     fun sendDmPush(
         recipientUserId: Int,
@@ -129,40 +177,29 @@ object FcmService {
     ) {
         if (!isInitialized) return
         scope.launch {
-            val token = getUserFcmToken(recipientUserId)
-            if (token.isNullOrBlank()) {
-                logger.debug("No FCM token for user $recipientUserId, skipping push")
+            val tokens = getAllFcmTokens(recipientUserId)
+            if (tokens.isEmpty()) {
+                logger.debug("[FCM] No tokens for user $recipientUserId, skipping DM push")
                 return@launch
             }
-
-            try {
-                val message = Message.builder()
-                    .setToken(token)
-                    .putData("type", "DM")
-                    .putData("sender_id", senderId.toString())
-                    .putData("receiver_id", recipientUserId.toString())
-                    .putData("sender_username", senderUsername)
-                    .putData("workspace_id", workspaceId.toString())
-                    .putData("id", messageId.toString())
-                    .putData("content", content)
-                    .putData("timestamp", timestamp.toString())
-                    .setAndroidConfig(
-                        AndroidConfig.builder()
-                            .setPriority(AndroidConfig.Priority.HIGH)
-                            .build()
-                    )
-                    .build()
-
-                val response = FirebaseMessaging.getInstance().send(message)
-                logger.info("Sent FCM DM push to user $recipientUserId (msgId: $response)")
-            } catch (e: Exception) {
-                logger.error("Failed to send FCM DM push to user $recipientUserId", e)
-            }
+            val data = mapOf(
+                "type" to "DM",
+                "sender_id" to senderId.toString(),
+                "receiver_id" to recipientUserId.toString(),
+                "sender_username" to senderUsername,
+                "workspace_id" to workspaceId.toString(),
+                "id" to messageId.toString(),
+                "content" to content,
+                "timestamp" to timestamp.toString()
+            )
+            val sent = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
+            if (sent > 0) logger.info("[FCM] DM push to userId=$recipientUserId: $sent/${tokens.size} devices")
         }
     }
 
     /**
-     * Dispatches a high-priority activity push notification (Mention, Task assigned/updated, Channel message).
+     * Dispatches a high-priority activity push notification to ALL registered devices
+     * of the recipient (Mention, Task assigned/updated, Channel message, etc).
      */
     fun sendGenericPush(
         recipientUserId: Int,
@@ -176,37 +213,24 @@ object FcmService {
     ) {
         if (!isInitialized) return
         scope.launch {
-            val token = getUserFcmToken(recipientUserId)
-            if (token.isNullOrBlank()) {
-                logger.debug("No FCM token for user $recipientUserId, skipping push")
+            val tokens = getAllFcmTokens(recipientUserId)
+            if (tokens.isEmpty()) {
+                logger.debug("[FCM] No tokens for user $recipientUserId, skipping generic push")
                 return@launch
             }
-
-            try {
-                val builder = Message.builder()
-                    .setToken(token)
-                    .putData("type", type)
-                    .putData("notification_id", notificationId.toString())
-                    .putData("recipient_id", recipientUserId.toString())
-                    .putData("title", title)
-                    .putData("body", body)
-                    .putData("created_at", System.currentTimeMillis().toString())
-
-                workspaceId?.let { builder.putData("workspace_id", it.toString()) }
-                actorUsername?.let { builder.putData("actor_username", it) }
-                actorAvatarUrl?.let { builder.putData("actor_avatar_url", it) }
-
-                builder.setAndroidConfig(
-                    AndroidConfig.builder()
-                        .setPriority(AndroidConfig.Priority.HIGH)
-                        .build()
-                )
-
-                val response = FirebaseMessaging.getInstance().send(builder.build())
-                logger.info("Sent FCM Generic push to user $recipientUserId: $title (msgId: $response)")
-            } catch (e: Exception) {
-                logger.error("Failed to send FCM generic push to user $recipientUserId", e)
+            val data = buildMap<String, String> {
+                put("type", type)
+                put("notification_id", notificationId.toString())
+                put("recipient_id", recipientUserId.toString())
+                put("title", title)
+                put("body", body)
+                put("created_at", System.currentTimeMillis().toString())
+                workspaceId?.let { put("workspace_id", it.toString()) }
+                actorUsername?.let { put("actor_username", it) }
+                actorAvatarUrl?.let { put("actor_avatar_url", it) }
             }
+            val sent = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
+            if (sent > 0) logger.info("[FCM] Generic push '$title' to userId=$recipientUserId: $sent/${tokens.size} devices")
         }
     }
 }

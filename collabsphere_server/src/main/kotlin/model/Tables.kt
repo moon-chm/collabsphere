@@ -31,6 +31,30 @@ object UsersTable : Table("users") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/**
+ * Per-device FCM token registry — supports multiple simultaneous devices per user.
+ *
+ * Primary key is (userId, deviceId) — each physical device has exactly one row.
+ * Registering the same deviceId again is an upsert (update the token, e.g. after a token refresh).
+ *
+ * The legacy [UsersTable.fcmToken] single-token column is kept for backward compatibility
+ * with older Android clients that don't send a deviceId. [com.collabsphere.util.FcmService]
+ * fans out to BOTH so no device is silently dropped during the migration window.
+ */
+object UserFcmTokensTable : Table("user_fcm_tokens") {
+    val userId = integer("user_id")
+        .references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+        .index()
+    // Stable client-side identifier — e.g. Settings.Secure.ANDROID_ID or a UUID persisted to DataStore.
+    // Max 128 chars to cover Android IDs, UUIDs, and vendor device IDs with room to spare.
+    val deviceId = varchar("device_id", 128)
+    val token = varchar("token", 500)
+    // Unix millis — lets the server prune tokens that haven't refreshed in >90 days (stale installs)
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(userId, deviceId)
+}
+
 object WorkspacesTable : Table("workspace") {
     val id = integer("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()

@@ -528,41 +528,86 @@ fun Application.configureRouting() {
         authenticate("auth-jwt") {
 
             // ── Register this device for push notifications ────────────────────
-            // The token is always bound to the JWT's user — any userId in the body is ignored, so
-            // nobody can route another account's notifications to their own device.
+            // Backward-compatible: existing clients send {"fcmToken": "..."}.
+            // New clients can additionally send {"deviceId": "..."} to enable per-device token rows.
+            // The token is always bound to the JWT user — any userId field in the body is ignored.
             post("/api/user/fcm-token") {
                 try {
                     val actingUserId = call.authenticatedUserId()
-                    val fcmToken = call.receive<Map<String, String>>()["fcmToken"]
+                    val body = call.receive<Map<String, String>>()
+                    val fcmToken = body["fcmToken"]
+                    val deviceId = body["deviceId"]?.take(128)  // client-supplied stable device id
+
                     if (fcmToken.isNullOrBlank() || fcmToken.length > 500) {
                         call.respond(HttpStatusCode.BadRequest, "Missing or invalid fcmToken")
                         return@post
                     }
                     dbQuery {
-                        // A device belongs to whoever logged in on it last — detach it from any
-                        // previous account so they stop receiving pushes on a handed-over phone.
+                        // ── Legacy single-token path (backward compat for all existing clients) ──
+                        // Detach this token from any other account (handed-over phone), then assign to current user.
                         UsersTable.update({ (UsersTable.fcmToken eq fcmToken) and (UsersTable.id neq actingUserId) }) {
                             it[UsersTable.fcmToken] = null
                         }
                         UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[UsersTable.fcmToken] = fcmToken
                         }
+
+                        // ── Multi-device token path (when client supplies a deviceId) ──────────
+                        if (!deviceId.isNullOrBlank()) {
+                            // Remove this token from any OTHER user's device rows
+                            // (hands-over: someone else's account used to own this device)
+                            UserFcmTokensTable.deleteWhere {
+                                (UserFcmTokensTable.token eq fcmToken)
+                            }
+                            // Re-insert for the current user (we just cleared it above if it existed elsewhere)
+                            UserFcmTokensTable.upsert(
+                                UserFcmTokensTable.userId,
+                                UserFcmTokensTable.deviceId
+                            ) {
+                                it[UserFcmTokensTable.userId] = actingUserId
+                                it[UserFcmTokensTable.deviceId] = deviceId
+                                it[UserFcmTokensTable.token] = fcmToken
+                                it[UserFcmTokensTable.updatedAt] = System.currentTimeMillis()
+                            }
+                        }
                     }
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
                 } catch (e: Exception) {
+                    logger.warn("[FCM] Token registration failed", e)
                     call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                 }
             }
 
             // ── Unregister this device (logout) ────────────────────────────────
+            // Clears both the legacy single-token and the per-device row (if deviceId supplied).
             delete("/api/user/fcm-token") {
-                val actingUserId = call.authenticatedUserId()
-                dbQuery {
-                    UsersTable.update({ UsersTable.id eq actingUserId }) {
-                        it[UsersTable.fcmToken] = null
+                try {
+                    val actingUserId = call.authenticatedUserId()
+                    val body = runCatching { call.receive<Map<String, String>>() }.getOrNull()
+                    val deviceId = body?.get("deviceId")?.take(128)
+
+                    dbQuery {
+                        // Always clear legacy token
+                        UsersTable.update({ UsersTable.id eq actingUserId }) {
+                            it[UsersTable.fcmToken] = null
+                        }
+                        // If device-aware client: remove just this device's row
+                        // If legacy client (no deviceId): remove ALL device rows for this user (full logout)
+                        if (!deviceId.isNullOrBlank()) {
+                            UserFcmTokensTable.deleteWhere {
+                                (UserFcmTokensTable.userId eq actingUserId) and
+                                (UserFcmTokensTable.deviceId eq deviceId)
+                            }
+                        } else {
+                            UserFcmTokensTable.deleteWhere {
+                                UserFcmTokensTable.userId eq actingUserId
+                            }
+                        }
                     }
+                    call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.OK, mapOf("status" to "success")) // idempotent logout
                 }
-                call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
             }
 
             // ── GET own full profile ───────────────────────────────────────────
