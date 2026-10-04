@@ -10,6 +10,20 @@ jobs:
   build-server:
     name: Build Ktor Backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: Collabsphere
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -45,6 +59,11 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
+        working-directory: ./collabsphere_app
+
+      - name: Create dummy google-services.json
+        run: |
+          echo '{ "project_info": { "project_number": "123", "project_id": "dummy" }, "client": [ { "client_info": { "mobilesdk_app_id": "1:123:android:456", "android_client_info": { "package_name": "com.collabsphere.app" } }, "api_key": [ { "current_key": "dummy" } ] } ], "configuration_version": "1" }' > app/google-services.json
         working-directory: ./collabsphere_app
 
       - name: Build Android App (Debug)
