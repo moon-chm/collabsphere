@@ -76,20 +76,9 @@ fun Application.module() {
         verify { callId -> callId.isNotEmpty() }
     }
 
-    // ── Rate Limiting ─────────────────────────────────────────────────────────
+    // ── Forwarded Headers (Proxy Support) ──────────────────────────────────
     install(XForwardedHeaders)
     install(ForwardedHeaders)
-
-    install(RateLimit) {
-        global {
-            rateLimiter(limit = 1000, refillPeriod = 1.minutes)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
-        register(RateLimitName("auth")) {
-            rateLimiter(limit = 10, refillPeriod = 1.minutes)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
-    }
 
     // ── Observability: Structured access logging ──────────────────────────────
     install(CallLogging) {
@@ -120,7 +109,7 @@ fun Application.module() {
         // Auth endpoints (login, register, password reset) — stricter
         register(RateLimitName("auth")) {
             rateLimiter(limit = 10, refillPeriod = 1.minutes)
-            requestKey { call -> call.request.local.remoteAddress }
+            requestKey { call -> call.request.origin.remoteHost }
         }
         // All authenticated API endpoints — generous limit per user
         register(RateLimitName("api")) {
@@ -128,7 +117,7 @@ fun Application.module() {
             requestKey { call ->
                 call.principal<JWTPrincipal>()
                     ?.payload?.getClaim("userId")?.asString()
-                    ?: call.request.local.remoteAddress
+                    ?: call.request.origin.remoteHost
             }
         }
     }
