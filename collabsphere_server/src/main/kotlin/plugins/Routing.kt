@@ -55,50 +55,26 @@ suspend fun <T> dbQuery(block: suspend () -> T): T {
 private fun escapeLikeLiteral(value: String): String =
     value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-// A user can have more than one live connection (multiple devices, or a second app instance) — keyed
-// by a set of sessions per user instead of a single session, so one doesn't silently evict another.
-val activeDmSessions = ConcurrentHashMap<Long, MutableSet<WebSocketServerSession>>()
+// ── WebSocket session management ─────────────────────────────────────────────
+// Delegated to WebSocketBroker which:
+//   • On single instance (current): identical behaviour to the previous ConcurrentHashMap approach
+//   • On multi-instance (future):   routes cross-instance messages via Redis pub/sub
+//
+// The `activeDmSessions` reference is kept as a read-only shim so any external code
+// that only reads the map (e.g. presence checks) continues to compile.
+val activeDmSessions get() = emptyMap<Long, Set<WebSocketServerSession>>() // presence via WebSocketBroker.isUserConnected
 
-private fun addDmSession(userId: Long, session: WebSocketServerSession) {
-    activeDmSessions.computeIfAbsent(userId) { java.util.concurrent.CopyOnWriteArraySet() }.add(session)
-}
+private fun addDmSession(userId: Long, session: WebSocketServerSession) =
+    WebSocketBroker.addSession(userId, session, supportsChannelEvents = false)
 
-private fun removeDmSession(userId: Long, session: WebSocketServerSession) {
-    activeDmSessions[userId]?.let { sessions ->
-        sessions.remove(session)
-        if (sessions.isEmpty()) activeDmSessions.remove(userId)
-    }
-}
+private fun removeDmSession(userId: Long, session: WebSocketServerSession) =
+    WebSocketBroker.removeSession(userId, session)
 
-private suspend fun sendToUser(userId: Long, text: String) {
-    activeDmSessions[userId]?.forEach { session ->
-        if (session.isActive) {
-            try {
-                session.send(Frame.Text(text))
-            } catch (e: Exception) {
-                // A dead session left registered would silently eat every future push to this user —
-                // drop it so the next reconnect re-registers a working one instead.
-                logger.warn("[sendToUser] Failed sending to userId=$userId, dropping dead session", e)
-                removeDmSession(userId, session)
-            }
-        }
-    }
-}
+private suspend fun sendToUser(userId: Long, text: String) =
+    WebSocketBroker.sendToUser(userId, text, requireChannelCapable = false)
 
-private val channelCapableSessions: MutableSet<WebSocketServerSession> = ConcurrentHashMap.newKeySet()
-
-private suspend fun sendToChannelCapableUser(userId: Long, text: String) {
-    activeDmSessions[userId]?.forEach { session ->
-        if (session in channelCapableSessions && session.isActive) {
-            try {
-                session.send(Frame.Text(text))
-            } catch (e: Exception) {
-                removeDmSession(userId, session)
-                channelCapableSessions.remove(session)
-            }
-        }
-    }
-}
+private suspend fun sendToChannelCapableUser(userId: Long, text: String) =
+    WebSocketBroker.sendToUser(userId, text, requireChannelCapable = true)
 
 private fun workspaceMemberIds(workspaceId: Int): List<Int> =
     WorkspaceMembersTable
@@ -155,11 +131,13 @@ private fun ResultRow.toDmHistoryDto() = DmDto(
 fun ApplicationCall.authenticatedUserId(): Int =
     principal<JWTPrincipal>()!!.payload.getClaim("userId").asInt()
 
-/** Must be called from inside an existing `dbQuery`/transaction block. */
-internal fun isMember(userId: Int, workspaceId: Int): Boolean =
-    WorkspaceMembersTable.selectAll()
-        .where { (WorkspaceMembersTable.workspaceId eq workspaceId) and (WorkspaceMembersTable.userId eq userId) }
-        .count() > 0
+/**
+ * Must be called from inside an existing `dbQuery`/transaction block.
+ * L1: Redis cache (30s TTL) — zero DB hit on warm cache.
+ * L2: PostgreSQL — source of truth on cache miss.
+ * Falls back to bare DB query when Redis is not configured (single-instance / no REDIS_URL).
+ */
+internal fun isMember(userId: Int, workspaceId: Int): Boolean = isMemberCached(userId, workspaceId)
 
 internal fun workspaceOwnerId(workspaceId: Int): Int? =
     WorkspacesTable.select(WorkspacesTable.userId)
@@ -864,8 +842,7 @@ fun Application.configureRouting() {
                             .toSet()
 
                         memberIds.filter { uid ->
-                            val sessions = activeDmSessions[uid.toLong()]
-                            sessions != null && sessions.isNotEmpty()
+                            WebSocketBroker.isUserConnected(uid.toLong())
                         }
                     }
 
@@ -923,7 +900,7 @@ fun Application.configureRouting() {
                         if (isBlocked) return@dbQuery null
 
                         UsersTable.selectAll().where { UsersTable.id eq targetId }.singleOrNull()?.let { row ->
-                            val isOnlineNow = activeDmSessions.containsKey(targetId.toLong())
+                            val isOnlineNow = WebSocketBroker.isUserConnected(targetId.toLong())
                             PublicProfileResponse(
                                 id = row[UsersTable.id],
                                 username = row[UsersTable.username],
@@ -3876,10 +3853,8 @@ fun Application.configureRouting() {
                         ?.split(",")
                         ?.any { it.trim() == "channel" } == true
 
-                    addDmSession(userIdParam, this)
-                    if (supportsChannelEvents) {
-                        channelCapableSessions.add(this)
-                    }
+                    // Register session — passes supportsChannelEvents so only one registration happens
+                    WebSocketBroker.addSession(userIdParam, this, supportsChannelEvents = supportsChannelEvents)
                     var cachedUsername: String? = null
 
                     // Mark user online on WS connect
@@ -4164,12 +4139,12 @@ fun Application.configureRouting() {
                         }
                     } catch (_: Exception) {
                     } finally {
-                        removeDmSession(userIdParam, this)
-                        channelCapableSessions.remove(this)
+                        WebSocketBroker.removeSession(userIdParam, this)
+                        // No separate channelCapableSessions.remove needed — removeDmSession delegates to WebSocketBroker.removeSession which handles it
 
                         // If no other live sessions remain for this user, broadcast USER_OFFLINE to teammates
-                        val remainingSessions = activeDmSessions[userIdParam]
-                        if (remainingSessions == null || remainingSessions.isEmpty()) {
+                        val hasRemainingSessions = WebSocketBroker.isUserConnected(userIdParam)
+                        if (!hasRemainingSessions) {
                             try {
                                 val offlineDto = DmDto(action = "USER_OFFLINE", senderId = userIdParam.toInt())
                                 val offlineJson = Json.encodeToString(DmDto.serializer(), offlineDto)

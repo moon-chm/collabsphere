@@ -43,7 +43,23 @@ dependencies {
     implementation("io.ktor:ktor-client-core:${ktor_version}")
     implementation("io.ktor:ktor-client-cio:${ktor_version}")
     implementation("io.ktor:ktor-client-content-negotiation:${ktor_version}")
-    
+
+    // ── Observability ─────────────────────────────────────────────────────────
+    // Request correlation IDs (X-Request-Id header in/out)
+    implementation("io.ktor:ktor-server-call-id:${ktor_version}")
+    // Structured access logging (method, path, status, duration)
+    implementation("io.ktor:ktor-server-call-logging:${ktor_version}")
+    // Micrometer metrics exposed as Prometheus scrape endpoint
+    implementation("io.ktor:ktor-server-metrics-micrometer:${ktor_version}")
+    implementation("io.micrometer:micrometer-registry-prometheus:1.12.5")
+
+    // ── Rate limiting ─────────────────────────────────────────────────────────
+    implementation("io.ktor:ktor-server-rate-limit:${ktor_version}")
+
+    // ── Optional Redis (graceful degradation — disabled when REDIS_URL is absent) ──
+    // Used for: WebSocket cross-instance fan-out, membership cache, workspace member cache
+    implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
+
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
 }
