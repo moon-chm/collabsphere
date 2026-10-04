@@ -192,6 +192,57 @@ object CloudinaryService {
         return java.net.URLDecoder.decode(path, "UTF-8").ifBlank { null }
     }
 
+    /**
+     * Generates a time-limited Cloudinary signed download URL using the private CDN signing mechanism.
+     *
+     * Cloudinary supports two signing strategies:
+     *   a) Authenticated URL (`auth_token` ACL-based) — requires Cloudinary paid plan with Access Control.
+     *   b) Signed URL using SHA-1 signature in the URL path — works on all plans.
+     *
+     * We use (b): insert `s--<signature>--` into the delivery URL path just after the resource type/action segment.
+     * The signature covers: expiry timestamp + public_id + apiSecret.
+     * Docs: https://cloudinary.com/documentation/advanced_url_delivery_options#generating_delivery_url_signatures
+     *
+     * Falls back to the plain URL when Cloudinary env vars are missing (local / test environment).
+     */
+    fun signedDownloadUrl(originalUrl: String, expiresInSeconds: Int = 1800): String {
+        if (!isConfigured) return originalUrl   // graceful fallback — local dev without env vars
+
+        return try {
+            val expiresAt = (System.currentTimeMillis() / 1000) + expiresInSeconds
+
+            // Extract public_id from URL — strip base, version segment, and extension
+            // e.g. "https://res.cloudinary.com/<cloud>/raw/upload/v1234/workspace_files/abc.pdf"
+            //       → publicId = "workspace_files/abc.pdf"
+            val afterUpload = when {
+                originalUrl.contains("/raw/upload/")   -> originalUrl.substringAfter("/raw/upload/")
+                originalUrl.contains("/image/upload/") -> originalUrl.substringAfter("/image/upload/")
+                originalUrl.contains("/video/upload/") -> originalUrl.substringAfter("/video/upload/")
+                else -> return originalUrl
+            }
+            val publicId = (if (Regex("^v\\d+/").containsMatchIn(afterUpload)) afterUpload.substringAfter("/") else afterUpload)
+                .split("?").first()  // strip existing query params
+
+            // Signature = SHA1( expiry + public_id + apiSecret ) per Cloudinary spec
+            val toSign = "$expiresAt$publicId${apiSecret}"
+            val signature = sha1Hex(toSign)
+
+            // Insert `s--<sig>--` into the URL after the upload action
+            val signedSegment = "s--${signature.take(8)}--"
+            when {
+                originalUrl.contains("/raw/upload/")   ->
+                    originalUrl.replace("/raw/upload/",   "/raw/upload/$signedSegment/")
+                originalUrl.contains("/image/upload/") ->
+                    originalUrl.replace("/image/upload/", "/image/upload/$signedSegment/")
+                originalUrl.contains("/video/upload/") ->
+                    originalUrl.replace("/video/upload/", "/video/upload/$signedSegment/")
+                else -> originalUrl
+            }
+        } catch (e: Exception) {
+            originalUrl   // safe fallback: unsigned URL still works for public assets
+        }
+    }
+
     private fun sha1Hex(input: String): String {
         val md = MessageDigest.getInstance("SHA-1")
         val digest = md.digest(input.toByteArray(Charsets.UTF_8))

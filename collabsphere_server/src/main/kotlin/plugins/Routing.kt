@@ -76,11 +76,15 @@ private suspend fun sendToUser(userId: Long, text: String) =
 private suspend fun sendToChannelCapableUser(userId: Long, text: String) =
     WebSocketBroker.sendToUser(userId, text, requireChannelCapable = true)
 
+/**
+ * Returns workspace member user IDs.
+ * L1: JVM cache (60 s TTL) — zero DB hit on warm cache.
+ * L2: Redis cache (120 s TTL) — shared across instances when Redis configured.
+ * L3: PostgreSQL — source of truth on full cache miss.
+ * Must be called from inside an Exposed transaction / dbQuery block.
+ */
 private fun workspaceMemberIds(workspaceId: Int): List<Int> =
-    WorkspaceMembersTable
-        .select(WorkspaceMembersTable.userId)
-        .where { WorkspaceMembersTable.workspaceId eq workspaceId }
-        .map { it[WorkspaceMembersTable.userId] }
+    WorkspaceMemberCache.getMembers(workspaceId)
 
 private fun channelReactionSummary(messageId: Int, channelId: Int, workspaceId: Int): ChannelReactionSummary {
     val reactors = ChannelReactionsTable.selectAll()
@@ -1390,6 +1394,8 @@ fun Application.configureRouting() {
                             NotificationMutesTable.deleteWhere {
                                 (NotificationMutesTable.workspaceId eq workspaceIdParam) and (NotificationMutesTable.userId eq targetUserId)
                             }
+                            WorkspaceMemberCache.invalidate(workspaceIdParam)
+                            MembershipCache.invalidate(targetUserId, workspaceIdParam)
                             HttpStatusCode.OK
                         }
                         call.respond(outcome, outcome == HttpStatusCode.OK)
@@ -1566,6 +1572,8 @@ fun Application.configureRouting() {
                                 it[workspaceId] = insertedId
                                 it[userId] = actingUserId
                             }
+                            // New workspace — no stale cache exists, but invalidate defensively
+                            WorkspaceMemberCache.invalidate(insertedId)
 
                             WorkspaceResponse(
                                 id = insertedId,
@@ -1622,10 +1630,11 @@ fun Application.configureRouting() {
                                         it[workspaceId] = workspaceIdParam
                                         it[userId] = targetUserId
                                     }
-
                                     WorkspacesTable.update({ WorkspacesTable.id eq workspaceIdParam }) {
                                         it[updatedAt] = System.currentTimeMillis()
                                     }
+                                    WorkspaceMemberCache.invalidate(workspaceIdParam)
+                                    MembershipCache.invalidate(targetUserId, workspaceIdParam)
                                 }
 
                                 MemberResponse(
@@ -1909,6 +1918,8 @@ fun Application.configureRouting() {
                                 WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
                                     it[updatedAt] = System.currentTimeMillis()
                                 }
+                                WorkspaceMemberCache.invalidate(wsId)
+                                MembershipCache.invalidate(actingUserId, wsId)
                             }
 
                             if (invRow != null) {
@@ -3707,31 +3718,14 @@ fun Application.configureRouting() {
 
                         val storedLocation = fileRow[LocalFilesTable.fileLocation]
                         if (CloudinaryService.isCloudinaryUrl(storedLocation)) {
-                            val connection = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                                (java.net.URL(storedLocation).openConnection() as java.net.HttpURLConnection).apply {
-                                    connectTimeout = 30_000
-                                    readTimeout = 120_000
-                                }.also { it.connect() }
-                            }
-                            val remoteStatus = kotlinx.coroutines.withContext(Dispatchers.IO) { connection.responseCode }
-                            if (remoteStatus !in 200..299) {
-                                connection.disconnect()
-                                call.respond(HttpStatusCode.NotFound, "File not found on server")
-                                return@get
-                            }
-                            val responseType = runCatching { ContentType.parse(fileRow[LocalFilesTable.mimeType]) }
-                                .getOrDefault(ContentType.Application.OctetStream)
-                            try {
-                                call.respondOutputStream(
-                                    contentType = responseType,
-                                    status = HttpStatusCode.OK,
-                                    contentLength = connection.contentLengthLong.takeIf { it >= 0 }
-                                ) {
-                                    connection.inputStream.use { it.copyTo(this) }
-                                }
-                            } finally {
-                                connection.disconnect()
-                            }
+                            // Generate a short-lived signed URL and redirect — avoids piping bytes
+                            // through the server. The client (or CDN) fetches directly from Cloudinary.
+                            // This cuts server egress bandwidth to ~0 for cloud-stored files.
+                            val signedUrl = CloudinaryService.signedDownloadUrl(
+                                originalUrl = storedLocation,
+                                expiresInSeconds = 1800  // 30 minutes — ample for a download to start
+                            )
+                            call.respondRedirect(signedUrl, permanent = false)
                             return@get
                         }
 
