@@ -9,6 +9,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -19,6 +20,10 @@ import java.io.FileInputStream
 object FcmService {
     private val logger = LoggerFactory.getLogger(FcmService::class.java)
     private var isInitialized = false
+
+    /** Shared supervised scope: failures in one push don't cancel others, and the scope
+     *  outlives individual calls without leaking a new scope per send. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun init() {
         if (isInitialized || FirebaseApp.getApps().isNotEmpty()) {
@@ -123,7 +128,7 @@ object FcmService {
         timestamp: Long
     ) {
         if (!isInitialized) return
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             val token = getUserFcmToken(recipientUserId)
             if (token.isNullOrBlank()) {
                 logger.debug("No FCM token for user $recipientUserId, skipping push")
@@ -170,7 +175,7 @@ object FcmService {
         actorAvatarUrl: String?
     ) {
         if (!isInitialized) return
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             val token = getUserFcmToken(recipientUserId)
             if (token.isNullOrBlank()) {
                 logger.debug("No FCM token for user $recipientUserId, skipping push")

@@ -8,6 +8,9 @@ import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("TaskReminders")
 
 private const val DAY_MS = 24 * 60 * 60 * 1000L
 private const val REMINDER_CHECK_INTERVAL_MS = 15 * 60 * 1000L
@@ -35,7 +38,7 @@ fun Application.startTaskReminderScheduler() {
             try {
                 sendDueTaskReminders(System.currentTimeMillis())
             } catch (e: Exception) {
-                println("[TaskReminders] Reminder run failed: ${e.message}")
+                logger.error("[TaskReminders] Reminder run failed", e)
             }
             delay(REMINDER_CHECK_INTERVAL_MS)
         }

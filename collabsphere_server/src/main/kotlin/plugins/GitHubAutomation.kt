@@ -33,6 +33,9 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("GitHubAutomation")
 
 private val TASK_REFERENCE = Regex("""(?i)(?<![\w-])T-(\d+)\b""")
 private val CLOSING_REFERENCE = Regex("""(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+T-(\d+)\b""")
@@ -76,7 +79,7 @@ fun Application.startGitHubDigestScheduler() {
             try {
                 postDueDigests(System.currentTimeMillis())
             } catch (e: Exception) {
-                println("[GitHub] Weekly digest run failed: ${e.message}")
+                logger.error("[GitHub] Weekly digest run failed", e)
             }
             delay(DIGEST_CHECK_INTERVAL_MS)
         }
@@ -186,7 +189,7 @@ suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
                 is GitHubCheckSuiteActivity -> handleCheckSuite(repo, activity)
             }
         } catch (e: Exception) {
-            println("[GitHub] Automation failed for repository ${activity.repositoryId}: ${e.message}")
+            logger.error("[GitHub] Automation failed for repository ${activity.repositoryId}", e)
         }
     }
 }

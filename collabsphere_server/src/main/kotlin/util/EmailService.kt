@@ -20,8 +20,10 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Base64
 import java.util.Properties
+import org.slf4j.LoggerFactory
 
 object EmailService {
+    private val logger = LoggerFactory.getLogger(EmailService::class.java)
     // --- Gmail API (OAuth2 over HTTPS Port 443) Configuration ---
     private var isGmailApiConfigured = false
     private var gmailClientId = ""
@@ -75,7 +77,7 @@ object EmailService {
 
         if (gmailClientId.isNotBlank() && gmailClientSecret.isNotBlank() && gmailRefreshToken.isNotBlank()) {
             isGmailApiConfigured = true
-            println("[EmailService] Configured Gmail API (OAuth2 HTTPS Port 443) for $gmailSender")
+            logger.info("[EmailService] Configured Gmail API (OAuth2 HTTPS Port 443) for $gmailSender")
         }
 
         // 3. Load SMTP credentials (as secondary fallback)
@@ -96,11 +98,11 @@ object EmailService {
                 smtpProperties["mail.smtp.socketFactory.class"] = "javax.net.ssl.SSLSocketFactory"
             }
             isSmtpConfigured = true
-            println("[EmailService] Configured SMTP fallback: host=$smtpHost, port=$smtpPort, user=$smtpUser")
+            logger.info("[EmailService] Configured SMTP fallback: host=$smtpHost, port=$smtpPort, user=$smtpUser")
         }
 
         if (!isGmailApiConfigured && !isSmtpConfigured) {
-            println("[EmailService] No email provider fully configured. Emails will be logged to stdout.")
+            logger.warn("[EmailService] No email provider fully configured. Emails will be logged to stdout.")
         }
     }
 
@@ -114,7 +116,7 @@ object EmailService {
             return cachedAccessToken!!
         }
 
-        println("[EmailService] Requesting fresh Google OAuth2 access token...")
+        logger.debug("[EmailService] Requesting fresh Google OAuth2 access token...")
         val formBody = listOf(
             "client_id" to gmailClientId,
             "client_secret" to gmailClientSecret,
@@ -143,7 +145,7 @@ object EmailService {
         cachedAccessToken = token
         // Buffer by 60 seconds before expiration
         tokenExpiresAtMillis = now + ((expiresIn - 60).coerceAtLeast(300) * 1000L)
-        println("[EmailService] Successfully refreshed Google access token (valid for ${expiresIn}s)")
+        logger.info("[EmailService] Successfully refreshed Google access token (valid for ${expiresIn}s)")
         return token
     }
 
@@ -189,10 +191,10 @@ object EmailService {
 
         val sendResponse = httpClient.send(sendRequest, HttpResponse.BodyHandlers.ofString())
         if (sendResponse.statusCode() in 200..299) {
-            println("[EmailService] Gmail API: Successfully sent email to $to: \"$subject\"")
+            logger.info("[EmailService] Gmail API: Successfully sent email to $to: \"$subject\"")
             return true
         } else {
-            System.err.println("[EmailService] Gmail API send error HTTP ${sendResponse.statusCode()}: ${sendResponse.body()}")
+            logger.error("[EmailService] Gmail API send error HTTP ${sendResponse.statusCode()}: ${sendResponse.body()}")
             return false
         }
     }
@@ -217,7 +219,7 @@ object EmailService {
         }
 
         Transport.send(message)
-        println("[EmailService] SMTP: Successfully sent email to $to: \"$subject\"")
+        logger.info("[EmailService] SMTP: Successfully sent email to $to: \"$subject\"")
         return true
     }
 
@@ -233,10 +235,9 @@ object EmailService {
             try {
                 val ok = sendViaGmailApi(to, subject, htmlBody)
                 if (ok) return@withContext true
-                println("[EmailService] Gmail API returned unsuccessful response, falling back...")
+                logger.warn("[EmailService] Gmail API returned unsuccessful response, falling back...")
             } catch (e: Exception) {
-                System.err.println("[EmailService] Gmail API failed: ${e.message}, falling back...")
-                e.printStackTrace()
+                logger.warn("[EmailService] Gmail API failed, falling back...", e)
             }
         }
 
@@ -245,10 +246,9 @@ object EmailService {
             try {
                 val ok = sendViaSmtp(to, subject, htmlBody)
                 if (ok) return@withContext true
-                println("[EmailService] SMTP dispatch failed, falling back...")
+                logger.warn("[EmailService] SMTP dispatch failed, falling back...")
             } catch (e: Exception) {
-                System.err.println("[EmailService] SMTP failed: ${e.message}")
-                e.printStackTrace()
+                logger.warn("[EmailService] SMTP failed, falling back...", e)
             }
         }
 

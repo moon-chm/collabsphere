@@ -14,6 +14,9 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("GitHubWebhookProcessor")
 
 fun Application.startGitHubWebhookProcessor() {
     launch(Dispatchers.IO) {
@@ -21,7 +24,7 @@ fun Application.startGitHubWebhookProcessor() {
             try {
                 processNextWebhookBatch()
             } catch (e: Exception) {
-                println("[GitHub] Webhook processor error: ${e.message}")
+                logger.error("[GitHub] Webhook processor error", e)
             }
             delay(5000L) // Poll every 5 seconds
         }
@@ -64,7 +67,7 @@ private suspend fun processNextWebhookBatch() {
                 }
             }
         } catch (e: Exception) {
-            println("[GitHub] Failed to process webhook delivery $deliveryId: ${e.message}")
+            logger.error("[GitHub] Failed to process webhook delivery $deliveryId", e)
             dbQuery {
                 val currentRetry = GitHubWebhookEventsTable.selectAll()
                     .where { GitHubWebhookEventsTable.deliveryId eq deliveryId }

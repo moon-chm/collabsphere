@@ -20,6 +20,7 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.upsert
 import java.util.concurrent.ConcurrentHashMap
+import org.slf4j.LoggerFactory
 
 data class CommitRecord(
     val sha: String,
@@ -69,6 +70,8 @@ fun GitHubIssueInfo.toRecord(now: Long = System.currentTimeMillis()): IssueRecor
     )
 
 object GitHubDataStore {
+
+    private val logger = LoggerFactory.getLogger(GitHubDataStore::class.java)
 
     fun saveCommits(repositoryId: Int, commits: List<CommitRecord>) {
         if (commits.isEmpty()) return
@@ -390,7 +393,7 @@ object GitHubSyncManager {
                 }
                 val token = GitHubService.repoAccessToken(installationId, userToken)
                 if (token == null) {
-                    println("[GitHub] No token available to sync $repoFullName")
+                    logger.warn("[GitHub] No token available to sync $repoFullName")
                     newSuspendedTransaction(Dispatchers.IO) {
                         GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                             it[syncState] = "FAILED"
@@ -402,7 +405,7 @@ object GitHubSyncManager {
                 val activities = GitHubDataStore.sync(repositoryId, token, repoFullName, branch)
                 if (activities.isNotEmpty()) activityHandler?.invoke(activities)
             } catch (e: GitHubApiException) {
-                println("[GitHub] API Error during sync of $repoFullName: ${e.statusCode} ${e.message}")
+                logger.warn("[GitHub] API Error during sync of $repoFullName: ${e.statusCode} ${e.message}")
                 val state = if (e.statusCode == 403 || e.statusCode == 429) "RATE_LIMITED" else "FAILED"
                 newSuspendedTransaction(Dispatchers.IO) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
@@ -411,7 +414,7 @@ object GitHubSyncManager {
                     }
                 }
             } catch (e: Exception) {
-                println("[GitHub] Sync failed for $repoFullName: ${e.message}")
+                logger.error("[GitHub] Sync failed for $repoFullName", e)
                 newSuspendedTransaction(Dispatchers.IO) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                         it[syncState] = "FAILED"

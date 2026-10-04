@@ -5,8 +5,10 @@ import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import org.slf4j.LoggerFactory
 
 object CryptoService {
+    private val logger = LoggerFactory.getLogger(CryptoService::class.java)
     private const val ALGORITHM = "AES/GCM/NoPadding"
     private const val TAG_LENGTH_BIT = 128
     private const val IV_LENGTH_BYTE = 12
@@ -54,7 +56,7 @@ object CryptoService {
             
             String(cipher.doFinal(encrypted))
         } catch (e: Exception) {
-            println("[CryptoService] Decryption failed: ${e.message}")
+            logger.error("[CryptoService] Decryption failed", e)
             null
         }
     }

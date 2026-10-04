@@ -10,6 +10,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.OffsetDateTime
+import org.slf4j.LoggerFactory
 
 class GitHubApiException(val statusCode: Int, message: String) : Exception(message)
 
@@ -58,6 +59,7 @@ fun parseGitHubTime(value: String?): Long? =
 
 object GitHubService {
 
+    private val logger = LoggerFactory.getLogger(GitHubService::class.java)
     private const val PAGE_SIZE = 100
     private const val MAX_REPO_PAGES = 10
     private const val MAX_COMMIT_PAGES = 50
@@ -85,7 +87,7 @@ object GitHubService {
                 parameter("page", page)
             }
             if (!response.status.isSuccess()) {
-                println("[GitHub] GET $url page $page failed: ${response.status}")
+                logger.warn("[GitHub] GET $url page $page failed: ${response.status}")
                 val rateLimitRemaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
                 val msg = if (response.status == HttpStatusCode.Forbidden && rateLimitRemaining == 0) {
                     "GitHub API Rate limit exceeded"
@@ -113,7 +115,7 @@ object GitHubService {
             }
             return null
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to get user installations", e)
             return null
         }
     }
@@ -125,7 +127,7 @@ object GitHubService {
             }
             if (response.status.isSuccess()) response.body<GitHubUser>() else null
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to get authenticated user", e)
             null
         }
 
@@ -153,7 +155,7 @@ object GitHubService {
                     parameter("page", page)
                 }
                 if (!response.status.isSuccess()) {
-                    println("[GitHub] Listing installation repos failed: ${response.status}")
+                    logger.warn("[GitHub] Listing installation repos failed: ${response.status}")
                     val rateLimitRemaining = response.headers["X-RateLimit-Remaining"]?.toIntOrNull()
                     val msg = if (response.status == HttpStatusCode.Forbidden && rateLimitRemaining == 0) {
                         "GitHub API Rate limit exceeded"
@@ -172,7 +174,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to fetch repository pages", e)
             throw Exception("Failed to fetch repository pages", e)
         }
     }
@@ -188,7 +190,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to get commits for $repoFullName", e)
             emptyList()
         }
 
@@ -202,7 +204,7 @@ object GitHubService {
         } catch (e: GitHubApiException) {
             throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to get issues for $repoFullName", e)
             emptyList()
         }
 
@@ -216,11 +218,11 @@ object GitHubService {
             if (response.status.isSuccess()) {
                 response.body<GitHubIssueInfo>() to response.status
             } else {
-                println("[GitHub] Creating issue in $repoFullName failed: ${response.status}")
+                logger.warn("[GitHub] Creating issue in $repoFullName failed: ${response.status}")
                 null to response.status
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to create issue in $repoFullName", e)
             null to null
         }
 
@@ -232,11 +234,11 @@ object GitHubService {
                 setBody(mapOf("state" to state))
             }
             if (!response.status.isSuccess()) {
-                println("[GitHub] Setting issue #$number in $repoFullName to $state failed: ${response.status}")
+                logger.warn("[GitHub] Setting issue #$number in $repoFullName to $state failed: ${response.status}")
             }
             response.status.isSuccess()
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to set issue state for #$number in $repoFullName", e)
             false
         }
 
@@ -430,11 +432,11 @@ object GitHubService {
                 setBody(mapOf("assignees" to logins))
             }
             if (!response.status.isSuccess()) {
-                println("[GitHub] Adding assignees to issue #$number in $repoFullName failed: ${response.status}")
+                logger.warn("[GitHub] Adding assignees to issue #$number in $repoFullName failed: ${response.status}")
             }
             response.status.isSuccess()
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to add assignees to issue #$number in $repoFullName", e)
             false
         }
 
@@ -447,11 +449,11 @@ object GitHubService {
                 setBody(mapOf("assignees" to logins))
             }
             if (!response.status.isSuccess()) {
-                println("[GitHub] Removing assignees from issue #$number in $repoFullName failed: ${response.status}")
+                logger.warn("[GitHub] Removing assignees from issue #$number in $repoFullName failed: ${response.status}")
             }
             response.status.isSuccess()
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to remove assignees from issue #$number in $repoFullName", e)
             false
         }
 

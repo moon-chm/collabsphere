@@ -60,6 +60,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("GitHubRoutes")
 
 @Serializable
 data class LinkRepoRequest(
@@ -355,7 +358,7 @@ fun Application.configureGitHubRoutes() {
                         true
                     }
                 } catch (e: Exception) {
-                    println("[GitHub] Failed to save connection: ${e.message}")
+                    logger.error("[GitHub] Failed to save connection", e)
                     null
                 }
 
@@ -379,7 +382,7 @@ fun Application.configureGitHubRoutes() {
             }
 
             if (!GitHubWebhookService.verifySignature(payload, signature)) {
-                println("[GitHub] Rejected webhook with invalid signature")
+                logger.warn("[GitHub] Rejected webhook with invalid signature")
                 call.respond(HttpStatusCode.Unauthorized)
                 return@post
             }
@@ -395,7 +398,7 @@ fun Application.configureGitHubRoutes() {
                 }
                 call.respond(HttpStatusCode.Accepted)
             } catch (e: Exception) {
-                println("[GitHub] Webhook enqueue failed: ${e.message}")
+                logger.error("[GitHub] Webhook enqueue failed", e)
                 call.respond(HttpStatusCode.InternalServerError)
             }
         }
@@ -432,7 +435,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, available)
                     } catch (e: Exception) {
-                        println("[GitHub] Error fetching available repos: ${e.message}")
+                        logger.error("[GitHub] Error fetching available repos", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to fetch repos")
                     }
                 }
@@ -485,7 +488,7 @@ fun Application.configureGitHubRoutes() {
                             }
                         }
                     } catch (e: Exception) {
-                        println("[GitHub] Error linking repo: ${e.message}")
+                        logger.error("[GitHub] Error linking repo", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to link repo")
                     }
                 }
@@ -703,7 +706,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, mapOf("status" to "unlinked"))
                     } catch (e: Exception) {
-                        println("[GitHub] Error unlinking repo: ${e.message}")
+                        logger.error("[GitHub] Error unlinking repo", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to unlink repo")
                     }
                 }
@@ -727,7 +730,7 @@ fun Application.configureGitHubRoutes() {
                         }
                         call.respond(HttpStatusCode.OK, mapOf("status" to "disconnected"))
                     } catch (e: Exception) {
-                        println("[GitHub] Error disconnecting GitHub: ${e.message}")
+                        logger.error("[GitHub] Error disconnecting GitHub", e)
                         call.respond(HttpStatusCode.InternalServerError, "Failed to disconnect GitHub")
                     }
                 }

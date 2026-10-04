@@ -17,6 +17,7 @@ import java.security.spec.PKCS8EncodedKeySpec
 import java.util.*
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import org.slf4j.LoggerFactory
 
 @Serializable
 data class GitHubInstallationTokenResponse(
@@ -34,6 +35,7 @@ data class GitHubUserTokenResponse(
 
 object GitHubAuthService {
 
+    private val logger = LoggerFactory.getLogger(GitHubAuthService::class.java)
     private val appId = System.getenv("GITHUB_APP_ID")
     private val clientId = System.getenv("GITHUB_CLIENT_ID")
     private val clientSecret = System.getenv("GITHUB_CLIENT_SECRET")
@@ -49,7 +51,7 @@ object GitHubAuthService {
         try {
             parsePrivateKey()
         } catch (e: Exception) {
-            println("[GitHub] App private key unavailable, falling back to user tokens: ${e.message}")
+            logger.warn("[GitHub] App private key unavailable, falling back to user tokens", e)
             null
         }
     }
@@ -125,7 +127,7 @@ object GitHubAuthService {
                 header(HttpHeaders.Accept, "application/vnd.github+json")
             }
             if (!response.status.isSuccess()) {
-                println("[GitHub] Failed to get installation token: ${response.status}")
+                logger.warn("[GitHub] Failed to get installation token: ${response.status}")
                 return null
             }
             val body = response.body<GitHubInstallationTokenResponse>()
@@ -133,7 +135,7 @@ object GitHubAuthService {
             installationTokens[installationId] = CachedToken(body.token, expiresAt)
             return body.token
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("[GitHub] Failed to get installation token for installation $installationId", e)
             return null
         }
     }
@@ -157,10 +159,10 @@ object GitHubAuthService {
                 setBody(mapOf("access_token" to userToken))
             }
             if (!response.status.isSuccess() && response.status != HttpStatusCode.NotFound) {
-                println("[GitHub] Revoking user grant failed: ${response.status}")
+                logger.warn("[GitHub] Revoking user grant failed: ${response.status}")
             }
         } catch (e: Exception) {
-            println("[GitHub] Revoking user grant failed: ${e.message}")
+            logger.warn("[GitHub] Revoking user grant failed", e)
         }
     }
 
@@ -179,7 +181,7 @@ object GitHubAuthService {
             }
             return null
         } catch (e: Exception) {
-            println("[GitHub] Code exchange failed: ${e.message}")
+            logger.error("[GitHub] Code exchange failed", e)
             return null
         }
     }

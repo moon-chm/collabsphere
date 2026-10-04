@@ -1,45 +1,12 @@
 package plugins
 
-import com.collabsphere.dto.MessageRequest
-import com.collabsphere.dto.MessageResponse
-import com.collabsphere.dto.NotesRequest
-import com.collabsphere.dto.NotesResponse
-import com.collabsphere.dto.FileResponse
-import com.collabsphere.dto.FileSyncResponse
-import com.collabsphere.dto.MessageSyncResponse
-import com.collabsphere.dto.NotesSyncResponse
 import com.collabsphere.dto.*
-import dto.*
-import com.collabsphere.model.TasksTable
-import com.collabsphere.model.MessageTable
-import com.collabsphere.model.LocalFilesTable
-import com.collabsphere.model.NotesTable
-import com.collabsphere.model.UsersTable
-import com.collabsphere.model.WorkspacesTable
-import com.collabsphere.model.DirectMessagesTable
-import com.collabsphere.model.DmReactionsTable
-import com.collabsphere.model.ChannelReactionsTable
-import com.collabsphere.model.NotificationMutesTable
-import com.collabsphere.model.ChannelReadStateTable
-import com.collabsphere.model.WorkspaceMembersTable
-import com.collabsphere.model.ChannelsTable
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.GlobalScope
-import com.collabsphere.model.UserBlocksTable
-import com.collabsphere.model.UserVerificationTable
-import com.collabsphere.model.NotificationsTable
-import com.collabsphere.model.PasswordResetTable
-import com.collabsphere.model.WorkspaceInvitationsTable
-import com.collabsphere.util.EmailService
-import com.collabsphere.dto.NotificationResponse
-import com.collabsphere.dto.NotificationCountResponse
-import com.collabsphere.dto.MarkReadRequest
-import com.collabsphere.dto.NotificationPushFrame
-import kotlinx.serialization.encodeToString
-import com.collabsphere.util.JwtConfig
-import com.collabsphere.util.PasswordHasher
+import com.collabsphere.model.*
 import com.collabsphere.util.AvatarGenerator
 import com.collabsphere.util.CloudinaryService
+import com.collabsphere.util.EmailService
+import com.collabsphere.util.JwtConfig
+import com.collabsphere.util.PasswordHasher
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -52,8 +19,9 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
@@ -61,7 +29,9 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.Int
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("Routing")
 
 /** Postgres SQLSTATE codes for transient conflicts worth retrying instead of surfacing as a 500. */
 private val RETRYABLE_SQLSTATES = setOf("40001", "40P01") // serialization_failure, deadlock_detected
@@ -107,7 +77,7 @@ private suspend fun sendToUser(userId: Long, text: String) {
             } catch (e: Exception) {
                 // A dead session left registered would silently eat every future push to this user —
                 // drop it so the next reconnect re-registers a working one instead.
-                println("[sendToUser] Failed sending to userId=$userId, dropping dead session: ${e.message}")
+                logger.warn("[sendToUser] Failed sending to userId=$userId, dropping dead session", e)
                 removeDmSession(userId, session)
             }
         }
@@ -167,26 +137,12 @@ private suspend fun broadcastChannelMessageChange(messageId: Int) {
         val (snapshot, memberIds) = dbQuery {
             val row = MessageTable.selectAll().where { MessageTable.id eq messageId }.singleOrNull()
                 ?: return@dbQuery null
-            val snapshot = MessageSyncResponse(
-                id = row[MessageTable.id],
-                userId = row[MessageTable.userId],
-                workspaceId = row[MessageTable.workspaceId],
-                channelId = row[MessageTable.channelId],
-                userName = row[MessageTable.userName],
-                content = row[MessageTable.content],
-                status = row[MessageTable.status],
-                isDeleted = row[MessageTable.isDeleted],
-                updatedAt = row[MessageTable.updatedAt],
-                replyToId = row[MessageTable.replyToId],
-                mediaUrl = row[MessageTable.mediaUrl],
-                pinnedAt = row[MessageTable.pinnedAt]
-            )
-            snapshot to workspaceMemberIds(snapshot.workspaceId)
+            row.toMessageSyncResponse() to workspaceMemberIds(row[MessageTable.workspaceId])
         } ?: return
         val json = Json.encodeToString(ChannelMessageEvent(message = snapshot))
         memberIds.forEach { sendToChannelCapableUser(it.toLong(), json) }
     } catch (e: Exception) {
-        println("[broadcastChannelMessageChange] Failed for messageId=$messageId: ${e.message}")
+        logger.error("[broadcastChannelMessageChange] Failed for messageId=$messageId", e)
     }
 }
 
@@ -194,26 +150,18 @@ private const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
 private const val DEFAULT_HISTORY_PAGE = 50
 private const val MAX_HISTORY_PAGE = 100
 
-private fun ResultRow.toDmHistoryDto(): DmDto {
-    val rawId = this[DirectMessagesTable.id]
-    val resolvedId = when (rawId) {
-        is EntityID<*> -> (rawId.value as Number).toInt()
-        is Number -> rawId.toInt()
-        else -> rawId.toString().toInt()
-    }
-    return DmDto(
-        action = "HISTORY",
-        id = resolvedId,
-        workspaceId = this[DirectMessagesTable.workspaceId],
-        senderId = this[DirectMessagesTable.senderId],
-        receiverId = this[DirectMessagesTable.receiverId],
-        content = this[DirectMessagesTable.content],
-        timestamp = this[DirectMessagesTable.timestamp],
-        mediaUrl = this[DirectMessagesTable.mediaUrl],
-        isRead = this[DirectMessagesTable.isRead],
-        replyToId = this[DirectMessagesTable.replyToId]
-    )
-}
+private fun ResultRow.toDmHistoryDto() = DmDto(
+    action = "HISTORY",
+    id = this[DirectMessagesTable.id],
+    workspaceId = this[DirectMessagesTable.workspaceId],
+    senderId = this[DirectMessagesTable.senderId],
+    receiverId = this[DirectMessagesTable.receiverId],
+    content = this[DirectMessagesTable.content],
+    timestamp = this[DirectMessagesTable.timestamp],
+    mediaUrl = this[DirectMessagesTable.mediaUrl],
+    isRead = this[DirectMessagesTable.isRead],
+    replyToId = this[DirectMessagesTable.replyToId]
+)
 
 internal fun selectInitialDmHistory(rowsNewestFirst: List<DmDto>, userId: Int, perConversation: Int): List<DmDto> {
     val counts = HashMap<Pair<Int, Int>, Int>()
@@ -2470,7 +2418,7 @@ fun Application.configureRouting() {
                                     updatedTask.id, updatedTask.workspaceId, updatedTask.assignedToUserId
                                 )
                             } catch (e: Exception) {
-                                println("[GitHub] Assignee sync to GitHub failed: ${e.message}")
+                                logger.warn("[GitHub] Assignee sync to GitHub failed", e)
                             }
                         }
                         // ── Notification: task updated ────────────────────────────────────
@@ -3559,7 +3507,7 @@ fun Application.configureRouting() {
                                     contentType = finalMimeType
                                 )
                             } catch (e: Exception) {
-                                println("[FileUpload] Cloudinary upload failed, storing on local disk: ${e.message}")
+                                logger.warn("[FileUpload] Cloudinary upload failed, storing on local disk", e)
                                 null
                             }
                         } else {
@@ -3998,7 +3946,7 @@ fun Application.configureRouting() {
                                                 hasMedia = !requestedDto.mediaUrl.isNullOrBlank()
                                             )
                                             if (rejection != null) {
-                                                println("[DM] Refused SEND_MESSAGE from userId=${requestedDto.senderId} to ${requestedDto.receiverId}: $rejection")
+                                                logger.info("[DM] Refused SEND_MESSAGE from userId=${requestedDto.senderId} to ${requestedDto.receiverId}: $rejection")
                                                 return@dbQuery null
                                             }
                                             val validReplyToId = requestedDto.replyToId?.takeIf { targetId ->
