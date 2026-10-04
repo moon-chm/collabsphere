@@ -349,6 +349,7 @@ object GitHubDataStore {
 }
 
 object GitHubSyncManager {
+    private val logger = LoggerFactory.getLogger("GitHubSyncManager")
 
     private const val MANUAL_SYNC_COOLDOWN_MS = 30_000L
     private const val AUTO_SYNC_COOLDOWN_MS = 5 * 60 * 1000L

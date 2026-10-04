@@ -1,6 +1,7 @@
 package plugins
 
 import com.collabsphere.dto.*
+import dto.*
 import com.collabsphere.model.*
 import com.collabsphere.util.AvatarGenerator
 import com.collabsphere.util.CloudinaryService
@@ -4068,9 +4069,9 @@ fun Application.configureRouting() {
                                         val typingJson = Json.encodeToString(DmDto.serializer(), typingPayload)
                                         sendToUser(dmDto.receiverId.toLong(), typingJson)
                                     } else if (dmDto.action == "REACT_MESSAGE" || dmDto.action == "UNREACT_MESSAGE") {
-                                        val messageId = dmDto.id
-                                        val emoji = dmDto.emoji
-                                        if (messageId != null && messageId != 0 && !emoji.isNullOrBlank()) {
+                                        val messageId = dmDto.id ?: 0
+                                        val emoji = dmDto.emoji ?: ""
+                                        if (messageId != 0 && emoji.isNotBlank()) {
                                             val reactionOutcome = dbQuery {
                                                 val existing = DirectMessagesTable.selectAll()
                                                     .where { DirectMessagesTable.id eq messageId }.singleOrNull()
