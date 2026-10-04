@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.channels
+
 import android.util.Log
 
 import androidx.datastore.core.DataStore
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.collabsphere.app.model.readSyncPosition
+import com.collabsphere.app.model.commitSyncPosition
 
 enum class ChannelDeleteResult { DELETED, FORBIDDEN, FAILED }
 
@@ -113,8 +116,9 @@ class ChannelRepo(
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId)
-                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-                val updates = apiService.getChannelUpdates(workspaceId, lastSyncTime)
+                val position = dataStore.readSyncPosition(syncKey)
+                val page = apiService.getChannelUpdates(workspaceId, position.since, position.cursor)
+                val updates = page.items
 
                 if (updates.isNotEmpty()) {
                     val upserts = updates.filter { !it.isDeleted }.map { remote ->
@@ -137,11 +141,9 @@ class ChannelRepo(
                     }
                     if (upserts.isNotEmpty()) channelDao.insertAllChannels(upserts)
 
-                    val newestTimestamp = updates.maxOf { it.updatedAt }
-                    dataStore.edit { preferences ->
-                        preferences[syncKey] = newestTimestamp
-                    }
                 }
+                // After the rows are stored: committing first and dying in between would skip them.
+                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
             } catch (e: Exception) {
                 Log.e("ChannelRepo", "Operation failed", e)
             }

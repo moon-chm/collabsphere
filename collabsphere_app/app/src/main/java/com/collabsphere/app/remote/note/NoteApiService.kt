@@ -1,5 +1,8 @@
 package com.collabsphere.app.remote.note
 
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.syncParameters
+import com.collabsphere.app.remote.toSyncPage
 import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.notes.NotesRequest
@@ -45,10 +48,10 @@ class NoteApiService(private val client: HttpClient) {
     suspend fun deleteNote(noteId: Int): HttpStatusCode =
         client.delete("$baseUrl/$noteId").status
 
-    suspend fun getNoteUpdates(workspaceId: Int, since: Long): List<NotesSyncDto> {
+    suspend fun getNoteUpdates(workspaceId: Int, since: Long, cursor: Long?): SyncPage<NotesSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {
-            parameter("since", since)
+            syncParameters(since, cursor)
             contentType(ContentType.Application.Json)
-        }.body()
+        }.toSyncPage()
     }
 }

@@ -12,7 +12,17 @@ import org.slf4j.LoggerFactory
 
 object DatabaseFactory {
     private val logger = LoggerFactory.getLogger(DatabaseFactory::class.java)
+
+    @Volatile
+    private var initialized = false
+
+    /**
+     * Idempotent: a second call (tests start the application module many times in one JVM) reuses the
+     * existing pool instead of opening another one that is never closed.
+     */
+    @Synchronized
     fun init() {
+        if (initialized) return
         val rawDatabaseUrl = System.getenv("DATABASE_URL")
         val rawJdbcUrl = System.getenv("JDBC_DATABASE_URL")
 
@@ -121,7 +131,9 @@ object DatabaseFactory {
                 GitHubCodeReferencesTable,
                 GitHubCodeCacheTable
             )
+            SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()
         }
+        initialized = true
     }
 }

@@ -50,6 +50,9 @@ interface DmDao {
     @Query("DELETE FROM DM WHERE id = :dmId")
     suspend fun deleteDmById(dmId: Int)
 
+    @Query("SELECT EXISTS(SELECT 1 FROM DM WHERE id = :dmId)")
+    suspend fun exists(dmId: Int): Boolean
+
     @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp AND senderId = :senderId")
     suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long, senderId: Int)
 }

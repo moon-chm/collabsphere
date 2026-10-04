@@ -8,7 +8,17 @@ import com.collabsphere.app.model.TempId
 import com.collabsphere.app.model.isWorkRunning
 import com.collabsphere.app.remote.dm.DmApiService
 import com.collabsphere.app.remote.media.MediaApiService
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.longPreferencesKey
+import com.collabsphere.app.MyApplication
+import com.collabsphere.app.model.commitSyncPosition
+import com.collabsphere.app.model.readSyncPosition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,12 +29,17 @@ import java.util.concurrent.TimeUnit
 
 private const val DM_HISTORY_PAGE_SIZE = 50
 
+/** How often a connected, foregrounded app re-checks for DM edits/deletes it may have missed. */
+private const val DM_SYNC_INTERVAL_MS = 60_000L
+private val DM_SYNC_KEY = longPreferencesKey("dm_last_sync_time")
+
 class DmRepo(
     private val dmDao: DmDao,
     private val reactionDao: DmReactionDao,
     private val apiService: DmApiService,
     private val mediaApiService: MediaApiService,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val dataStore: DataStore<Preferences>
 ) {
 
     private val _incomingEvents = MutableSharedFlow<DmDto>(extraBufferCapacity = 64)
@@ -381,6 +396,68 @@ class DmRepo(
     suspend fun deleteReactionLocally(messageId: Int, userId: Int, emoji: String) {
         reactionDao.deleteReaction(messageId, userId, emoji)
     }
+
+    /**
+     * Pulls DM edits, read-state changes and deletions this device missed while it was disconnected.
+     * New messages already arrive over the socket; this is for changes to messages it already holds.
+     */
+    suspend fun syncDmChanges(baseUrl: String) {
+        try {
+            val position = dataStore.readSyncPosition(DM_SYNC_KEY)
+            val knownUpToId = dmDao.newestSyncedDmId() ?: 0
+            val page = apiService.getDmUpdates(baseUrl, position.cursor, knownUpToId)
+            for (dto in page.items) {
+                val id = dto.id ?: continue
+                if (dto.isDeleted) {
+                    dmDao.deleteDmById(id)
+                    reactionDao.deleteAllReactionsForMessage(id)
+                } else if (dmDao.exists(id) || id > knownUpToId) {
+                    // Older rows the device never loaded are skipped: inserting them would leave a hole in
+                    // the conversation between them and the loaded window. History paging fetches them.
+                    dmDao.sendDm(dto.toEntity(isRead = dto.isRead))
+                }
+            }
+            dataStore.commitSyncPosition(DM_SYNC_KEY, position, page, newestUpdatedAt = null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("DmRepo", "DM sync failed", e)
+        }
+    }
+
+    /**
+     * Runs [syncDmChanges] on every (re)connect, and periodically while connected and in the
+     * foreground — a sync response read just before a realtime delete could otherwise resurrect the
+     * message locally until the next reconnect; the next pass delivers its tombstone.
+     */
+    suspend fun runDmSyncLoop(baseUrl: String, isConnected: () -> Boolean) {
+        var wasConnected = false
+        var lastSyncAt = 0L
+        while (currentCoroutineContext().isActive) {
+            val connected = isConnected()
+            val justConnected = connected && !wasConnected
+            wasConnected = connected
+            val periodicDue = MyApplication.isAppForeground &&
+                System.currentTimeMillis() - lastSyncAt >= DM_SYNC_INTERVAL_MS
+            if (connected && (justConnected || periodicDue)) {
+                lastSyncAt = System.currentTimeMillis()
+                syncDmChanges(baseUrl)
+            }
+            delay(2_000)
+        }
+    }
+
+    private fun DmDto.toEntity(isRead: Boolean) = DmEntity(
+        id = id ?: 0,
+        workspaceId = workspaceId,
+        senderId = senderId,
+        receiverId = receiverId,
+        dm_content = content,
+        timestamp = timestamp,
+        mediaUrl = mediaUrl,
+        isRead = isRead,
+        replyToId = replyToId
+    )
 
     suspend fun disconnectChat() {
         apiService.disconnect()

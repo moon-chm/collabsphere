@@ -167,7 +167,7 @@ val repositoryModule = module {
     single { NotesRepo(get(), get(), get(), get()) }
     single { MessageRepo(get(), get(), get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
-    single { DmRepo(get(), get(), get(), get(), get()) }
+    single { DmRepo(get(), get(), get(), get(), get(), get()) }
     single { NotificationRepo(get()) }
 }
 

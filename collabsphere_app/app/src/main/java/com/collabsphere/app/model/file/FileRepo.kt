@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.file
+
 import com.collabsphere.app.remote.ApiStatusException
 import com.collabsphere.app.model.SyncDecision
 import com.collabsphere.app.model.SyncPolicy
@@ -20,6 +21,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.collabsphere.app.model.readSyncPosition
+import com.collabsphere.app.model.commitSyncPosition
 
 class FileRepo(
     private val fileDoa: FileDao,
@@ -132,9 +135,9 @@ class FileRepo(
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId)
-                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-
-                val updates = fileApiService.getFileUpdates(workspaceId, lastSyncTime)
+                val position = dataStore.readSyncPosition(syncKey)
+                val page = fileApiService.getFileUpdates(workspaceId, position.since, position.cursor)
+                val updates = page.items
 
                 if (updates.isNotEmpty()) {
                     val upserts = updates.filter { !it.isDeleted }.map { remote ->
@@ -154,11 +157,9 @@ class FileRepo(
                     val deletes = updates.filter { it.isDeleted }.map { it.id }
                     fileDoa.applyDelta(upserts, deletes)
 
-                    val newestTimestamp = updates.maxOf { it.updatedAt }
-                    dataStore.edit { preferences ->
-                        preferences[syncKey] = newestTimestamp
-                    }
                 }
+                // After the rows are stored: committing first and dying in between would skip them.
+                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
             } catch (e: Exception) {
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)

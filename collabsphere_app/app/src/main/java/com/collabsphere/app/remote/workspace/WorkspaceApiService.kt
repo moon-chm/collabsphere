@@ -1,5 +1,8 @@
 package com.collabsphere.app.remote.workspace
 
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.syncParameters
+import com.collabsphere.app.remote.toSyncPage
 import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.search.WorkspaceSearchResponse
@@ -69,10 +72,10 @@ class WorkspaceApiService(
         }.body()
     }
 
-    suspend fun getWorkspaceUpdates(userId: Int, since: Long): List<WorkspaceSyncDto> {
+    suspend fun getWorkspaceUpdates(userId: Int, since: Long, cursor: Long?): SyncPage<WorkspaceSyncDto> {
         return client.get("$baseUrl/sync/$userId") {
-            parameter("since", since)
-        }.body()
+            syncParameters(since, cursor)
+        }.toSyncPage()
     }
 
     suspend fun removeMember(workspaceId: Int, userId: Int): HttpStatusCode =

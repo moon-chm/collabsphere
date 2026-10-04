@@ -34,6 +34,9 @@ object WorkspacesTable : Table("workspace") {
     val workspacePassword = varchar("workspace_password", 255)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -42,6 +45,9 @@ object WorkspaceMembersTable : Table("workspace_members") {
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val role = varchar("role", 10).default("MEMBER")
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(workspaceId, userId)
 }
@@ -54,8 +60,15 @@ object ChannelsTable : Table("channels") {
     val description = text("description")
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, syncXid)
+    }
 }
 
 object LocalFilesTable : Table("local_files") {
@@ -69,16 +82,26 @@ object LocalFilesTable : Table("local_files") {
     val fileName = varchar("file_name", 255)
     val sizeBytes = long("sizebytes")
     val fileLocation = varchar("file_location", 500)
+    // The "<uuid>_<name>" segment that /api/file/download/{name} is addressed by — looked up by
+    // equality instead of a `url LIKE '%/name'` scan. Backfilled from `url` for older rows.
+    val storageKey = varchar("storage_key", 300).nullable().index()
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, syncXid)
+    }
 }
 
 object MessageTable : Table("message") {
     val id = integer("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val channelId = integer("channel_id").references(ChannelsTable.id, onDelete = ReferenceOption.CASCADE).index()
     val userName = varchar("user_name", 255)
     val content = text("content")
@@ -89,8 +112,15 @@ object MessageTable : Table("message") {
     val status = varchar("status", 50)
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, channelId, syncXid)
+    }
 }
 
 object NotesTable : Table("notes") {
@@ -105,8 +135,15 @@ object NotesTable : Table("notes") {
     // Set by the client on an offline-created note so a WorkManager retry after a lost (but
     // successful) create response returns the existing row instead of inserting a duplicate.
     val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, syncXid)
+    }
 }
 
 object TasksTable : Table("task") {
@@ -127,13 +164,20 @@ object TasksTable : Table("task") {
     // Set by the client on an offline-created task so a WorkManager retry after a lost (but
     // successful) create response returns the existing row instead of inserting a duplicate.
     val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, syncXid)
+    }
 }
 
 object DirectMessagesTable : Table("direct_messages") {
     val id = integer("id").autoIncrement()
-    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val senderId = integer("sender_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val receiverId = integer("receiver_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
     val content = text("content")
@@ -141,8 +185,19 @@ object DirectMessagesTable : Table("direct_messages") {
     val replyToId = integer("reply_to_id").nullable()
     val isRead = bool("is_read").default(false)
     val timestamp = long("timestamp")
+    // Soft delete: the row stays as a tombstone (content/media cleared) so a device that was offline
+    // when the message was deleted still learns about it through /api/dm/sync.
+    val isDeleted = bool("is_deleted").default(false)
+    // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
+    // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
+    val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, senderId, syncXid)
+        index(false, receiverId, syncXid)
+    }
 }
 
 object ChannelReadStateTable : Table("channel_read_state") {
@@ -206,6 +261,11 @@ object NotificationsTable : Table("notifications") {
     val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        // Unread badge count and "mark all read" both filter on exactly this pair.
+        index(false, recipientId, isRead)
+    }
 }
 
 object PasswordResetTable : Table("password_resets") {
@@ -275,8 +335,15 @@ object GitHubWebhookEventsTable : Table("github_webhook_events") {
     val nextRetryAt = long("next_retry_at").clientDefault { System.currentTimeMillis() }
     val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
     val error = text("error").nullable()
+    // When a worker claimed the row — a PROCESSING row older than the lease is presumed abandoned
+    // (server crashed/redeployed mid-event) and is put back in the queue.
+    val processingStartedAt = long("processing_started_at").nullable()
 
     override val primaryKey = PrimaryKey(deliveryId)
+
+    init {
+        index(false, status, nextRetryAt)
+    }
 }
 
 object GitHubCheckSuitesTable : Table("github_check_suites") {

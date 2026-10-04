@@ -18,5 +18,7 @@ data class DmDto(
     val reactions: Map<String, Int>? = null,
     val replyToId: Int? = null,
     val channelId: Int? = null,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // Only set on /api/dm/sync rows: true means the message was deleted (a tombstone).
+    val isDeleted: Boolean = false
 )

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.collabsphere.app.model.readSyncPosition
+import com.collabsphere.app.model.commitSyncPosition
 
 class WorkspaceRepo(
     private val workspaceDao: WorkspaceDao,
@@ -51,8 +53,9 @@ class WorkspaceRepo(
             // the moment the app returns to foreground — then goes straight to a fetch below.
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             try {
-                val lastSyncTime = dataStore.data.map { it[LAST_SYNC_KEY] ?: 0L }.first()
-                val updates = workspaceApiService.getWorkspaceUpdates(userId, lastSyncTime)
+                val position = dataStore.readSyncPosition(LAST_SYNC_KEY)
+                val page = workspaceApiService.getWorkspaceUpdates(userId, position.since, position.cursor)
+                val updates = page.items
 
                 if (updates.isNotEmpty()) {
                     updates.forEach { remote ->
@@ -70,12 +73,9 @@ class WorkspaceRepo(
                             syncWorkspaceMembers(remote.id)
                         }
                     }
-
-                    val newestTimestamp = updates.maxOf { it.updatedAt }
-                    dataStore.edit { preferences ->
-                        preferences[LAST_SYNC_KEY] = newestTimestamp
-                    }
                 }
+                // After the rows are stored: committing first and dying in between would skip them.
+                dataStore.commitSyncPosition(LAST_SYNC_KEY, position, page, updates.maxOfOrNull { it.updatedAt })
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }

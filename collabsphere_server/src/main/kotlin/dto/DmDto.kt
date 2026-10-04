@@ -18,5 +18,8 @@ data class DmDto(
     val reactions: Map<String, Int>? = null,
     val replyToId: Int? = null,
     val channelId: Int? = null,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // Only ever true on rows from /api/dm/sync (a tombstone for a deleted DM). Left at its default
+    // everywhere else, so it's omitted from socket frames and older clients never see the field.
+    val isDeleted: Boolean = false
 )

@@ -1,5 +1,8 @@
 package com.collabsphere.app.remote.message
 import com.collabsphere.app.remote.requireSuccess
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.syncParameters
+import com.collabsphere.app.remote.toSyncPage
 import android.util.Log
 
 import com.collabsphere.app.AppConfig
@@ -91,9 +94,16 @@ class MessageApiService(private val client: HttpClient) {
         }.body()
     }
 
-    suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long): List<MessageSyncDto> {
+    /** The newest page, plus the cursor to start delta sync from — read under the same snapshot as the page. */
+    suspend fun getLatestMessagePage(workspaceId: Int, channelId: Int, limit: Int): SyncPage<MessageSyncDto> {
+        return client.get("$baseUrl/history/$workspaceId/$channelId") {
+            parameter("limit", limit)
+        }.toSyncPage()
+    }
+
+    suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long, cursor: Long?): SyncPage<MessageSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId/$channelId") {
-            parameter("since", since)
-        }.body()
+            syncParameters(since, cursor)
+        }.toSyncPage()
     }
 }
