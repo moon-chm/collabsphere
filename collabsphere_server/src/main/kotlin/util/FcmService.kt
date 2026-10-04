@@ -7,6 +7,9 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.AndroidConfig
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.Message
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -120,7 +123,7 @@ object FcmService {
         timestamp: Long
     ) {
         if (!isInitialized) return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val token = getUserFcmToken(recipientUserId)
             if (token.isNullOrBlank()) {
                 logger.debug("No FCM token for user $recipientUserId, skipping push")
@@ -167,7 +170,7 @@ object FcmService {
         actorAvatarUrl: String?
     ) {
         if (!isInitialized) return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val token = getUserFcmToken(recipientUserId)
             if (token.isNullOrBlank()) {
                 logger.debug("No FCM token for user $recipientUserId, skipping push")

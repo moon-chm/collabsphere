@@ -962,7 +962,7 @@ fun Application.configureGitHubRoutes() {
 
                         val targetRepoIds = if (repoId != null) {
                             if (!linkedRepoIds.containsKey(repoId)) {
-                                return@newSuspendedTransaction call.respond(HttpStatusCode.Forbidden)
+                                return@dbQuery call.respond(HttpStatusCode.Forbidden)
                             }
                             listOf(repoId)
                         } else {
