@@ -1,5 +1,8 @@
 package com.collabsphere.app.remote.channel
 
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.syncParameters
+import com.collabsphere.app.remote.toSyncPage
 import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import io.ktor.client.*
@@ -35,9 +38,9 @@ class ChannelApiService(private val client: HttpClient) {
         return client.get("$baseUrl/workspace/$workspaceId").body()
     }
 
-    suspend fun getChannelUpdates(workspaceId: Int, since: Long): List<ChannelSyncDto> {
+    suspend fun getChannelUpdates(workspaceId: Int, since: Long, cursor: Long?): SyncPage<ChannelSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {
-            parameter("since", since)
-        }.body()
+            syncParameters(since, cursor)
+        }.toSyncPage()
     }
 }

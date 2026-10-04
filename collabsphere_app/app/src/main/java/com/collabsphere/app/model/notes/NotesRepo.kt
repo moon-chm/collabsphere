@@ -17,6 +17,8 @@ import com.collabsphere.app.remote.note.NoteApiService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.concurrent.TimeUnit
+import com.collabsphere.app.model.readSyncPosition
+import com.collabsphere.app.model.commitSyncPosition
 
 class NotesRepo(
     private val notesDao: NotesDao,
@@ -52,8 +54,9 @@ class NotesRepo(
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             try {
                 val syncKey = getSyncKey(workspaceId)
-                val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-                val updates = apiService.getNoteUpdates(workspaceId, lastSyncTime)
+                val position = dataStore.readSyncPosition(syncKey)
+                val page = apiService.getNoteUpdates(workspaceId, position.since, position.cursor)
+                val updates = page.items
 
                 if (updates.isNotEmpty()) {
                     val upserts = updates.filter { !it.isDeleted }.map { remote ->
@@ -69,11 +72,9 @@ class NotesRepo(
                     val deletes = updates.filter { it.isDeleted }.map { it.id }
                     notesDao.applyDelta(upserts, deletes)
 
-                    val newestTimestamp = updates.maxOf { it.updatedAt }
-                    dataStore.edit { preferences ->
-                        preferences[syncKey] = newestTimestamp
-                    }
                 }
+                // After the rows are stored: committing first and dying in between would skip them.
+                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

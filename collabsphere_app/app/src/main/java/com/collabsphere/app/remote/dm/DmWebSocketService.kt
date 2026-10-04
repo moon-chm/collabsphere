@@ -41,6 +41,7 @@ class DmWebSocketService : Service() {
     private lateinit var notificationManager: NotificationManager
 
     private var connectionJob: Job? = null
+    private var dmSyncJob: Job? = null
     private var currentBaseUrl: String? = null
     private var currentUserIdLong: Long = -1L
 
@@ -108,6 +109,11 @@ class DmWebSocketService : Service() {
         currentUserIdLong = userId
 
         connectionJob?.cancel()
+        // Catches up on DM edits/deletes missed while disconnected, each time the socket (re)connects.
+        dmSyncJob?.cancel()
+        dmSyncJob = serviceScope.launch {
+            repo.runDmSyncLoop(baseUrl) { isWebSocketConnected }
+        }
         connectionJob = serviceScope.launch {
             var backoffMs = 2000L
             val maxBackoffMs = 30000L
@@ -159,6 +165,7 @@ class DmWebSocketService : Service() {
     override fun onDestroy() {
         isWebSocketConnected = false
         connectionJob?.cancel()
+        dmSyncJob?.cancel()
         // Deliberately outlives serviceScope (cancelled right after) so the disconnect handshake can
         // still finish even though the service itself is being torn down right now.
         CoroutineScope(NonCancellable + Dispatchers.IO).launch {

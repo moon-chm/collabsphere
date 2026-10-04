@@ -10,6 +10,8 @@ import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.ChannelReadState
 import com.collabsphere.app.dto.message.ChannelTypingEvent
 import com.collabsphere.app.dto.notification.NotificationPushFrame
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.toSyncPage
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -186,6 +188,18 @@ class DmApiService(
             beforeId?.let { parameter("before", it) }
             parameter("limit", limit)
         }.body()
+    }
+
+    /**
+     * DM edits, read-state changes and deletions (as tombstones) since [cursor]. Without a cursor the
+     * server uses [knownUpToId] — the newest DM id held locally — to decide what this device could have.
+     */
+    suspend fun getDmUpdates(baseUrl: String, cursor: Long?, knownUpToId: Int): SyncPage<DmDto> {
+        val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
+        return client.get("$cleanBaseUrl/api/dm/sync") {
+            cursor?.let { parameter("cursor", it) }
+            parameter("sinceId", knownUpToId)
+        }.toSyncPage()
     }
 
     suspend fun getOnlineUsers(baseUrl: String, workspaceId: Int): List<Int> {

@@ -1,5 +1,8 @@
 package com.collabsphere.app.remote.file
 
+import com.collabsphere.app.remote.SyncPage
+import com.collabsphere.app.remote.syncParameters
+import com.collabsphere.app.remote.toSyncPage
 import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.file.FileResponse
@@ -66,10 +69,10 @@ class FileApiService(private val client: HttpClient) {
     suspend fun deleteFile(fileId: Long): HttpStatusCode =
         client.delete("$baseUrl/$fileId").status
 
-    suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long): List<FileSyncDto> {
+    suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long, cursor: Long?): SyncPage<FileSyncDto> {
         return client.get("$baseUrl/updates") {
             parameter("workspaceId", workspaceId)
-            parameter("lastSyncTime", lastSyncTime)
-        }.body()
+            syncParameters(lastSyncTime, cursor, sinceParam = "lastSyncTime")
+        }.toSyncPage()
     }
 }

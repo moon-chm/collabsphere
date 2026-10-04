@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.message
+
 import com.collabsphere.app.remote.ApiStatusException
 import com.collabsphere.app.model.SyncDecision
 import com.collabsphere.app.model.SyncPolicy
@@ -29,6 +30,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.collabsphere.app.model.readSyncPosition
+import com.collabsphere.app.model.commitSyncPosition
+import com.collabsphere.app.model.SyncPosition
 
 class MessageRepo(
     private val messageDao: MessageDao,
@@ -250,12 +254,18 @@ class MessageRepo(
     }
 
     private suspend fun loadInitialPage(workspaceId: Int, channelId: Int) {
-        val page = apiService.getMessageHistory(workspaceId, channelId, null, HISTORY_PAGE_SIZE)
-        messageDao.applyDelta(page.map { it.toEntity() }, emptyList())
+        val page = apiService.getLatestMessagePage(workspaceId, channelId, HISTORY_PAGE_SIZE)
+        messageDao.applyDelta(page.items.map { it.toEntity() }, emptyList())
         val syncKey = getSyncKey(workspaceId, channelId)
-        dataStore.edit { preferences ->
-            preferences[syncKey] = page.maxOfOrNull { it.updatedAt } ?: 1L
-        }
+        // `since` doubles as the "initial page loaded" marker (never 0 from here on); the cursor, read
+        // under the same snapshot as the page, is where delta sync picks up without a gap.
+        dataStore.commitSyncPosition(
+            syncKey,
+            SyncPosition(since = 0L, cursor = null),
+            page.copy(reset = false),
+            page.items.maxOfOrNull { it.updatedAt } ?: 1L,
+            force = true
+        )
     }
 
     private fun MessageSyncDto.toEntity() = MessageEntity(
@@ -289,13 +299,14 @@ class MessageRepo(
                 lastPollAt = System.currentTimeMillis()
                 try {
                     val syncKey = getSyncKey(workspaceId, channelId)
-                    val lastSyncTime = dataStore.data.map { it[syncKey] ?: 0L }.first()
-                    if (lastSyncTime == 0L) {
+                    val position = dataStore.readSyncPosition(syncKey)
+                    if (position.since == 0L) {
                         loadInitialPage(workspaceId, channelId)
                         delay(2000)
                         continue
                     }
-                    val updates = apiService.getMessageUpdates(workspaceId, channelId, lastSyncTime)
+                    val page = apiService.getMessageUpdates(workspaceId, channelId, position.since, position.cursor)
+                    val updates = page.items
 
                     if (updates.isNotEmpty()) {
                         val oldestLoaded = messageDao.oldestSyncedMessageId(workspaceId, channelId)
@@ -304,12 +315,10 @@ class MessageRepo(
                             .map { it.toEntity() }
                         val deletes = updates.filter { it.isDeleted }.map { it.id }
                         messageDao.applyDelta(upserts, deletes)
-
-                        val newestTimestamp = updates.maxOf { it.updatedAt }
-                        dataStore.edit { preferences ->
-                            preferences[syncKey] = newestTimestamp
-                        }
                     }
+                    // After the rows are stored: committing first and dying in between would skip them.
+                    // A reset clears `since` too, which sends the next pass back through loadInitialPage.
+                    dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
                 } catch (e: Exception) {
                     Log.e("MessageRepo", "Operation failed", e)
                 }
