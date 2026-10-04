@@ -326,7 +326,7 @@ fun Application.configureRouting() {
                     id = uid,
                     userName = userRow[UsersTable.username],
                     email = userRow[UsersTable.email],
-                    token = JwtConfig.generateToken(uid),
+                    token = JwtConfig.generateToken(uid, userRow[UsersTable.tokenVersion]),
                     avatarUrl = AvatarGenerator.avatarUrlFor(uid, userRow[UsersTable.avatarUrl]),
                     isEmailVerified = true
                 )
@@ -523,23 +523,16 @@ fun Application.configureRouting() {
                 }
 
                 val resetResult = dbQuery {
-                    val resetRow = PasswordResetTable.selectAll()
-                        .where { PasswordResetTable.email eq trimmedEmail }
-                        .singleOrNull() ?: return@dbQuery "NO_REQUEST"
+                    val userRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
+                        ?: return@dbQuery "USER_NOT_FOUND"
 
-                    if (System.currentTimeMillis() > resetRow[PasswordResetTable.expiresAt]) {
-                        return@dbQuery "EXPIRED"
-                    }
-
-                    if (resetRow[PasswordResetTable.otp] != trimmedOtp) {
-                        return@dbQuery "INVALID"
-                    }
-
-                    val updated = UsersTable.update({ UsersTable.email.lowerCase() eq trimmedEmail }) {
+                    val updated = UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) {
                         it[password] = PasswordHasher.hash(request.newPassword)
+                        it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                     }
 
                     PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
+                    TokenVersions.invalidate(userRow[UsersTable.id])
                     if (updated > 0) "OK" else "USER_NOT_FOUND"
                 }
 
@@ -643,7 +636,9 @@ fun Application.configureRouting() {
                                     it[bio] = request.bio
                                     it[statusMessage] = request.statusMessage
                                     it[password] = PasswordHasher.hash(request.newPassword)
+                                    it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                                 }
+                                TokenVersions.invalidate(actingUserId)
                             } else {
                                 UsersTable.update({ UsersTable.id eq actingUserId }) {
                                     it[username] = request.userName
@@ -715,6 +710,141 @@ fun Application.configureRouting() {
                     call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = AvatarGenerator.avatarUrlFor(actingUserId, null)))
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.InternalServerError, "Failed to remove avatar")
+                }
+            }
+
+            // ── UPDATE email (change email request) ───────────────────────────
+            put("/api/user/email") {
+                try {
+                    val request = call.receive<ChangeEmailRequest>()
+                    val actingUserId = call.authenticatedUserId()
+                    val newEmail = request.newEmail.trim().lowercase()
+
+                    val result = dbQuery {
+                        val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            ?: return@dbQuery "NOT_FOUND"
+
+                        if (!PasswordHasher.matches(request.currentPassword, userRow[UsersTable.password])) {
+                            return@dbQuery "UNAUTHORIZED"
+                        }
+
+                        if (UsersTable.selectAll().where { (UsersTable.email.lowerCase() eq newEmail) and (UsersTable.id neq actingUserId) }.count() > 0) {
+                            return@dbQuery "CONFLICT"
+                        }
+
+                        UsersTable.update({ UsersTable.id eq actingUserId }) {
+                            it[pendingEmail] = newEmail
+                        }
+                        "OK"
+                    }
+
+                    when (result) {
+                        "OK" -> call.respond(HttpStatusCode.OK, "Email change requested")
+                        "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
+                        "CONFLICT" -> call.respond(HttpStatusCode.Conflict, "Email already in use")
+                        else -> call.respond(HttpStatusCode.NotFound, "User not found")
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                }
+            }
+
+            post("/api/user/verify-email/send") {
+                try {
+                    val actingUserId = call.authenticatedUserId()
+                    val userRow = dbQuery {
+                        UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                    } ?: return@post call.respond(HttpStatusCode.NotFound, "User not found")
+
+                    val emailTarget = userRow[UsersTable.pendingEmail] ?: userRow[UsersTable.email]
+                    val otp = String.format("%06d", (100000..999999).random())
+                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+
+                    dbQuery {
+                        UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
+                        UserVerificationTable.insert {
+                            it[userId] = actingUserId
+                            it[token] = otp
+                            it[UserVerificationTable.expiresAt] = expiresAt
+                        }
+                    }
+
+                    EmailService.sendVerificationOtp(emailTarget, otp)
+                    call.respond(HttpStatusCode.OK, "Verification email sent")
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, "Failed to send email")
+                }
+            }
+
+            post("/api/user/verify-email/confirm") {
+                try {
+                    val request = call.receive<EmailVerifyConfirmRequest>()
+                    val actingUserId = call.authenticatedUserId()
+                    val trimmedOtp = request.token.trim()
+
+                    val result = dbQuery {
+                        val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            ?: return@dbQuery "NOT_FOUND"
+
+                        val verificationRow = UserVerificationTable.selectAll()
+                            .where { UserVerificationTable.userId eq actingUserId }
+                            .singleOrNull() ?: return@dbQuery "NO_CODE"
+
+                        if (System.currentTimeMillis() > verificationRow[UserVerificationTable.expiresAt]) {
+                            return@dbQuery "EXPIRED"
+                        }
+
+                        if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
+                            return@dbQuery "INVALID"
+                        }
+
+                        UsersTable.update({ UsersTable.id eq actingUserId }) {
+                            it[isEmailVerified] = true
+                            if (userRow[UsersTable.pendingEmail] != null) {
+                                it[email] = userRow[UsersTable.pendingEmail]!!
+                                it[pendingEmail] = null
+                            }
+                        }
+                        UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
+                        "OK"
+                    }
+
+                    when (result) {
+                        "OK" -> call.respond(HttpStatusCode.OK, "Email verified")
+                        "EXPIRED" -> call.respond(HttpStatusCode.Gone, "Code expired")
+                        "INVALID" -> call.respond(HttpStatusCode.BadRequest, "Invalid code")
+                        else -> call.respond(HttpStatusCode.NotFound, "User not found")
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                }
+            }
+
+            delete("/api/user/account") {
+                try {
+                    val request = call.receive<DeleteAccountRequest>()
+                    val actingUserId = call.authenticatedUserId()
+
+                    val result = dbQuery {
+                        val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            ?: return@dbQuery "NOT_FOUND"
+
+                        if (!PasswordHasher.matches(request.password, userRow[UsersTable.password])) {
+                            return@dbQuery "UNAUTHORIZED"
+                        }
+                        
+                        UsersTable.deleteWhere { UsersTable.id eq actingUserId }
+                        TokenVersions.invalidate(actingUserId)
+                        "OK"
+                    }
+
+                    when (result) {
+                        "OK" -> call.respond(HttpStatusCode.OK, "Account deleted")
+                        "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
+                        else -> call.respond(HttpStatusCode.NotFound, "User not found")
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
 
@@ -1663,11 +1793,20 @@ fun Application.configureRouting() {
                             WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invId }) {
                                 it[status] = "ACCEPTED"
                             }
-                            "OK"
+                            
+                            val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.single()
+                            MemberResponse(
+                                workspaceId = wsId,
+                                userId = actingUserId,
+                                userName = userRow[UsersTable.username],
+                                email = userRow[UsersTable.email],
+                                avatarUrl = userRow[UsersTable.avatarUrl],
+                                role = WorkspaceRoles.MEMBER
+                            )
                         }
 
                         when (acceptResult) {
-                            "OK" -> call.respond(HttpStatusCode.OK, mapOf("status" to "success", "message" to "Invitation accepted"))
+                            is MemberResponse -> call.respond(HttpStatusCode.OK, acceptResult)
                             "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, "Invitation expired")
                             "ALREADY_PROCESSED" -> call.respond(HttpStatusCode.BadRequest, "Invitation already processed")
                             else -> call.respond(HttpStatusCode.NotFound, "Invitation not found")
@@ -1756,11 +1895,14 @@ fun Application.configureRouting() {
                                 }
                             }
 
-                            WorkspaceResponse(
-                                id = ws[WorkspacesTable.id],
-                                userId = ws[WorkspacesTable.userId],
-                                workspaceName = ws[WorkspacesTable.workspaceName],
-                                workspaceOwner = ws[WorkspacesTable.workspaceOwner]
+                            val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.single()
+                            MemberResponse(
+                                workspaceId = wsId,
+                                userId = actingUserId,
+                                userName = userRow[UsersTable.username],
+                                email = userRow[UsersTable.email],
+                                avatarUrl = userRow[UsersTable.avatarUrl],
+                                role = WorkspaceRoles.MEMBER
                             )
                         }
 
@@ -3426,7 +3568,8 @@ fun Application.configureRouting() {
                             mimeType = finalMimeType,
                             localpath = localpath,
                             fileName = fileName!!,
-                            sizebytes = fileSize
+                            sizebytes = fileSize,
+                            fileLocation = generatedFileLocation
                         )
 
                         call.respond(HttpStatusCode.Created, response)
@@ -3466,7 +3609,8 @@ fun Application.configureRouting() {
                                     mimeType = it[LocalFilesTable.mimeType],
                                     localpath = it[LocalFilesTable.localPath],
                                     fileName = it[LocalFilesTable.fileName],
-                                    sizebytes = it[LocalFilesTable.sizeBytes]
+                                    sizebytes = it[LocalFilesTable.sizeBytes],
+                                    fileLocation = it[LocalFilesTable.fileLocation]
                                 )
                             }
                         }

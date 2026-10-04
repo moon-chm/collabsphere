@@ -53,7 +53,11 @@ fun Application.module() {
             realm = JwtConfig.realm
             verifier(JwtConfig.verifier)
             validate { credential ->
-                if (credential.payload.getClaim("userId").asInt() != null) JWTPrincipal(credential.payload) else null
+                val userId = credential.payload.getClaim("userId").asInt() ?: return@validate null
+                val tokenVersion = credential.payload.getClaim(JwtConfig.TOKEN_VERSION_CLAIM).asInt() ?: 0
+                // Deleted account (null) or a token minted before the last password change/reset.
+                if (plugins.TokenVersions.current(userId) != tokenVersion) return@validate null
+                JWTPrincipal(credential.payload)
             }
             challenge { _, _ ->
                 call.respond(HttpStatusCode.Unauthorized, "Token is missing, invalid, or expired")

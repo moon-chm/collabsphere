@@ -22,6 +22,11 @@ object UsersTable : Table("users") {
     val showLastSeen = bool("show_last_seen").default(true)
     val profileVisibility = varchar("profile_visibility", 20).default("public") // "public" | "members_only"
     val fcmToken = varchar("fcm_token", 500).nullable()
+    // Bumped on password change/reset — every JWT carries the version it was minted with, so this
+    // revokes all previously issued tokens (see plugins/AuthSupport.kt TokenVersions).
+    val tokenVersion = integer("token_version").default(0)
+    // Requested-but-unverified new email. `email` only changes once the user proves they own this one.
+    val pendingEmail = varchar("pending_email", 255).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -244,6 +249,7 @@ object UserVerificationTable : Table("user_verification") {
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).uniqueIndex()
     val token = varchar("token", 255)
     val expiresAt = long("expires_at")
+    val attempts = integer("attempts").default(0)
 
     override val primaryKey = PrimaryKey(userId)
 }
@@ -272,6 +278,7 @@ object PasswordResetTable : Table("password_resets") {
     val email = varchar("email", 255)
     val otp = varchar("otp", 10)
     val expiresAt = long("expires_at")
+    val attempts = integer("attempts").default(0)
 
     override val primaryKey = PrimaryKey(email)
 }

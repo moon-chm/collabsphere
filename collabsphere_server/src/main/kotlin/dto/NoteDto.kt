@@ -21,7 +21,7 @@ data class NotesRequest(
 @Serializable
 data class NotesResponse(
     val id: Int,
-    val userId: Int?,
+    val userId: Int,
     val workspaceId: Int,
     val notesName: String,
     val description: String,
@@ -31,7 +31,7 @@ data class NotesResponse(
 @Serializable
 data class NotesSyncResponse(
     val id: Int,
-    val userId: Int?,
+    val userId: Int,
     val workspaceId: Int,
     val notesName: String,
     val description: String,
@@ -50,6 +50,7 @@ data class FileSyncResponse(
     val localpath: String?,
     val fileName: String,
     val sizebytes: Long,
+    val fileLocation: String? = null,
     val isDeleted: Boolean,
     val updatedAt: Long
 )

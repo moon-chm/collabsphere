@@ -166,6 +166,7 @@ internal fun fileDeltaSync(workspaceId: Int, request: SyncRequest): SyncPage<Fil
                     localpath = it[LocalFilesTable.localPath],
                     fileName = it[LocalFilesTable.fileName],
                     sizebytes = it[LocalFilesTable.sizeBytes],
+                    fileLocation = it[LocalFilesTable.fileLocation],
                     isDeleted = it[LocalFilesTable.isDeleted],
                     updatedAt = it[LocalFilesTable.updatedAt]
                 )

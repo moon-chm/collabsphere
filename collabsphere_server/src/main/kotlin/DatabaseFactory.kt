@@ -134,6 +134,19 @@ object DatabaseFactory {
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()
         }
+        // Separate transaction: if legacy rows already contain case-variant duplicates the CREATE
+        // fails, and in Postgres a failed statement poisons the whole transaction it runs in.
+        try {
+            transaction(database) {
+                exec("CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (lower(email))")
+            }
+        } catch (e: Exception) {
+            logger.error(
+                "[DatabaseFactory] Could not create unique index on lower(users.email) — duplicate emails exist " +
+                    "and must be merged manually. Registration still checks for duplicates, but concurrent sign-ups can race.",
+                e
+            )
+        }
         initialized = true
     }
 }

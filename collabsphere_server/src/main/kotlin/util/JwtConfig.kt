@@ -23,10 +23,14 @@ object JwtConfig {
         .withAudience(audience)
         .build()
 
-    fun generateToken(userId: Int): String = JWT.create()
+    /** Claim carrying UsersTable.tokenVersion; tokens minted before this existed read as version 0. */
+    const val TOKEN_VERSION_CLAIM = "tv"
+
+    fun generateToken(userId: Int, tokenVersion: Int = 0): String = JWT.create()
         .withIssuer(issuer)
         .withAudience(audience)
         .withClaim("userId", userId)
+        .withClaim(TOKEN_VERSION_CLAIM, tokenVersion)
         .withExpiresAt(Date(System.currentTimeMillis() + validityMs))
         .sign(algorithm)
 
