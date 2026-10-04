@@ -120,12 +120,14 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // null = DataStore not yet loaded. Avoids the one-frame onboarding
                     // flash for logged-in users on cold start (#5).
-                    val savedUserId: Int? by userPreferences.userIdFlow
-                        .map<Int, Int?> { it }
-                        .collectAsStateWithLifecycle(initialValue = null)
-                    val onboardingDone: Boolean? by userPreferences.onboardingDoneFlow
-                        .map<Boolean, Boolean?> { it }
-                        .collectAsStateWithLifecycle(initialValue = null)
+                    val savedUserId: Int? by androidx.compose.runtime.remember(userPreferences.userIdFlow) {
+                        userPreferences.userIdFlow.map<Int, Int?> { it }
+                    }.collectAsStateWithLifecycle(initialValue = null)
+                    
+                    val onboardingDone: Boolean? by androidx.compose.runtime.remember(userPreferences.onboardingDoneFlow) {
+                        userPreferences.onboardingDoneFlow.map<Boolean, Boolean?> { it }
+                    }.collectAsStateWithLifecycle(initialValue = null)
+                    
                     val loggedInUserId by loginViewModel.loggedInUserId.collectAsStateWithLifecycle(initialValue = 0L)
 
                     var showSplash by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
