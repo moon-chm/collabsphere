@@ -87,5 +87,6 @@ data class InvitationResponse(
     val inviteeEmail: String,
     val inviteCode: String,
     val status: String,
+    val expiresAt: Long,
     val createdAt: Long
 )

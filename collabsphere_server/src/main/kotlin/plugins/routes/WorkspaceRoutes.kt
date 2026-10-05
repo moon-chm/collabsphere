@@ -389,6 +389,7 @@ internal fun Route.workspaceRoutes() {
                         inviteeEmail = trimmedEmail,
                         inviteCode = inviteCode,
                         status = "PENDING",
+                        expiresAt = expiresAt,
                         createdAt = System.currentTimeMillis()
                     )
                 }
@@ -425,6 +426,7 @@ internal fun Route.workspaceRoutes() {
                                 inviteeEmail = it[WorkspaceInvitationsTable.inviteeEmail],
                                 inviteCode = it[WorkspaceInvitationsTable.inviteCode],
                                 status = it[WorkspaceInvitationsTable.status],
+                                expiresAt = it[WorkspaceInvitationsTable.expiresAt],
                                 createdAt = it[WorkspaceInvitationsTable.createdAt]
                             )
                         }
