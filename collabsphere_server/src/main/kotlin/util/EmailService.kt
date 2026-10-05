@@ -93,6 +93,8 @@ object EmailService {
             smtpProperties["mail.smtp.auth"] = "true"
             smtpProperties["mail.smtp.starttls.enable"] = "true"
             smtpProperties["mail.smtp.ssl.protocols"] = "TLSv1.2 TLSv1.3"
+            smtpProperties["mail.smtp.connectiontimeout"] = "5000"
+            smtpProperties["mail.smtp.timeout"] = "5000"
             if (smtpPort == 465) {
                 smtpProperties["mail.smtp.socketFactory.port"] = "465"
                 smtpProperties["mail.smtp.socketFactory.class"] = "javax.net.ssl.SSLSocketFactory"
