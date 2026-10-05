@@ -357,7 +357,7 @@ internal fun Route.workspaceRoutes() {
                 val inviteCode = (1..6).map { chars.random() }.joinToString("")
                 val expiresAt = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // 7 days
 
-                val insertedInvitation = dbReadQuery {
+                val insertedInvitation = dbQuery {
                     val invId = WorkspaceInvitationsTable.insert {
                         it[workspaceId] = workspaceIdParam
                         it[inviterUserId] = actingUserId
@@ -446,17 +446,17 @@ internal fun Route.workspaceRoutes() {
                     UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
                 } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
 
-                val acceptResult = dbReadQuery {
+                val acceptResult = dbQuery {
                     val invRow = WorkspaceInvitationsTable.selectAll()
                         .where { (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) }
-                        .singleOrNull() ?: return@dbReadQuery "NOT_FOUND"
+                        .singleOrNull() ?: return@dbQuery "NOT_FOUND"
 
                     if (invRow[WorkspaceInvitationsTable.status] != "PENDING") {
-                        return@dbReadQuery "ALREADY_PROCESSED"
+                        return@dbQuery "ALREADY_PROCESSED"
                     }
 
                     if (System.currentTimeMillis() > invRow[WorkspaceInvitationsTable.expiresAt]) {
-                        return@dbReadQuery "EXPIRED"
+                        return@dbQuery "EXPIRED"
                     }
 
                     val wsId = invRow[WorkspaceInvitationsTable.workspaceId]
@@ -512,7 +512,7 @@ internal fun Route.workspaceRoutes() {
                     UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()?.get(UsersTable.email)
                 } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
 
-                val declined = dbReadQuery {
+                val declined = dbQuery {
                     val updated = WorkspaceInvitationsTable.update({
                         (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase())
                     }) {
@@ -542,7 +542,7 @@ internal fun Route.workspaceRoutes() {
                     return@post call.respond(HttpStatusCode.BadRequest, "Invite code cannot be blank")
                 }
 
-                val joinedWorkspace = dbReadQuery {
+                val joinedWorkspace = dbQuery {
                     val invRow = WorkspaceInvitationsTable.selectAll()
                         .where {
                             (WorkspaceInvitationsTable.inviteCode eq trimmedCode) and
@@ -557,10 +557,10 @@ internal fun Route.workspaceRoutes() {
                         null
                     }
 
-                    if (wsId == null) return@dbReadQuery null
+                    if (wsId == null) return@dbQuery null
 
                     val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq wsId }.singleOrNull()
-                        ?: return@dbReadQuery null
+                        ?: return@dbQuery null
 
                     val alreadyMember = WorkspaceMembersTable.selectAll().where {
                         (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
@@ -709,7 +709,7 @@ internal fun Route.workspaceRoutes() {
                         "Missing password"
                     )
 
-                val deletedIds = dbReadQuery {
+                val deletedIds = dbQuery {
                     val condition = if (workspaceId != null) {
                         (WorkspacesTable.id eq workspaceId) and (WorkspacesTable.userId eq actingUserId)
                     } else {

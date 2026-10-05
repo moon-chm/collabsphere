@@ -164,10 +164,10 @@ internal fun Route.tasksRoutes() {
                 val taskIdParam = call.parameters["taskId"]?.toIntOrNull()
                     ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing or invalid taskId")
                 val actingUserId = call.authenticatedUserId()
-                val updatedRows = dbReadQuery {
+                val updatedRows = dbQuery {
                     val task = TasksTable.selectAll().where { TasksTable.id eq taskIdParam }.singleOrNull()
-                        ?: return@dbReadQuery -1
-                    if (!isMember(actingUserId, task[TasksTable.workspaceId])) return@dbReadQuery -2
+                        ?: return@dbQuery -1
+                    if (!isMember(actingUserId, task[TasksTable.workspaceId])) return@dbQuery -2
                     TasksTable.update({ TasksTable.id eq taskIdParam }) {
                         it[isDeleted] = true
                         it[updatedAt] = System.currentTimeMillis()
@@ -198,15 +198,15 @@ internal fun Route.tasksRoutes() {
             }
 
             var previousStatus: String? = null
-            val updateResult = dbReadQuery {
+            val updateResult = dbQuery {
                 val existingTask = TasksTable.selectAll().where { TasksTable.id eq taskId }.singleOrNull()
-                    ?: return@dbReadQuery -1
+                    ?: return@dbQuery -1
                 previousStatus = existingTask[TasksTable.status]
                 if (!isMember(actingUserId, existingTask[TasksTable.workspaceId]) ||
                     !isMember(actingUserId, request.workspaceId)
-                ) return@dbReadQuery -2
+                ) return@dbQuery -2
                 if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
-                    return@dbReadQuery -4
+                    return@dbQuery -4
                 }
 
                 // Business rules: mirror client-side restrictions server-side
@@ -229,12 +229,12 @@ internal fun Route.tasksRoutes() {
                 val editingPlanning = nextDueDate != currentDueDate || nextPriority != currentPriority ||
                         nextChecklist != currentChecklist || nextLabels != currentLabels
 
-                if (reassigning && actingUserId != existingTask[TasksTable.createdByUserId]) return@dbReadQuery -3
-                if (editingContentOrStatus && actingUserId != existingTask[TasksTable.assignedToUserId]) return@dbReadQuery -3
+                if (reassigning && actingUserId != existingTask[TasksTable.createdByUserId]) return@dbQuery -3
+                if (editingContentOrStatus && actingUserId != existingTask[TasksTable.assignedToUserId]) return@dbQuery -3
                 if (editingPlanning &&
                     actingUserId != existingTask[TasksTable.assignedToUserId] &&
                     actingUserId != existingTask[TasksTable.createdByUserId]
-                ) return@dbReadQuery -3
+                ) return@dbQuery -3
 
                 TasksTable.update({ TasksTable.id eq taskId }) {
                     it[TasksTable.taskName] = request.taskName
@@ -259,7 +259,7 @@ internal fun Route.tasksRoutes() {
                 -4   -> return@put call.respond(HttpStatusCode.BadRequest, "Assignee is not a member of the workspace")
             }
 
-            val updatedTask = dbReadQuery {
+            val updatedTask = dbQuery {
                 TasksTable.selectAll().where { TasksTable.id eq taskId }.map {
                     TaskResponse(
                         id = it[TasksTable.id],
@@ -295,7 +295,7 @@ internal fun Route.tasksRoutes() {
                 // ── Notification: task updated ────────────────────────────────
                 val assigneeId = updatedTask.assignedToUserId
                 if (assigneeId != null && assigneeId != actingUserId) {
-                    val updaterName = dbReadQuery {
+                    val updaterName = dbQuery {
                         UsersTable.selectAll().where { UsersTable.id eq actingUserId }
                             .singleOrNull()?.get(UsersTable.username) ?: "Someone"
                     }

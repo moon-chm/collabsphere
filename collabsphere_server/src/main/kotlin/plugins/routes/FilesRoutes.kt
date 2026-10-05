@@ -248,9 +248,9 @@ internal fun Route.filesRoutes() {
                     return@get
                 }
 
-                val page = dbReadQuery {
+                val page = dbQuery {
                     if (!isMember(actingUserId, workspaceIdParam)) {
-                        return@dbReadQuery null
+                        return@dbQuery null
                     }
                     fileDeltaSync(workspaceIdParam, syncRequest)
                 }
