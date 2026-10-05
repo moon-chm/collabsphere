@@ -232,7 +232,7 @@ object GitHubDataStore {
     private const val SYNC_OVERLAP_MS = 24 * 60 * 60 * 1000L
 
     suspend fun sync(repositoryId: Int, token: String, repoFullName: String, branch: String): List<GitHubActivity> {
-        val latestCommitDate = newSuspendedTransaction(Dispatchers.IO) {
+        val latestCommitDate = newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
             val maxDate = GitHubCommitsTable.commitDate.max()
             GitHubCommitsTable.select(maxDate)
                 .where { GitHubCommitsTable.repositoryId eq repositoryId }
@@ -275,7 +275,7 @@ object GitHubDataStore {
             emptyList()
         }
 
-        return newSuspendedTransaction(Dispatchers.IO) {
+        return newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
             val stillLinked = GitHubRepositoriesTable.selectAll()
                 .where { GitHubRepositoriesTable.id eq repositoryId }
                 .count() > 0
@@ -386,7 +386,7 @@ object GitHubSyncManager {
         cooldownMap?.put(repositoryId, System.currentTimeMillis())
         scope.launch {
             try {
-                newSuspendedTransaction(Dispatchers.IO) {
+                newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                         it[syncState] = "SYNCING"
                         it[lastSyncError] = null
@@ -395,7 +395,7 @@ object GitHubSyncManager {
                 val token = GitHubService.repoAccessToken(installationId, userToken)
                 if (token == null) {
                     logger.warn("[GitHub] No token available to sync $repoFullName")
-                    newSuspendedTransaction(Dispatchers.IO) {
+                    newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
                         GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                             it[syncState] = "FAILED"
                             it[lastSyncError] = "No token available"
@@ -408,7 +408,7 @@ object GitHubSyncManager {
             } catch (e: GitHubApiException) {
                 logger.warn("[GitHub] API Error during sync of $repoFullName: ${e.statusCode} ${e.message}")
                 val state = if (e.statusCode == 403 || e.statusCode == 429) "RATE_LIMITED" else "FAILED"
-                newSuspendedTransaction(Dispatchers.IO) {
+                newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                         it[syncState] = state
                         it[lastSyncError] = e.message
@@ -417,7 +417,7 @@ object GitHubSyncManager {
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.error("[GitHub] Sync failed for $repoFullName", e)
-                newSuspendedTransaction(Dispatchers.IO) {
+                newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
                     GitHubRepositoriesTable.update({ GitHubRepositoriesTable.id eq repositoryId }) {
                         it[syncState] = "FAILED"
                         it[lastSyncError] = e.message

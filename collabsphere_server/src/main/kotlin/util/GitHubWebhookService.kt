@@ -90,7 +90,7 @@ object GitHubWebhookService {
             return emptyList()
         }
 
-        return newSuspendedTransaction(Dispatchers.IO) {
+        return newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
             when (eventType) {
                 "push" -> handlePushEvent(payload)
                 "pull_request" -> handlePullRequestEvent(payload)
