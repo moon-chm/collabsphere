@@ -303,18 +303,15 @@ fun Application.configureGitHubRoutes() {
                 val githubUser = GitHubService.getAuthenticatedUser(userToken)
                 val installations = GitHubService.getUserInstallations(userToken).orEmpty()
                 val requestedInstallationId = call.request.queryParameters["installation_id"]?.toLongOrNull()
-                if (requestedInstallationId == null && installations.isEmpty()) {
-                    call.respondRedirect(installPageUrl(rawState))
-                    return@get
-                }
+                
                 val installation = if (requestedInstallationId != null) {
                     installations.firstOrNull { it.id == requestedInstallationId }
                 } else {
                     installations.firstOrNull { it.account.login.equals(githubUser?.login, ignoreCase = true) }
-                        ?: installations.firstOrNull()
                 }
+
                 if (installation == null) {
-                    call.redirectGitHubResult(workspaceId, "installation_not_found")
+                    call.respondRedirect(installPageUrl(rawState))
                     return@get
                 }
 
