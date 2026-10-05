@@ -8,7 +8,7 @@
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
-    <!-- Suppress noisy framework output — still visible at WARN+ -->
+    <!-- Suppress noisy framework output - still visible at WARN+ -->
     <logger name="io.netty" level="WARN"/>
     <logger name="org.eclipse.jetty" level="WARN"/>
     <!-- Suppress Exposed SQL statement echo in production -->
