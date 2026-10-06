@@ -159,29 +159,39 @@ class DmViewModel(
         _isLoadingMembers.value = true
         memberCollectionJob?.cancel()
         memberCollectionJob = viewModelScope.launch {
-            try {
-                workspaceRepo.syncWorkspaceMembers(workspaceId)
-            } catch (e: Exception) {
-                Log.e("DM_VM", "Failed syncing workspace members (will use local cache)", e)
+            // Launch delta sync in background so it doesn't block the UI flow collection
+            launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    workspaceRepo.syncWorkspaceMembers(workspaceId)
+                } catch (e: Exception) {
+                    Log.e("DM_VM", "Failed syncing workspace members (will use local cache)", e)
+                }
+            }
+
+            // Fetch online users in background
+            launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val initialOnline = repo.fetchOnlineUsers(baseUrl, workspaceId)
+                    _onlineUserIds.value = initialOnline.toSet()
+                } catch (e: Exception) {
+                    Log.e("DM_VM", "Failed fetching online users for workspace $workspaceId", e)
+                }
             }
 
             try {
-                val initialOnline = repo.fetchOnlineUsers(baseUrl, workspaceId)
-                _onlineUserIds.value = initialOnline.toSet()
-            } catch (e: Exception) {
-                Log.e("DM_VM", "Failed fetching online users for workspace $workspaceId", e)
+                workspaceRepo.getWorkspaceMembersFlow(workspaceId)
+                    .catch { e ->
+                        Log.e("DM_VM", "Failed reading members stream from room storage", e)
+                        _workspaceMembers.value = emptyList()
+                        _isLoadingMembers.value = false
+                    }
+                    .collect { members ->
+                        _workspaceMembers.value = members
+                        _isLoadingMembers.value = false
+                    }
+            } finally {
+                _isLoadingMembers.value = false
             }
-
-            workspaceRepo.getWorkspaceMembersFlow(workspaceId)
-                .catch { e ->
-                    Log.e("DM_VM", "Failed reading members stream from room storage", e)
-                    _workspaceMembers.value = emptyList()
-                    _isLoadingMembers.value = false
-                }
-                .collect { members ->
-                    _workspaceMembers.value = members
-                    _isLoadingMembers.value = false
-                }
         }
     }
 

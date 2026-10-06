@@ -122,16 +122,31 @@ fun UserListSkeleton(modifier: Modifier = Modifier, count: Int = 5, trailing: Bo
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 0.dp, vertical = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         repeat(count) { i ->
-            SkeletonRowCard(
-                height = 68.dp,
-                titleFraction = if (i % 2 == 0) 0.55f else 0.4f,
-                subtitleWidth = if (i % 2 == 0) 120.dp else 84.dp,
-                trailing = trailing
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Box(Modifier.size(42.dp).shimmerEffect(CircleShape))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    SkeletonLine(width = if (i % 2 == 0) 120.dp else 90.dp, height = 14.dp)
+                    Spacer(Modifier.height(8.dp))
+                    SkeletonLine(width = if (i % 2 == 0) 80.dp else 110.dp, height = 10.dp)
+                }
+                if (trailing) {
+                    Spacer(Modifier.width(12.dp))
+                    Box(Modifier.size(32.dp).shimmerEffect(CircleShape))
+                }
+            }
+            if (i < count - 1) {
+                androidx.compose.material3.Divider(color = ShadowDark.copy(alpha = 0.05f), thickness = 1.dp)
+            }
         }
     }
 }
