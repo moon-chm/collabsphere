@@ -574,3 +574,76 @@ fun MessageSkeletonList(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * Skeleton placeholder for the Kanban board in TaskScreen.
+ */
+@Composable
+fun TaskSkeletonList(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        for (i in 0..2) {
+            Column(
+                modifier = Modifier
+                    .width(300.dp)
+                    .fillMaxHeight()
+                    .drawBehind {
+                            drawRoundRect(
+                                color = com.collabsphere.app.ui.theme.ShadowDark.copy(alpha = 0.08f),
+                                topLeft = androidx.compose.ui.geometry.Offset(2.dp.toPx(), 4.dp.toPx()),
+                                size = androidx.compose.ui.geometry.Size(size.width, size.height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(
+                                color = com.collabsphere.app.ui.theme.SurfaceRaised,
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
+                            )
+                    }
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Column Header Skeleton
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SkeletonLine(width = 80.dp, height = 16.dp)
+                    SkeletonLine(width = 24.dp, height = 16.dp)
+                }
+                
+                // Cards Skeletons
+                for (j in 0..3) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .drawBehind {
+                                    drawRoundRect(
+                                        color = com.collabsphere.app.ui.theme.Surface,
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx())
+                                    )
+                            }
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            SkeletonLine(width = 160.dp, height = 14.dp)
+                            SkeletonLine(width = 100.dp, height = 10.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                SkeletonLine(width = 40.dp, height = 12.dp)
+                                SkeletonLine(width = 20.dp, height = 20.dp, modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

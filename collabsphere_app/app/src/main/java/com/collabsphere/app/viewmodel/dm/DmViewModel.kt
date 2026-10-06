@@ -58,6 +58,9 @@ class DmViewModel(
     private val _isLoadingOlder = MutableStateFlow(false)
     val isLoadingOlder: StateFlow<Boolean> = _isLoadingOlder.asStateFlow()
 
+    private val _isLoadingMembers = MutableStateFlow(true)
+    val isLoadingMembers: StateFlow<Boolean> = _isLoadingMembers.asStateFlow()
+
     private var hasMoreOlder = true
     private var olderLoadJob: Job? = null
     private var currentBaseUrl: String? = null
@@ -153,6 +156,7 @@ class DmViewModel(
 
     fun loadWorkspaceMembers(workspaceId: Int, baseUrl: String = AppConfig.BASE_URL) {
         currentWorkspaceId = workspaceId
+        _isLoadingMembers.value = true
         memberCollectionJob?.cancel()
         memberCollectionJob = viewModelScope.launch {
             try {
@@ -172,9 +176,11 @@ class DmViewModel(
                 .catch { e ->
                     Log.e("DM_VM", "Failed reading members stream from room storage", e)
                     _workspaceMembers.value = emptyList()
+                    _isLoadingMembers.value = false
                 }
                 .collect { members ->
                     _workspaceMembers.value = members
+                    _isLoadingMembers.value = false
                 }
         }
     }

@@ -107,6 +107,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import com.collabsphere.app.view.components.UserListSkeleton
 
 private val REACTION_EMOJIS = listOf("👍", "❤️", "😂", "🚀", "👀")
 
@@ -224,6 +225,7 @@ fun DMScreen(
     val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val isLoadingMembers by viewModel.isLoadingMembers.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
 
@@ -833,7 +835,13 @@ fun DMScreen(
 
                     val otherMembers = workspaceMembers.filter { it.id != currentUserId.toInt() }
 
-                    if (otherMembers.isEmpty()) {
+                    if (isLoadingMembers) {
+                        UserListSkeleton(
+                            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                            count = 6,
+                            trailing = false
+                        )
+                    } else if (otherMembers.isEmpty()) {
                         Box(
                             modifier = Modifier.weight(1f).fillMaxWidth().padding(24.dp),
                             contentAlignment = Alignment.Center

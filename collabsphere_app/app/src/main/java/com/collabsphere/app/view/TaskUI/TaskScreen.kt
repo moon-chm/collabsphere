@@ -61,6 +61,7 @@ import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.task.TaskEntity
 import com.collabsphere.app.model.task.TaskStatus
 import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.view.components.TaskSkeletonList
 import com.collabsphere.app.viewmodel.task.TaskUiEvent
 import com.collabsphere.app.viewmodel.task.TaskUiModel
 import com.collabsphere.app.viewmodel.task.TaskViewModel
@@ -169,14 +170,18 @@ onDrawBehind {
             )
 
             // Kanban Horizontal Scroll Columns
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .horizontalScroll(scrollState)
-                    .padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                val toDoTasks = tasks.filter { it.task.status == TaskStatus.TO_DO }
+            if (isSyncing && tasks.isEmpty()) {
+                TaskSkeletonList(modifier = Modifier.weight(1f))
+            } else {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .horizontalScroll(scrollState)
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    val toDoTasks = tasks.filter { it.task.status == TaskStatus.TO_DO }
                 val inProgressTasks = tasks.filter { it.task.status == TaskStatus.IN_PROGRESS }
                 val doneTasks = tasks.filter { it.task.status == TaskStatus.DONE }
 
@@ -212,6 +217,7 @@ onDrawBehind {
                     onUpdate = { taskToUpdate = it },
                     onAssignClick = { taskToAssign = it }
                 )
+            }
             }
         }
 
