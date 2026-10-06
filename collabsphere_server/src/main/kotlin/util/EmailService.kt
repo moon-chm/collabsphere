@@ -56,6 +56,9 @@ object EmailService {
     private var smtpFrom = ""
 
     init {
+        // Force IPv4 for SMTP connections to prevent SocketTimeoutException on networks with broken IPv6 routing
+        System.setProperty("java.net.preferIPv4Stack", "true")
+
         // 1. Try reading from local.properties if present
         val localPropsFile = File("local.properties")
         val fileProps = Properties()
@@ -240,7 +243,7 @@ object EmailService {
                 logger.warn("[EmailService] Gmail API returned unsuccessful response, falling back...")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                logger.warn("[EmailService] Gmail API failed, falling back...", e)
+                logger.warn("[EmailService] Gmail API failed (${e.message}), falling back...")
             }
         }
 
@@ -252,7 +255,7 @@ object EmailService {
                 logger.warn("[EmailService] SMTP dispatch failed, falling back...")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                logger.warn("[EmailService] SMTP failed, falling back...", e)
+                logger.warn("[EmailService] SMTP failed (${e.message}), falling back...")
             }
         }
 

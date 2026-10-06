@@ -27,7 +27,7 @@ def main():
 
     # access_type='offline' and prompt='consent' ensure Google generates a refresh token
     flow = InstalledAppFlow.from_client_secrets_file(cred_file, SCOPES)
-    creds = flow.run_local_server(port=0, access_type='offline', prompt='consent')
+    creds = flow.run_local_server(port=8080, access_type='offline', prompt='consent')
 
     print("\n" + "=" * 65)
     print("SUCCESS! OAuth2 Credentials Obtained:")
