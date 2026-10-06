@@ -1,7 +1,9 @@
 package com.collabsphere.app.view.TaskUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import com.collabsphere.app.viewmodel.GitHubViewModel
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -75,7 +77,7 @@ fun TaskScreen(
         viewModel.uiEvent.collect { event ->
             when (event) {
                 is TaskUiEvent.ShowToast -> {
-                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                    AppToast.show(event.message)
                 }
             }
         }
@@ -151,7 +153,7 @@ onDrawBehind {
                 }
 
                 if (isSyncing) {
-                    CircularProgressIndicator(
+                    CollabSpinner(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                         color = CoralStart

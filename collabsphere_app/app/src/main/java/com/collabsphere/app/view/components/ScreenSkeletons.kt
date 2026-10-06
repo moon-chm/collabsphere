@@ -1,52 +1,242 @@
 package com.collabsphere.app.view.components
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.collabsphere.app.ui.theme.*
 
 /**
  * Reusable shimmer brush modifier tuned to CollabSphere's warm tactile skeuomorphic palette.
+ *
+ * All shimmering blocks share the same frame clock and are drawn in root
+ * coordinates, so the highlight sweeps across the whole screen as a single
+ * synchronized band (instead of every block pulsing on its own schedule).
+ * Only the draw phase is invalidated per frame — no recomposition.
  */
 fun Modifier.shimmerEffect(
     shape: Shape = RoundedCornerShape(SkeuoTokens.RadiusSmall)
 ): Modifier = composed {
-    val transition = rememberInfiniteTransition(label = "shimmerTransition")
-    val translateAnimation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1200f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmerTranslate"
-    )
-    val shimmerColors = listOf(
-        Color(0xFFDFD9CE).copy(alpha = 0.50f),
-        Color(0xFFFAF8F3).copy(alpha = 0.90f),
-        Color(0xFFDFD9CE).copy(alpha = 0.50f)
-    )
-    val brush = Brush.linearGradient(
-        colors = shimmerColors,
-        start = Offset(translateAnimation - 400f, translateAnimation - 400f),
-        end = Offset(translateAnimation, translateAnimation)
-    )
+    val progress = produceState(0f) {
+        while (true) {
+            withFrameMillis { t -> value = (t % SHIMMER_DURATION_MS) / SHIMMER_DURATION_MS.toFloat() }
+        }
+    }
+    val density = LocalDensity.current
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+    var rootOffset by remember { mutableStateOf(Offset.Zero) }
+
     this
+        .onGloballyPositioned { rootOffset = it.positionInRoot() }
         .clip(shape)
-        .background(brush)
+        .drawBehind {
+            drawRect(ShimmerBase)
+            val band = screenWidthPx * 0.45f
+            // Travel from fully off-screen left to fully off-screen right.
+            val bandStart = -band + (screenWidthPx + band * 2f) * progress.value - band
+            // Slight diagonal: shift by the element's vertical position.
+            val x0 = bandStart - rootOffset.x - rootOffset.y * 0.15f
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, ShimmerHighlight, Color.Transparent),
+                    start = Offset(x0, 0f),
+                    end = Offset(x0 + band, size.height * 0.35f)
+                )
+            )
+        }
+}
+
+private const val SHIMMER_DURATION_MS = 1400L
+private val ShimmerBase = Color(0xFFE2DCD1)
+private val ShimmerHighlight = Color(0xFFF8F5EF)
+
+/** Text-line placeholder. */
+@Composable
+fun SkeletonLine(width: Dp, height: Dp = 12.dp, modifier: Modifier = Modifier) {
+    Box(modifier.width(width).height(height).shimmerEffect(RoundedCornerShape(height / 2)))
+}
+
+/** Generic raised card with avatar + two lines; building block for list skeletons. */
+@Composable
+fun SkeletonRowCard(
+    modifier: Modifier = Modifier,
+    height: Dp = 72.dp,
+    avatarShape: Shape = CircleShape,
+    avatarSize: Dp = 40.dp,
+    titleFraction: Float = 0.6f,
+    subtitleWidth: Dp = 96.dp,
+    trailing: Boolean = false
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .skeuoRaised(cornerRadius = 16.dp)
+            .background(SurfaceRaised, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.size(avatarSize).shimmerEffect(avatarShape))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Box(
+                    Modifier.fillMaxWidth(titleFraction).height(14.dp)
+                        .shimmerEffect(RoundedCornerShape(7.dp))
+                )
+                Spacer(Modifier.height(8.dp))
+                SkeletonLine(width = subtitleWidth, height = 10.dp)
+            }
+            if (trailing) {
+                Spacer(Modifier.width(12.dp))
+                Box(Modifier.width(56.dp).height(28.dp).shimmerEffect(RoundedCornerShape(14.dp)))
+            }
+        }
+    }
+}
+
+/** Skeleton for lists of people (blocked users, members, user search). */
+@Composable
+fun UserListSkeleton(modifier: Modifier = Modifier, count: Int = 5, trailing: Boolean = true) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        repeat(count) { i ->
+            SkeletonRowCard(
+                height = 68.dp,
+                titleFraction = if (i % 2 == 0) 0.55f else 0.4f,
+                subtitleWidth = if (i % 2 == 0) 120.dp else 84.dp,
+                trailing = trailing
+            )
+        }
+    }
+}
+
+/** Skeleton for activity feeds such as GitHub PRs / commits / releases. */
+@Composable
+fun ActivityListSkeleton(modifier: Modifier = Modifier, count: Int = 5) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        repeat(count) { i ->
+            SkeletonRowCard(
+                height = 66.dp,
+                avatarShape = RoundedCornerShape(10.dp),
+                avatarSize = 34.dp,
+                titleFraction = if (i % 2 == 0) 0.75f else 0.6f,
+                subtitleWidth = 130.dp,
+                trailing = true
+            )
+        }
+    }
+}
+
+/** Skeleton for a profile page: avatar, name, bio lines and stat chips. */
+@Composable
+fun ProfileSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.size(96.dp).shimmerEffect(CircleShape))
+        Spacer(Modifier.height(18.dp))
+        SkeletonLine(width = 160.dp, height = 20.dp)
+        Spacer(Modifier.height(10.dp))
+        SkeletonLine(width = 120.dp, height = 12.dp)
+        Spacer(Modifier.height(28.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .skeuoRaised(cornerRadius = 18.dp)
+                .background(SurfaceRaised, RoundedCornerShape(18.dp))
+                .padding(18.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.fillMaxWidth(0.9f).height(12.dp).shimmerEffect(RoundedCornerShape(6.dp)))
+                Box(Modifier.fillMaxWidth(0.75f).height(12.dp).shimmerEffect(RoundedCornerShape(6.dp)))
+                Box(Modifier.fillMaxWidth(0.5f).height(12.dp).shimmerEffect(RoundedCornerShape(6.dp)))
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(2) {
+                Box(Modifier.width(120.dp).height(44.dp).shimmerEffect(RoundedCornerShape(22.dp)))
+            }
+        }
+    }
+}
+
+/** Skeleton for the GitHub tab: header card, stat tiles and an activity feed. */
+@Composable
+fun GitHubSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(88.dp)
+                .skeuoRaised(cornerRadius = 18.dp)
+                .background(SurfaceRaised, RoundedCornerShape(18.dp))
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxSize()) {
+                Box(Modifier.size(48.dp).shimmerEffect(RoundedCornerShape(12.dp)))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth(0.6f).height(16.dp).shimmerEffect(RoundedCornerShape(8.dp)))
+                    Spacer(Modifier.height(8.dp))
+                    SkeletonLine(width = 110.dp, height = 11.dp)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            repeat(3) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(72.dp)
+                        .skeuoRaised(cornerRadius = 16.dp)
+                        .background(SurfaceRaised, RoundedCornerShape(16.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        SkeletonLine(width = 36.dp, height = 18.dp)
+                        Spacer(Modifier.height(8.dp))
+                        SkeletonLine(width = 56.dp, height = 10.dp)
+                    }
+                }
+            }
+        }
+        ActivityListSkeleton(count = 4)
+    }
 }
 
 /**

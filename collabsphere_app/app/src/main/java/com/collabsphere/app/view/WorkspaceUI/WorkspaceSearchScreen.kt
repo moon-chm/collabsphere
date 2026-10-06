@@ -30,7 +30,7 @@ import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Tag
-import androidx.compose.material3.CircularProgressIndicator
+import com.collabsphere.app.view.components.CollabSpinner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -159,7 +159,7 @@ fun WorkspaceSearchScreen(
                 else "Type at least ${WorkspaceSearchViewModel.MIN_QUERY_LENGTH} characters."
             )
             SearchUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
+                CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
             }
             is SearchUiState.Error -> Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),

@@ -1,7 +1,7 @@
 package com.collabsphere.app.view
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.ui.window.Dialog
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.LoginViewModel
+import com.collabsphere.app.view.components.CollabSpinner
 
 @Composable
 fun LoginScreen(
@@ -81,7 +82,7 @@ fun LoginScreen(
     LaunchedEffect(loginStatus) {
         loginStatus?.let {
             isLoading = false
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearLoginStatus()
         }
     }
@@ -92,6 +93,7 @@ fun LoginScreen(
     val isResetPasswordSuccess by viewModel.isResetPasswordSuccess.collectAsStateWithLifecycle()
     val verificationStatus by viewModel.verificationStatus.collectAsStateWithLifecycle()
     val isVerificationSuccess by viewModel.isVerificationSuccess.collectAsStateWithLifecycle()
+    val isLoadingEmail by viewModel.isLoadingEmail.collectAsStateWithLifecycle()
 
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var showVerifyEmailDialog by remember { mutableStateOf(false) }
@@ -104,7 +106,7 @@ fun LoginScreen(
 
     LaunchedEffect(forgotPasswordStatus) {
         forgotPasswordStatus?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
         }
     }
 
@@ -112,13 +114,13 @@ fun LoginScreen(
         if (isResetPasswordSuccess) {
             showForgotPasswordDialog = false
             viewModel.clearForgotPasswordState()
-            Toast.makeText(context, "Password reset successfully! Please sign in.", Toast.LENGTH_LONG).show()
+            AppToast.show("Password reset successfully! Please sign in.", long = true)
         }
     }
 
     LaunchedEffect(verificationStatus) {
         verificationStatus?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearVerificationStatus()
         }
     }
@@ -127,7 +129,7 @@ fun LoginScreen(
         if (isVerificationSuccess) {
             showVerifyEmailDialog = false
             viewModel.resetVerificationSuccess()
-            Toast.makeText(context, "Email verified! You can now log in.", Toast.LENGTH_LONG).show()
+            AppToast.show("Email verified! You can now log in.", long = true)
         }
     }
 
@@ -139,7 +141,7 @@ fun LoginScreen(
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
         } else if (!isFormValid) {
-            Toast.makeText(context, "Please enter your email and password", Toast.LENGTH_SHORT).show()
+            AppToast.warning("Please enter your email and password")
         }
     }
 
@@ -149,7 +151,6 @@ fun LoginScreen(
             .fillMaxSize()
             .background(Background)
             .systemBarsPadding()
-            .imePadding()
     ) {
         // Inner wave shape
         Box(
@@ -162,6 +163,7 @@ fun LoginScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -250,32 +252,12 @@ fun LoginScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Checkbox and Forgot Password Row
+            // Forgot Password Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Simple skeuo checkbox (visual only for now)
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .skeuoInset(cornerRadius = 6.dp, depth = 2.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(SurfaceRaised),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Could add a checkmark icon here if state was true
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Remember Me",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Muted
-                    )
-                }
-                
                 Text(
                     text = "Forgot password?",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -356,6 +338,7 @@ fun LoginScreen(
             ForgotPasswordDialog(
                 initialEmail = email,
                 step = forgotPasswordStep,
+                isLoading = isLoadingEmail,
                 onDismiss = {
                     showForgotPasswordDialog = false
                     viewModel.clearForgotPasswordState()
@@ -373,6 +356,7 @@ fun LoginScreen(
             val targetEmail = unverifiedEmailForLogin ?: email
             VerifyEmailDialog(
                 email = targetEmail,
+                isLoading = isLoadingEmail,
                 onDismiss = {
                     showVerifyEmailDialog = false
                     viewModel.clearUnverifiedEmailForLogin()
@@ -392,6 +376,7 @@ fun LoginScreen(
 fun ForgotPasswordDialog(
     initialEmail: String,
     step: Int,
+    isLoading: Boolean,
     onDismiss: () -> Unit,
     onRequestCode: (String) -> Unit,
     onResetPassword: (email: String, otp: String, pass: String, confirmPass: String) -> Unit
@@ -446,7 +431,8 @@ fun ForgotPasswordDialog(
 
                     SkeuoPrimaryButton(
                         text = "Send Reset Code",
-                        enabled = emailInput.isNotBlank(),
+                        isLoading = isLoading,
+                        enabled = emailInput.isNotBlank() && !isLoading,
                         accentColor = CoralStart,
                         onClick = { onRequestCode(emailInput.trim()) }
                     )
@@ -490,7 +476,8 @@ fun ForgotPasswordDialog(
 
                     SkeuoPrimaryButton(
                         text = "Reset Password",
-                        enabled = otpInput.length == 6 && newPassword.length >= 6 && newPassword == confirmPassword,
+                        isLoading = isLoading,
+                        enabled = otpInput.length == 6 && newPassword.length >= 6 && newPassword == confirmPassword && !isLoading,
                         accentColor = CoralStart,
                         onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword.trim(), confirmPassword.trim()) }
                     )
@@ -515,6 +502,7 @@ fun ForgotPasswordDialog(
 @Composable
 fun VerifyEmailDialog(
     email: String,
+    isLoading: Boolean,
     onDismiss: () -> Unit,
     onVerify: (String) -> Unit,
     onResend: () -> Unit
@@ -561,7 +549,8 @@ fun VerifyEmailDialog(
 
                 SkeuoPrimaryButton(
                     text = "Verify & Sign In",
-                    enabled = otpInput.length == 6,
+                    isLoading = isLoading,
+                    enabled = otpInput.length == 6 && !isLoading,
                     accentColor = MintGreen,
                     onClick = { onVerify(otpInput.trim()) }
                 )
@@ -570,12 +559,17 @@ fun VerifyEmailDialog(
                     modifier = Modifier
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
+                            indication = null,
+                            enabled = !isLoading
                         ) { onResend() }
                         .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                    if (isLoading) {
+                        CollabSpinner(modifier = Modifier.size(16.dp), color = IndigoStart, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                    }
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Resend Code",
@@ -852,10 +846,9 @@ internal fun SkeuoPrimaryButton(
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                modifier    = Modifier.size(22.dp),
-                color       = accentColor,
-                strokeWidth = 2.5.dp
+            com.collabsphere.app.view.components.CollabSpinner(
+                modifier = Modifier.size(24.dp),
+                color = accentColor
             )
         } else {
             Text(

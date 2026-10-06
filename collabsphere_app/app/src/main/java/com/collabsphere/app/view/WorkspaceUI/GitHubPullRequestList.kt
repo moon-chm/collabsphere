@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.material3.CircularProgressIndicator
+import com.collabsphere.app.view.components.CollabSpinner
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -75,7 +75,7 @@ internal fun PullRequestListView(
         if (state.items.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (state.isLoading) {
-                    CircularProgressIndicator()
+                    CollabSpinner()
                 } else {
                     Text("No pull requests", color = Color(0xFF70625E))
                 }
@@ -102,7 +102,7 @@ internal fun PullRequestListView(
                             contentAlignment = Alignment.Center
                         ) {
                             if (state.isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                CollabSpinner(modifier = Modifier.size(24.dp))
                             } else {
                                 OutlinedButton(onClick = onLoadMore) {
                                     Text("Load more", color = Color(0xFF2C2A28))

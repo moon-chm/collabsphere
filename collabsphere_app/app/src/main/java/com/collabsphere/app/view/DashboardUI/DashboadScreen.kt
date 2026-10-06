@@ -27,7 +27,7 @@ import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,7 +86,7 @@ fun DashboardScreen(
 
     LaunchedEffect(joinByCodeStatus) {
         joinByCodeStatus?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             onClearJoinByCodeStatus?.invoke()
         }
     }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import com.collabsphere.app.model.MuteRepo
+import com.collabsphere.app.view.components.AppToast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
@@ -79,6 +80,7 @@ import com.collabsphere.app.viewmodel.notes.NotesViewModel
 import com.collabsphere.app.viewmodel.task.TaskViewModel
 import com.collabsphere.app.viewmodel.dm.DmViewModel
 import com.collabsphere.app.viewmodel.GitHubViewModel
+import com.collabsphere.app.view.components.CollabSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +101,9 @@ fun WorkspaceDetailedScreen(
     fileViewModel: FileViewModel,
     dmViewModel: DmViewModel,
     gitHubViewModel: GitHubViewModel,
-    workspaceMembers: List<UserEntity>
+    workspaceMembers: List<UserEntity>,
+    isSendingInvitation: Boolean = false,
+    invitationStatus: String? = null
 ) {
     var selectedTab by remember(initialTab) { mutableStateOf(initialTab) }
     val muteRepo = koinInject<MuteRepo>()
@@ -111,6 +115,12 @@ fun WorkspaceDetailedScreen(
     var isDmInConversation by remember { mutableStateOf(false) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var showMembersDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(invitationStatus) {
+        if (invitationStatus != null && !invitationStatus.contains("Failed", ignoreCase = true)) {
+            showAddMemberDialog = false
+        }
+    }
 
     if (showMembersDialog) {
         WorkspaceMembersDialog(
@@ -349,21 +359,23 @@ fun WorkspaceDetailedScreen(
                                                                     }
                                 }
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable {
+                                .clickable(enabled = !isSendingInvitation) {
                                     val email = memberEmailInput.trim()
                                     if (email.isNotEmpty()) {
                                         onAddMemberSubmit(email)
-                                        showAddMemberDialog = false
-                                        memberEmailInput = ""
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Send Invite",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                            if (isSendingInvitation) {
+                                CollabSpinner(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text(
+                                    text = "Send Invite",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -463,14 +475,10 @@ fun WorkspaceDetailedScreen(
                                 muteScope.launch {
                                     muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
                                         .onSuccess {
-                                            android.widget.Toast.makeText(
-                                                muteContext,
-                                                if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs",
-                                                android.widget.Toast.LENGTH_SHORT
-                                            ).show()
+                                            AppToast.show(if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs")
                                         }
                                         .onFailure {
-                                            android.widget.Toast.makeText(muteContext, "Couldn't update mute. Check your connection.", android.widget.Toast.LENGTH_SHORT).show()
+                                            AppToast.error("Couldn't update mute. Check your connection.")
                                         }
                                 }
                             },

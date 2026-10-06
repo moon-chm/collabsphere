@@ -1,7 +1,7 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import android.widget.Toast
 import androidx.compose.animation.core.Spring
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -75,7 +75,7 @@ fun DeleteWorkspaceScreen(
 
     LaunchedEffect(workspaceStatus) {
         workspaceStatus?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearWorkspaceStatus()
 
             if (it.contains("successfully", ignoreCase = true)) {
@@ -352,7 +352,7 @@ fun DeleteWorkspaceScreen(
                                         lastClickTime = currentTime
                                         viewModel.onDeleteWorkspace()
                                     } else if (!isFormValid) {
-                                        Toast.makeText(context, "Please confirm workspace deletion", Toast.LENGTH_SHORT).show()
+                                        AppToast.warning("Please confirm workspace deletion")
                                     }
                                 },
                             contentAlignment = Alignment.Center

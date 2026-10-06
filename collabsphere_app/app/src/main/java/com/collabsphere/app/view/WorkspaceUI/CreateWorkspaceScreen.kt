@@ -1,7 +1,7 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import android.widget.Toast
 import androidx.compose.animation.core.Spring
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -71,7 +71,7 @@ fun CreateWorkspaceScreen(
 
     LaunchedEffect(workspaceStatus) {
         workspaceStatus?.let {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearWorkspaceStatus()
 
             if (it.contains("successfully", ignoreCase = true)) {
@@ -363,7 +363,7 @@ fun CreateWorkspaceScreen(
                                         lastClickTime = currentTime
                                         viewModel.onCreateWorkspace()
                                     } else if (!isFormValid) {
-                                        Toast.makeText(context, "Please enter workspace name & email", Toast.LENGTH_SHORT).show()
+                                        AppToast.warning("Please enter workspace name & email")
                                     }
                                 },
                             contentAlignment = Alignment.Center

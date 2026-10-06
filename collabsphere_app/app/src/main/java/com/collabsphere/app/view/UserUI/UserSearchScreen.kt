@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.UserUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -107,7 +109,7 @@ fun UserSearchScreen(
                         }
                     )
                     if (isSearching) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = CoralStart)
+                        CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = CoralStart)
                     }
                 }
             }

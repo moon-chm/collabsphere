@@ -1,6 +1,7 @@
 package com.collabsphere.app.view.WorkspaceUI
 
 import com.collabsphere.app.view.openInBrowser
+import com.collabsphere.app.view.components.CollabSpinner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,7 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.text.format.DateUtils
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.ui.text.style.TextOverflow
 import com.collabsphere.app.viewmodel.GitHubChannelOption
 import com.collabsphere.app.viewmodel.GitHubDailyCount
@@ -88,7 +89,7 @@ fun WorkspaceGitHubScreen(
 
     LaunchedEffect(error) {
         val message = error ?: return@LaunchedEffect
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        AppToast.show(message)
         viewModel.clearError()
     }
 
@@ -143,7 +144,7 @@ fun WorkspaceGitHubScreen(
         val canManage = analytics?.canManage == true
         val isConnected = analytics?.isConnected == true
         if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            CollabSpinner(modifier = Modifier.align(Alignment.Center))
         } else if (canManage && (isPickingRepo || (!isConnected && analytics?.hasConnection == true))) {
             val linkedNames = analytics?.repositories.orEmpty().map { it.fullName }.toSet()
             RepoPickerView(
@@ -291,7 +292,7 @@ private fun RepoPickerView(
 
         if (isLinking || isLoadingRepos) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CollabSpinner()
             }
         } else if (repos.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -413,7 +414,7 @@ private fun ConnectedView(
                     when (analytics.syncState) {
                         "SYNCING" -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                CollabSpinner(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(text = "Syncing with GitHub…", fontSize = 12.sp, color = Color(0xFF9E8E89))
                             }

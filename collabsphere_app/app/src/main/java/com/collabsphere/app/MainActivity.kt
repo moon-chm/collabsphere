@@ -14,7 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.core.content.ContextCompat
 import com.collabsphere.app.ui.theme.CollabSphereTheme
 import androidx.compose.runtime.LaunchedEffect
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -114,9 +114,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             CollabSphereTheme(darkTheme = false) {
                 Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .imePadding()
+                    // IME padding is applied per-route in AppNavigation so that
+                    // Login/Register backgrounds don't resize with the keyboard.
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     // null = DataStore not yet loaded. Avoids the one-frame onboarding
                     // flash for logged-in users on cold start (#5).
@@ -175,11 +175,7 @@ class MainActivity : ComponentActivity() {
                         SessionEvents.expiredToken.collect { token ->
                             if (!SessionEvents.claim(token)) return@collect
                             loginViewModel.logout()
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Your session expired. Please log in again.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            AppToast.error("Your session expired. Please log in again.")
                         }
                     }
 

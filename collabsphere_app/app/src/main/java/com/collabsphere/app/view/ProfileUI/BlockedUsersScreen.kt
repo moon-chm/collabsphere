@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,7 +78,7 @@ fun BlockedUsersScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && blockedUsers.isEmpty() -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = CoralStart)
+                    CollabSpinner(modifier = Modifier.align(Alignment.Center), color = CoralStart)
                 }
                 blockedUsers.isEmpty() -> {
                     Text(

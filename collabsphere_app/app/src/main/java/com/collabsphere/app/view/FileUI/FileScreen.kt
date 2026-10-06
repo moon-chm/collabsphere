@@ -1,11 +1,13 @@
 package com.collabsphere.app.view.FileUI
+
+import com.collabsphere.app.view.components.CollabSpinner
 import android.util.Log
 
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
@@ -84,7 +86,7 @@ fun openFile(
     }
 
     if (fileEntity.url.isEmpty()) {
-        Toast.makeText(context, "File is currently queued for offline upload.", Toast.LENGTH_SHORT).show()
+        AppToast.show("File is currently queued for offline upload.")
         return
     }
 
@@ -109,10 +111,10 @@ fun openFile(
                 context.startActivity(intent)
             } catch (e: Exception) {
                 Log.e("FileScreen", "Operation failed", e)
-                Toast.makeText(context, "No app found to open this type of file.", Toast.LENGTH_SHORT).show()
+                AppToast.error("No app found to open this type of file.")
             }
         } else {
-            Toast.makeText(context, "Failed to download file from server.", Toast.LENGTH_SHORT).show()
+            AppToast.error("Failed to download file from server.")
         }
     }
 }
@@ -307,7 +309,7 @@ onDrawBehind {
 },
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = CoralStart, strokeWidth = 3.dp)
+                    CollabSpinner(color = CoralStart, strokeWidth = 3.dp)
                 }
             }
         }
@@ -551,7 +553,7 @@ fun UploadFileDialog(
                 }
             } catch (e: Exception) {
                 Log.e("FileScreen", "Operation failed", e)
-                Toast.makeText(context, "Error staging file target local buffer.", Toast.LENGTH_SHORT).show()
+                AppToast.error("Error staging file target local buffer.")
             }
         }
     }
@@ -739,7 +741,7 @@ onDrawBehind {
                                     viewModel.uploadPhysicalFile(finalFile, detectedMimeType)
                                     onDismiss()
                                 } else {
-                                    Toast.makeText(context, "Please select a valid file first.", Toast.LENGTH_SHORT).show()
+                                    AppToast.error("Please select a valid file first.")
                                 }
                             },
                         contentAlignment = Alignment.Center

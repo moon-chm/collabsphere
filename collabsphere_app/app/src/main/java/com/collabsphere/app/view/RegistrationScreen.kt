@@ -1,7 +1,7 @@
 package com.collabsphere.app.view
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.LoginViewModel
+import com.collabsphere.app.view.components.CollabSpinner
 
 @Composable
 fun RegistrationScreen(
@@ -60,6 +61,7 @@ fun RegistrationScreen(
     var otpCode by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    val isLoadingEmail by viewModel.isLoadingEmail.collectAsStateWithLifecycle()
     var lastClickTime by remember { mutableStateOf(0L) }
 
     val isFormValid = email.isNotBlank() && username.isNotBlank() && password.isNotBlank()
@@ -67,7 +69,7 @@ fun RegistrationScreen(
     LaunchedEffect(loginStatus) {
         loginStatus?.let {
             isLoading = false
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearLoginStatus()
         }
     }
@@ -75,7 +77,7 @@ fun RegistrationScreen(
     LaunchedEffect(verificationStatus) {
         verificationStatus?.let {
             isLoading = false
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            AppToast.show(it)
             viewModel.clearVerificationStatus()
         }
     }
@@ -83,7 +85,7 @@ fun RegistrationScreen(
     LaunchedEffect(isVerificationSuccess) {
         if (isVerificationSuccess) {
             isLoading = false
-            Toast.makeText(context, "Account verified! You can now log in.", Toast.LENGTH_LONG).show()
+            AppToast.show("Account verified! You can now log in.", long = true)
             viewModel.resetVerificationSuccess()
             viewModel.clearRegistrationEmail()
             onNavigateToLogin()
@@ -109,7 +111,7 @@ fun RegistrationScreen(
             focusManager.clearFocus()
             viewModel.onVerifyRegistration(targetEmail, otpCode.trim())
         } else if (otpCode.trim().length != 6) {
-            Toast.makeText(context, "Please enter all 6 digits", Toast.LENGTH_SHORT).show()
+            AppToast.warning("Please enter all 6 digits")
         }
     }
 
@@ -119,7 +121,6 @@ fun RegistrationScreen(
             .fillMaxSize()
             .background(Background)
             .systemBarsPadding()
-            .imePadding()
     ) {
         // Inner wave shape
         Box(
@@ -132,6 +133,7 @@ fun RegistrationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -205,7 +207,8 @@ fun RegistrationScreen(
                         .fillMaxWidth()
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
+                            indication = null,
+                            enabled = !isLoadingEmail
                         ) {
                             viewModel.onResendVerification(registrationSuccessEmail!!)
                         }
@@ -213,7 +216,11 @@ fun RegistrationScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                    if (isLoadingEmail) {
+                        CollabSpinner(modifier = Modifier.size(16.dp), color = IndigoStart, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                    }
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Resend Code",

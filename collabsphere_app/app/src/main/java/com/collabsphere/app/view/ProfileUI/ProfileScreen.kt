@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
@@ -561,7 +563,7 @@ onDrawBehind {
                                     .background(Color.Black.copy(alpha = 0.35f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(
+                                CollabSpinner(
                                     modifier = Modifier.size(28.dp),
                                     color = Color.White,
                                     strokeWidth = 2.5.dp

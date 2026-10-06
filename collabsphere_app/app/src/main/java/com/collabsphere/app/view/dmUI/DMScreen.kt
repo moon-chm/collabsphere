@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.dmUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,7 +65,7 @@ import com.collabsphere.app.view.components.ReplyQuote
 import com.collabsphere.app.view.components.MarkdownText
 import com.collabsphere.app.view.components.LinkPreviewCard
 import com.collabsphere.app.view.components.PendingMessageLabel
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import com.collabsphere.app.view.components.isStalePending
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -386,7 +388,7 @@ fun DMScreen(
                         .fillMaxWidth()
                         .wrapContentHeight(),
                     contentScale = ContentScale.Fit,
-                    loading = { CircularProgressIndicator(color = CoralStart, modifier = Modifier.size(40.dp)) }
+                    loading = { CollabSpinner(color = CoralStart, modifier = Modifier.size(40.dp)) }
                 )
             }
         }
@@ -1174,7 +1176,7 @@ fun DMScreen(
                                                 .padding(vertical = 8.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            CircularProgressIndicator(
+                                            CollabSpinner(
                                                 modifier = Modifier.size(20.dp),
                                                 strokeWidth = 2.dp,
                                                 color = CoralStart
@@ -1324,7 +1326,7 @@ fun DMScreen(
                                                                         modifier = Modifier.size(120.dp),
                                                                         contentAlignment = Alignment.Center
                                                                     ) {
-                                                                        CircularProgressIndicator(
+                                                                        CollabSpinner(
                                                                             color = Color.White,
                                                                             modifier = Modifier.size(28.dp),
                                                                             strokeWidth = 2.5.dp
@@ -1370,7 +1372,7 @@ fun DMScreen(
                                                                 onDarkBubble = true
                                                             ) {
                                                                 viewModel.retryMessage(message) { feedback ->
-                                                                    feedback?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                                                                    feedback?.let { AppToast.show(it) }
                                                                 }
                                                             }
                                                         }
@@ -1657,7 +1659,7 @@ fun DMScreen(
                                                                         modifier = Modifier.size(120.dp),
                                                                         contentAlignment = Alignment.Center
                                                                     ) {
-                                                                        CircularProgressIndicator(
+                                                                        CollabSpinner(
                                                                             color = CoralStart,
                                                                             modifier = Modifier.size(28.dp),
                                                                             strokeWidth = 2.5.dp

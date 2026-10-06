@@ -96,6 +96,9 @@ class WorkspaceViewModel(
     private val _joinByCodeStatus = MutableStateFlow<String?>(null)
     val joinByCodeStatus: StateFlow<String?> = _joinByCodeStatus.asStateFlow()
 
+    private val _isSendingInvitation = MutableStateFlow(false)
+    val isSendingInvitation: StateFlow<Boolean> = _isSendingInvitation.asStateFlow()
+
     fun onJoinWorkspace(workspaceId: Int, email: String) {
         sendInvitation(workspaceId, email)
     }
@@ -109,6 +112,7 @@ class WorkspaceViewModel(
         }
 
         viewModelScope.launch {
+            _isSendingInvitation.value = true
             val result = repo.sendInvitation(workspaceId, trimmedEmail)
             result.onSuccess {
                 _invitationStatus.value = "Invitation sent to $trimmedEmail with invite code: ${it.inviteCode}"
@@ -120,6 +124,7 @@ class WorkspaceViewModel(
                 _invitationStatus.value = it.localizedMessage ?: "Failed to send invitation"
                 _workspaceStatus.value = it.localizedMessage ?: "Failed to send invitation"
             }
+            _isSendingInvitation.value = false
         }
     }
 

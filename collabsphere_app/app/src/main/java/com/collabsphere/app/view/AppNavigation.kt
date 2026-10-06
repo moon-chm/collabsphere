@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.first
 import com.collabsphere.app.view.WorkspaceUI.WorkspaceSearchScreen
 import com.collabsphere.app.viewmodel.WorkspaceSearchViewModel
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -76,6 +76,9 @@ import org.koin.compose.KoinContext
 import org.koin.compose.koinInject
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
 
 @Composable
 fun AppNavigation(
@@ -158,9 +161,16 @@ fun AppNavigation(
             }
         }
 
+        // Login/Register draw a full-screen background and handle the keyboard
+        // inside their own scrollable Column. Applying imePadding here would
+        // shrink the whole screen and make the background jump while typing.
+        val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+        val handlesImeItself = currentRoute == "login" || currentRoute == "register"
+
         NavHost(
             navController = navController,
             startDestination = startDestination,
+            modifier = if (handlesImeItself) Modifier else Modifier.imePadding(),
             enterTransition = {
                 slideIntoContainer(
                     towards = AnimatedContentTransitionScope.SlideDirection.Start,
@@ -547,17 +557,18 @@ fun AppNavigation(
                 val gitHubViewModel: GitHubViewModel = koinViewModel()
 
                 val invitationStatus by workspaceViewModel.invitationStatus.collectAsStateWithLifecycle()
+                val isSendingInvitation by workspaceViewModel.isSendingInvitation.collectAsStateWithLifecycle()
 
                 LaunchedEffect(workspaceStatus) {
                     workspaceStatus?.let {
-                        Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                        AppToast.show(it)
                         workspaceViewModel.clearWorkspaceStatus()
                     }
                 }
 
                 LaunchedEffect(invitationStatus) {
                     invitationStatus?.let {
-                        Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+                        AppToast.show(it)
                         workspaceViewModel.clearInvitationStatus()
                     }
                 }
@@ -575,6 +586,8 @@ fun AppNavigation(
                     dmViewModel = dmViewModel,
                     gitHubViewModel = gitHubViewModel,
                     workspaceMembers = workspaceMembers,
+                    isSendingInvitation = isSendingInvitation,
+                    invitationStatus = invitationStatus,
                     onBack = {
                         navController.popBackStack()
                     },

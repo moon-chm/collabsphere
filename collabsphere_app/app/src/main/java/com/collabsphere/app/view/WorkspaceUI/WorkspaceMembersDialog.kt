@@ -1,6 +1,6 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import com.collabsphere.app.view.components.CollabSpinner
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -104,7 +104,7 @@ fun WorkspaceMembersDialog(
                 status == HttpStatusCode.Forbidden -> "You don't have permission to do that."
                 else -> "That didn't work (${status.value})."
             }
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            AppToast.show(message)
             if (status?.isSuccess() == true) after()
         }
     }
@@ -135,7 +135,7 @@ fun WorkspaceMembersDialog(
             when {
                 loadFailed && members == null -> Text("Couldn't load members.", color = Muted, style = MaterialTheme.typography.bodyMedium)
                 members == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = CoralStart, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                    CollabSpinner(color = CoralStart, modifier = Modifier.size(28.dp))
                 }
                 else -> LazyColumn(
                     modifier = Modifier.heightIn(max = 420.dp),

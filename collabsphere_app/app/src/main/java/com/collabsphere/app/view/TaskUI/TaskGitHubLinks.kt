@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,11 +97,11 @@ fun TaskGitHubLinksSection(
                     scope.launch {
                         gitHubViewModel.createIssueForTask(workspaceId, taskId)
                             .onSuccess {
-                                Toast.makeText(context, "Created GitHub issue ${it.title}", Toast.LENGTH_SHORT).show()
+                                AppToast.show("Created GitHub issue ${it.title}")
                                 reloadKey++
                             }
                             .onFailure {
-                                Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                                AppToast.error(it.message)
                             }
                         isCreatingIssue = false
                     }

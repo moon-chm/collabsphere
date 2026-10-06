@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.MessageUI
 
+import com.collabsphere.app.view.components.CollabSpinner
+
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -24,7 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
-import android.widget.Toast
+import com.collabsphere.app.view.components.AppToast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.layout.ContentScale
@@ -117,7 +119,7 @@ fun MessageScreen(
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        viewModel.uiMessages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        viewModel.uiMessages.collect { AppToast.show(it) }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -130,7 +132,7 @@ fun MessageScreen(
                 }.getOrNull()
             }
             if (payload == null) {
-                Toast.makeText(context, "Couldn't read that image.", Toast.LENGTH_SHORT).show()
+                AppToast.error("Couldn't read that image.")
             } else {
                 viewModel.onSendMedia(payload.first, payload.second, payload.third)
             }
@@ -179,7 +181,7 @@ fun MessageScreen(
                     contentDescription = "Full screen image",
                     modifier = Modifier.fillMaxWidth(),
                     contentScale = ContentScale.Fit,
-                    loading = { CircularProgressIndicator(color = CoralStart, modifier = Modifier.size(40.dp)) }
+                    loading = { CollabSpinner(color = CoralStart, modifier = Modifier.size(40.dp)) }
                 )
             }
         }
@@ -194,7 +196,7 @@ fun MessageScreen(
                 if (index >= 0) {
                     coroutineScope.launch { listState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0) }
                 } else {
-                    Toast.makeText(context, "Scroll up to load older messages to see this one.", Toast.LENGTH_SHORT).show()
+                    AppToast.show("Scroll up to load older messages to see this one.")
                 }
             },
             onUnpin = { viewModel.togglePin(it) },
@@ -304,14 +306,10 @@ fun MessageScreen(
                             coroutineScope.launch {
                                 muteRepo.setMuted(viewModel.currentWorkspaceId, viewModel.currentChannelId, !isChannelMuted)
                                     .onSuccess {
-                                        Toast.makeText(
-                                            context,
-                                            if (isChannelMuted) "Channel unmuted" else "Channel muted — you'll still get @mentions",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        AppToast.show(if (isChannelMuted) "Channel unmuted" else "Channel muted — you'll still get @mentions")
                                     }
                                     .onFailure {
-                                        Toast.makeText(context, "Couldn't update mute. Check your connection.", Toast.LENGTH_SHORT).show()
+                                        AppToast.error("Couldn't update mute. Check your connection.")
                                     }
                             }
                         }
@@ -421,7 +419,7 @@ fun MessageScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (isUploadingMedia) {
-                                CircularProgressIndicator(
+                                CollabSpinner(
                                     modifier = Modifier.size(22.dp),
                                     strokeWidth = 2.dp,
                                     color = CoralStart
@@ -680,7 +678,7 @@ fun MessageScreen(
                                     .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(
+                                CollabSpinner(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
                                     color = CoralStart
@@ -830,7 +828,7 @@ fun MessageScreen(
                                                 contentScale = ContentScale.Crop,
                                                 loading = {
                                                     Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
-                                                        CircularProgressIndicator(
+                                                        CollabSpinner(
                                                             color = if (isOwnMessage) Color.White else CoralStart,
                                                             modifier = Modifier.size(28.dp),
                                                             strokeWidth = 2.5.dp

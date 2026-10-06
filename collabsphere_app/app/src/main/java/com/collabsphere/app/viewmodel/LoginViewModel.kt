@@ -60,6 +60,9 @@ class LoginViewModel(
     private val _unverifiedEmailForLogin = MutableStateFlow<String?>(null)
     val unverifiedEmailForLogin: StateFlow<String?> = _unverifiedEmailForLogin.asStateFlow()
 
+    private val _isLoadingEmail = MutableStateFlow(false)
+    val isLoadingEmail: StateFlow<Boolean> = _isLoadingEmail.asStateFlow()
+
     init {
         viewModelScope.launch {
             val savedId = userPreferences.userIdFlow.first()
@@ -151,6 +154,7 @@ class LoginViewModel(
         }
 
         viewModelScope.launch {
+            _isLoadingEmail.value = true
             repo.registerRemote(trimmedEmail, trimmedUserName, trimmedPassword)
                 .onSuccess { registerResponse ->
                     _registrationSuccessEmail.value = registerResponse.email
@@ -165,6 +169,7 @@ class LoginViewModel(
                     }
                     _loginStatus.value = errorMessage
                 }
+            _isLoadingEmail.value = false
         }
     }
 
@@ -194,6 +199,7 @@ class LoginViewModel(
         if (trimmedEmail.isEmpty()) return
 
         viewModelScope.launch {
+            _isLoadingEmail.value = true
             repo.resendVerification(trimmedEmail)
                 .onSuccess { msg ->
                     _verificationStatus.value = msg
@@ -201,6 +207,7 @@ class LoginViewModel(
                 .onFailure { err ->
                     _verificationStatus.value = err.message ?: "Failed to resend code"
                 }
+            _isLoadingEmail.value = false
         }
     }
 
@@ -212,6 +219,7 @@ class LoginViewModel(
         }
 
         viewModelScope.launch {
+            _isLoadingEmail.value = true
             repo.forgotPassword(trimmedEmail)
                 .onSuccess { msg ->
                     _forgotPasswordStatus.value = msg
@@ -220,6 +228,7 @@ class LoginViewModel(
                 .onFailure { err ->
                     _forgotPasswordStatus.value = err.message ?: "Failed to request password reset"
                 }
+            _isLoadingEmail.value = false
         }
     }
 
