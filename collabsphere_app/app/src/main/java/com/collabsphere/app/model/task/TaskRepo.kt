@@ -65,12 +65,18 @@ class TaskRepo(
                     member.userName
                 }
 
+                val existingUser = workspaceDao.getUserById(member.userId)
                 workspaceDao.upsertUser(
                     UserEntity(
                         id = member.userId,
                         email = member.email,
-                        password = "",
-                        userName = verifiedName
+                        password = existingUser?.password ?: "",
+                        userName = verifiedName,
+                        avatarUrl = member.avatarUrl,
+                        bio = existingUser?.bio,
+                        statusMessage = existingUser?.statusMessage,
+                        isEmailVerified = existingUser?.isEmailVerified ?: false,
+                        lastSeen = existingUser?.lastSeen
                     )
                 )
 

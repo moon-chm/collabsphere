@@ -134,13 +134,18 @@ class WorkspaceRepo(
                     "User ${member.userId}"
                 } else member.userName
 
+                val existingUser = workspaceDao.getUserById(member.userId)
                 workspaceDao.upsertUser(
                     UserEntity(
                         id = member.userId,
                         email = member.email,
-                        password = "",
+                        password = existingUser?.password ?: "",
                         userName = name,
-                        avatarUrl = member.avatarUrl
+                        avatarUrl = member.avatarUrl,
+                        bio = existingUser?.bio,
+                        statusMessage = existingUser?.statusMessage,
+                        isEmailVerified = existingUser?.isEmailVerified ?: false,
+                        lastSeen = existingUser?.lastSeen
                     )
                 )
 
@@ -205,13 +210,18 @@ class WorkspaceRepo(
                 "User ${remote.userId}"
             } else remote.userName
 
+            val existingUser = workspaceDao.getUserById(remote.userId)
             workspaceDao.upsertUser(
                 UserEntity(
                     id = remote.userId,
                     email = remote.email,
-                    password = "",
+                    password = existingUser?.password ?: "",
                     userName = name,
-                    avatarUrl = remote.avatarUrl
+                    avatarUrl = remote.avatarUrl,
+                    bio = existingUser?.bio,
+                    statusMessage = existingUser?.statusMessage,
+                    isEmailVerified = existingUser?.isEmailVerified ?: false,
+                    lastSeen = existingUser?.lastSeen
                 )
             )
 

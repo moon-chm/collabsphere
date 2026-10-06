@@ -29,6 +29,9 @@ interface WorkspaceDao {
     @Query("SELECT id FROM users WHERE LOWER(email) = LOWER(:email) LIMIT 1")
     suspend fun getUserIdByEmail(email: String): Int?
 
+    @Query("SELECT * FROM users WHERE id = :userId LIMIT 1")
+    suspend fun getUserById(userId: Int): UserEntity?
+
     @Query("SELECT COUNT(*) FROM users WHERE id = :userId")
     suspend fun userCount(userId: Int): Int
 
