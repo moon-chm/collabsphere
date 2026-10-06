@@ -195,7 +195,7 @@ fun RegistrationScreen(
                 SkeuoPrimaryButton(
                     text = "Verify & Activate",
                     isLoading = isLoading,
-                    enabled = otpCode.trim().length == 6 && !isLoading,
+                    enabled = !isLoading,
                     accentColor = MintGreen,
                     onClick = { handleVerify() }
                 )
@@ -361,7 +361,7 @@ fun RegistrationScreen(
                 SkeuoPrimaryButton(
                     text = "Register",
                     isLoading = isLoading,
-                    enabled = isFormValid && !isLoading,
+                    enabled = !isLoading,
                     accentColor = IndigoStart,
                     onClick = { handleRegister() }
                 )

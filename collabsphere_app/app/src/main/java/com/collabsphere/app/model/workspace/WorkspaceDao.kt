@@ -9,7 +9,7 @@ interface WorkspaceDao {
 
     @Query("""
         SELECT DISTINCT w.* FROM workspace w
-        INNER JOIN workspace_members wm ON w.id = wm.workspaceId
+        LEFT JOIN workspace_members wm ON w.id = wm.workspaceId
         WHERE wm.userId = :userId OR w.userId = :userId
     """)
     fun getAllWorkspacesForUser(userId: Int): Flow<List<WorkspaceEntity>>

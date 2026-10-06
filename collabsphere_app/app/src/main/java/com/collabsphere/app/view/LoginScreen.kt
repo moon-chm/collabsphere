@@ -279,7 +279,7 @@ fun LoginScreen(
             SkeuoPrimaryButton(
                 text = "Login",
                 isLoading = isLoading,
-                enabled = isFormValid && !isLoading,
+                enabled = !isLoading,
                 accentColor = CoralStart,
                 onClick = { handleLogin() }
             )
@@ -432,7 +432,7 @@ fun ForgotPasswordDialog(
                     SkeuoPrimaryButton(
                         text = "Send Reset Code",
                         isLoading = isLoading,
-                        enabled = emailInput.isNotBlank() && !isLoading,
+                        enabled = !isLoading,
                         accentColor = CoralStart,
                         onClick = { onRequestCode(emailInput.trim()) }
                     )
@@ -477,7 +477,7 @@ fun ForgotPasswordDialog(
                     SkeuoPrimaryButton(
                         text = "Reset Password",
                         isLoading = isLoading,
-                        enabled = otpInput.length == 6 && newPassword.length >= 6 && newPassword == confirmPassword && !isLoading,
+                        enabled = !isLoading,
                         accentColor = CoralStart,
                         onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword.trim(), confirmPassword.trim()) }
                     )
@@ -550,7 +550,7 @@ fun VerifyEmailDialog(
                 SkeuoPrimaryButton(
                     text = "Verify & Sign In",
                     isLoading = isLoading,
-                    enabled = otpInput.length == 6 && !isLoading,
+                    enabled = !isLoading,
                     accentColor = MintGreen,
                     onClick = { onVerify(otpInput.trim()) }
                 )

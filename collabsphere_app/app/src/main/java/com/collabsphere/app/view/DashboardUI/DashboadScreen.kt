@@ -508,18 +508,20 @@ fun DashboardScreen(
         // ── Skeuomorphic Action Buttons ──
         Row(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 20.dp, bottom = 32.dp),
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SkeuoSecondaryFab(
+                modifier = Modifier.weight(1f),
                 text = "Join with Code",
                 icon = Icons.Outlined.GroupAdd,
                 onClick = { showJoinByCodeDialog = true }
             )
             SkeuoFab(
-                modifier = Modifier,
+                modifier = Modifier.weight(1f),
                 onClick = onNavigateToWorkspace
             )
         }
@@ -931,9 +933,9 @@ private fun SkeuoFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier          = Modifier.padding(horizontal = 20.dp),
+            modifier          = Modifier.padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
         ) {
             Icon(Icons.Outlined.Add, null, tint = Color.White, modifier = Modifier.size(20.dp))
             Text(
@@ -956,13 +958,14 @@ private fun SkeuoFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
 private fun SkeuoSecondaryFab(
     text: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .height(52.dp)
             .drawWithCache {
                 val cr = CornerRadius(16.dp.toPx())
@@ -1010,9 +1013,9 @@ private fun SkeuoSecondaryFab(
         contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
         ) {
             Icon(icon, null, tint = IndigoStart, modifier = Modifier.size(18.dp))
             Text(
