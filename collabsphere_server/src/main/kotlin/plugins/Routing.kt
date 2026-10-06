@@ -1276,10 +1276,14 @@ fun Application.configureRouting() {
                     var cachedUsername: String? = null
 
                     // Mark user online on WS connect
-                    dbQuery {
-                        UsersTable.update({ UsersTable.id eq userIdParam.toInt() }) {
-                            it[UsersTable.lastSeen] = System.currentTimeMillis()
+                    try {
+                        dbQuery {
+                            UsersTable.update({ UsersTable.id eq userIdParam.toInt() }) {
+                                it[UsersTable.lastSeen] = System.currentTimeMillis()
+                            }
                         }
+                    } catch (e: Exception) {
+                        // Ignore concurrent update exception
                     }
 
                     // Teammate IDs across all shared workspaces for presence broadcast
@@ -1571,10 +1575,14 @@ fun Application.configureRouting() {
                         }
 
                         // Mark last seen on WS disconnect
-                        dbQuery {
-                            UsersTable.update({ UsersTable.id eq userIdParam.toInt() }) {
-                                it[UsersTable.lastSeen] = System.currentTimeMillis()
+                        try {
+                            dbQuery {
+                                UsersTable.update({ UsersTable.id eq userIdParam.toInt() }) {
+                                    it[UsersTable.lastSeen] = System.currentTimeMillis()
+                                }
                             }
+                        } catch (e: Exception) {
+                            // Ignore concurrent update exception
                         }
                     }
                 }
