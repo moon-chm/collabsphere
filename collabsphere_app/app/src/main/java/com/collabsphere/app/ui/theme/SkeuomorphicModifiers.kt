@@ -215,42 +215,60 @@ fun Modifier.skeuoInset(
     isDark: Boolean = false
 ): Modifier = this.drawWithCache {
     val cr = cornerRadius.toPx()
-    val d  = depth.toPx()
 
     onDrawBehind {
-        // STRICT STITCH SPECIFICATION: Debossed Input Fields (Carved Troughs)
-        
-        // 1. Bottom shelf rim highlight (simulates physical deboss cut)
-        // 0 1px 0 0 rgba(255, 255, 255, 0.9)
+        // bg-surface-container-lowest/80
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.9f),
-            topLeft = Offset(0f, 1.dp.toPx()),
+            color = Color.White.copy(alpha = 0.8f),
             size = size,
             cornerRadius = CornerRadius(cr)
         )
         
-        // 2. Base Trough Inset Background
-        // background: rgba(245, 238, 233, 0.6)
+        // Inset 1: 3px 3px 6px rgba(190, 182, 169, 0.5)
+        // We simulate true inset by clipping to the rect and drawing a blurred thick stroke along the edge
+        drawIntoCanvas { canvas ->
+            canvas.save()
+            val path = androidx.compose.ui.graphics.Path().apply {
+                addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, CornerRadius(cr)))
+            }
+            canvas.clipPath(path)
+            
+            val paintDark = Paint().apply {
+                style = androidx.compose.ui.graphics.PaintingStyle.Stroke
+                strokeWidth = 10.dp.toPx()
+                asFrameworkPaint().apply {
+                    isAntiAlias = true
+                    color = Color(190, 182, 169, (0.5f * 255).toInt()).toArgb()
+                    maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                }
+            }
+            // Offset to top-left to cast shadow bottom-right
+            canvas.translate(3.dp.toPx(), 3.dp.toPx())
+            canvas.drawPath(path, paintDark)
+            canvas.translate(-3.dp.toPx(), -3.dp.toPx())
+            
+            // Inset 2: -3px -3px 6px rgba(255, 255, 255, 0.9)
+            val paintLight = Paint().apply {
+                style = androidx.compose.ui.graphics.PaintingStyle.Stroke
+                strokeWidth = 10.dp.toPx()
+                asFrameworkPaint().apply {
+                    isAntiAlias = true
+                    color = Color(255, 255, 255, (0.9f * 255).toInt()).toArgb()
+                    maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                }
+            }
+            // Offset bottom-right to cast shadow top-left
+            canvas.translate(-3.dp.toPx(), -3.dp.toPx())
+            canvas.drawPath(path, paintLight)
+            canvas.translate(3.dp.toPx(), 3.dp.toPx())
+            
+            canvas.restore()
+        }
+        
+        // border-white/80 (drawn last to remain crisp on the edge)
         drawRoundRect(
-            color = Color(0xFFF5EEE9).copy(alpha = 0.6f),
+            color = Color.White.copy(alpha = 0.8f),
             size = size,
-            cornerRadius = CornerRadius(cr)
-        )
-        
-        // 3. Inner shadow 1 (inset 0 2px 4px 0 rgba(0, 0, 0, 0.06))
-        drawRoundRect(
-            color = Color.Black.copy(alpha = 0.06f),
-            topLeft = Offset(0f, 0f),
-            size = Size(size.width, size.height),
-            cornerRadius = CornerRadius(cr),
-            style = Stroke(width = 2.dp.toPx())
-        )
-        
-        // 4. Inner shadow 2 (inset 0 1px 2px 0 rgba(0, 0, 0, 0.04))
-        drawRoundRect(
-            color = Color.Black.copy(alpha = 0.04f),
-            topLeft = Offset(0f, 0f),
-            size = Size(size.width, size.height),
             cornerRadius = CornerRadius(cr),
             style = Stroke(width = 1.dp.toPx())
         )
@@ -589,4 +607,227 @@ fun SkeuoDebossedIconWell(
         contentAlignment = Alignment.Center,
         content = content
     )
+}
+
+
+@Composable
+fun SkeuoTactileFab(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String? = null,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val haptics = LocalHapticFeedback.current
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "fabScale"
+    )
+
+    Box(
+        modifier = modifier
+            .size(56.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .drawWithCache {
+                onDrawBehind {
+                    val cr = size.height / 2f
+                    
+                    if (!isPressed) {
+                        drawIntoCanvas { canvas ->
+                            val paint1 = Paint().apply {
+                                asFrameworkPaint().apply {
+                                    isAntiAlias = true
+                                    color = android.graphics.Color.TRANSPARENT
+                                    setShadowLayer(28.dp.toPx(), 0f, 14.dp.toPx(), Color(255, 90, 67, (0.42f * 255).toInt()).toArgb())
+                                }
+                            }
+                            canvas.drawRoundRect(left = 0f, top = 0f, right = size.width, bottom = size.height, radiusX = cr, radiusY = cr, paint = paint1)
+                            
+                            val paint2 = Paint().apply {
+                                asFrameworkPaint().apply {
+                                    isAntiAlias = true
+                                    color = android.graphics.Color.TRANSPARENT
+                                    setShadowLayer(12.dp.toPx(), 0f, 6.dp.toPx(), Color(181, 37, 21, (0.25f * 255).toInt()).toArgb())
+                                }
+                            }
+                            canvas.drawRoundRect(left = 0f, top = 0f, right = size.width, bottom = size.height, radiusX = cr, radiusY = cr, paint = paint2)
+                            
+                            val paint3 = Paint().apply {
+                                asFrameworkPaint().apply {
+                                    isAntiAlias = true
+                                    color = android.graphics.Color.TRANSPARENT
+                                    setShadowLayer(8.dp.toPx(), -3.dp.toPx(), -3.dp.toPx(), Color(255, 255, 255, (0.7f * 255).toInt()).toArgb())
+                                }
+                            }
+                            canvas.drawRoundRect(left = 0f, top = 0f, right = size.width, bottom = size.height, radiusX = cr, radiusY = cr, paint = paint3)
+                        }
+                    } else {
+                        drawIntoCanvas { canvas ->
+                            val paintActive = Paint().apply {
+                                asFrameworkPaint().apply {
+                                    isAntiAlias = true
+                                    color = android.graphics.Color.TRANSPARENT
+                                    setShadowLayer(8.dp.toPx(), 0f, 3.dp.toPx(), Color(255, 90, 67, (0.25f * 255).toInt()).toArgb())
+                                }
+                            }
+                            canvas.drawRoundRect(left = 0f, top = 0f, right = size.width, bottom = size.height, radiusX = cr, radiusY = cr, paint = paintActive)
+                        }
+                    }
+                    
+                    drawRoundRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFFFF6F59), Color(0xFFFF5A43)),
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, size.height)
+                        ),
+                        cornerRadius = CornerRadius(cr)
+                    )
+                    
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.8f),
+                        topLeft = Offset(0f, 1.dp.toPx()),
+                        size = size,
+                        cornerRadius = CornerRadius(cr),
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                    
+                    drawRoundRect(
+                        color = Color(0xFFB52515).copy(alpha = 0.2f),
+                        topLeft = Offset(0f, (-1).dp.toPx()),
+                        size = size,
+                        cornerRadius = CornerRadius(cr),
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                    
+                    drawContext.canvas.save()
+                    val clipPath = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height / 2f, CornerRadius(cr, cr)))
+                    }
+                    drawContext.canvas.clipPath(clipPath)
+                    
+                    val sheenBrush = Brush.verticalGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.35f), Color.Transparent),
+                        startY = 0f,
+                        endY = size.height / 2f
+                    )
+                    drawRoundRect(
+                        brush = sheenBrush,
+                        size = size,
+                        cornerRadius = CornerRadius(cr)
+                    )
+                    drawContext.canvas.restore()
+
+                    if (isPressed) {
+                        drawIntoCanvas { canvas ->
+                            canvas.save()
+                            val path = androidx.compose.ui.graphics.Path().apply {
+                                addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, CornerRadius(cr)))
+                            }
+                            canvas.clipPath(path)
+                            val paintDark = Paint().apply {
+                                style = androidx.compose.ui.graphics.PaintingStyle.Stroke
+                                strokeWidth = 8.dp.toPx()
+                                asFrameworkPaint().apply {
+                                    isAntiAlias = true
+                                    color = Color(140, 20, 10, (0.5f * 255).toInt()).toArgb()
+                                    maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                                }
+                            }
+                            canvas.translate(2.dp.toPx(), 3.dp.toPx())
+                            canvas.drawPath(path, paintDark)
+                            canvas.restore()
+                        }
+                    }
+                }
+            }
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.material3.Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier
+                .size(28.dp)
+                .graphicsLayer {
+                    shadowElevation = 1.dp.toPx()
+                    shape = androidx.compose.foundation.shape.CircleShape
+                    clip = false
+                    ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                    spotShadowColor = Color.Black.copy(alpha = 0.35f)
+                }
+        )
+    }
+}
+
+
+/**
+ * Medical-Grade Glassmorphism modifier for bottom sheets and overlays.
+ * Combines frosted fill, specular top rim highlight, and soft multi-source cast shadow.
+ */
+fun Modifier.skeuoGlass(
+    cornerRadius: Dp = 32.dp,
+    isDark: Boolean = false
+): Modifier = this.drawWithCache {
+    val cr = cornerRadius.toPx()
+    onDrawBehind {
+        // 1. Shadow: Ambient Elevation Shadow
+        // 0 12px 32px -4px rgba(79, 70, 229, 0.08)
+        drawIntoCanvas { canvas ->
+            val paintShadow = Paint().apply {
+                color = Color(79, 70, 229, (0.08f * 255).toInt())
+                asFrameworkPaint().apply {
+                    maskFilter = android.graphics.BlurMaskFilter(32.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                }
+            }
+            canvas.drawRoundRect(
+                left = 0f,
+                top = 12.dp.toPx(),
+                right = size.width,
+                bottom = size.height + 12.dp.toPx(),
+                radiusX = cr,
+                radiusY = cr,
+                paint = paintShadow
+            )
+        }
+
+        // 2. Surface Fill: rgba(255, 255, 255, 0.78)
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.85f),
+            size = size,
+            cornerRadius = CornerRadius(cr)
+        )
+
+        // 3. Perimeter Rim (Inset Specular Highlight)
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.9f),
+                    Color.White.copy(alpha = 0.2f),
+                    Color(215, 207, 196, (0.35f * 255).toInt()) // Underside edge gradient
+                ),
+                startY = 0f,
+                endY = size.height
+            ),
+            topLeft = Offset(0.5f, 0.5f),
+            size = Size(size.width - 1f, size.height - 1f),
+            cornerRadius = CornerRadius(cr),
+            style = Stroke(width = 1.dp.toPx())
+        )
+    }
 }

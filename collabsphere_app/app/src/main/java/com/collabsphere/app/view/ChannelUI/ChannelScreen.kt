@@ -163,91 +163,12 @@ fun ChannelScreen(
             }
         }
 
-        // Tactile Skeuomorphic FAB
-        val fabInteractionSource = remember { MutableInteractionSource() }
-        val isFabPressed by fabInteractionSource.collectIsPressedAsState()
-        val fabScale by animateFloatAsState(
-            targetValue = if (isFabPressed) 0.92f else 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-            label = "fabScale"
-        )
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                .drawWithCache {
-                    onDrawBehind {
-                    val shadowOffset = if (isFabPressed) 2.dp else 5.dp
-                    val shadowAlpha = if (isFabPressed) 0.15f else 0.35f
-
-                    drawRoundRect(
-                        color = CoralStart.copy(alpha = shadowAlpha),
-                        topLeft = Offset(0f, shadowOffset.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(20.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.30f),
-                        topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(20.dp.toPx())
-                    )
-                    drawRoundRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(CoralLight, CoralStart),
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, size.height)
-                        ),
-                        cornerRadius = CornerRadius(20.dp.toPx())
-                    )
-                    // Top hairline highlight hugging rounded contour
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.40f),
-                                Color.White.copy(alpha = 0.10f),
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = 20.dp.toPx()
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(20.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                                    }
-                }
-                .clip(RoundedCornerShape(20.dp))
-                .clickable(
-                    interactionSource = fabInteractionSource,
-                    indication = null
-                ) {
-                    showCreateDialog = true
-                }
-                .padding(horizontal = 20.dp, vertical = 14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "Add channel",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    ),
-                    color = Color.White
-                )
-            }
+                // Exact Tactile Glass FAB
+        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).padding(bottom = 68.dp)) {
+            SkeuoTactileFab(
+                onClick = { showCreateDialog = true },
+                icon = Icons.Default.Add
+            )
         }
 
         SnackbarHost(
