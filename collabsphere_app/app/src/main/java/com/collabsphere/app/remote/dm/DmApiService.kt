@@ -65,7 +65,8 @@ class DmApiService(
         try {
             val newSession = client.webSocketSession {
                 url("$wsUrl/ws/dm?sinceId=$sinceId&caps=channel")
-                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+                // Token is automatically injected by DynamicTokenPlugin
+                // AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
             session = newSession
         } catch (e: Exception) {

@@ -54,7 +54,8 @@ class GitHubUnfurlViewModel(private val httpClient: HttpClient) : ViewModel() {
             val token = AuthTokenHolder.token ?: return@launch
             try {
                 val response = httpClient.post("${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/unfurl") {
-                    header(HttpHeaders.Authorization, "Bearer $token")
+                    // Token is automatically injected by DynamicTokenPlugin
+                    // header(HttpHeaders.Authorization, "Bearer $token")
                     contentType(ContentType.Application.Json)
                     setBody(GitHubUnfurlRequest(batch))
                 }
@@ -91,7 +92,8 @@ class GitHubUnfurlViewModel(private val httpClient: HttpClient) : ViewModel() {
             }
             try {
                 val response = httpClient.post("${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/action") {
-                    header(HttpHeaders.Authorization, "Bearer $token")
+                    // Token is automatically injected by DynamicTokenPlugin
+                    // header(HttpHeaders.Authorization, "Bearer $token")
                     header("Idempotency-Key", idempotencyKey)
                     contentType(ContentType.Application.Json)
                     setBody(GitHubActionRequest(url, action, body))

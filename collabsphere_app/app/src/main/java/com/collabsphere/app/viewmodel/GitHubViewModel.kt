@@ -278,7 +278,7 @@ class GitHubViewModel(
         "${AppConfig.BASE_URL}/api/workspace/$workspaceId/github/$path"
 
     private fun HttpRequestBuilder.auth() {
-        header(HttpHeaders.Authorization, "Bearer ${AuthTokenHolder.token}")
+        // Token is now automatically injected by DynamicTokenPlugin in AppModule
     }
 
     private suspend fun HttpResponse.errorMessage(fallback: String): String =

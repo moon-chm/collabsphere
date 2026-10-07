@@ -192,17 +192,25 @@ class WorkspaceViewModel(
         }
 
         viewModelScope.launch {
-            val rowsDeleted = repo.deleteWorkspaceFromScreen(
-                name,
-                loggedInUserId,
-                password
-            )
+            try {
+                val rowsDeleted = repo.deleteWorkspaceFromScreen(
+                    name,
+                    loggedInUserId,
+                    password
+                )
 
-            if (rowsDeleted > 0) {
-                _workspaceStatus.value = "Workspace deleted successfully!"
-                clearInputs()
-            } else {
-                _workspaceStatus.value = "Network error. Please try again later."
+                if (rowsDeleted > 0) {
+                    _workspaceStatus.value = "Workspace deleted successfully!"
+                    clearInputs()
+                } else {
+                    _workspaceStatus.value = "Incorrect workspace name or password."
+                }
+            } catch (e: Exception) {
+                if (e.message?.contains("404") == true || e.message?.contains("NotFound") == true) {
+                    _workspaceStatus.value = "Incorrect workspace name or password."
+                } else {
+                    _workspaceStatus.value = "Network error. Please try again later."
+                }
             }
         }
     }
