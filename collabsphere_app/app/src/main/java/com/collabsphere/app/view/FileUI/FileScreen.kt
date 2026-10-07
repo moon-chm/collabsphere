@@ -194,8 +194,8 @@ onDrawBehind {
                             icon = Icons.Default.Folder,
                             title = "No files available",
                             description = "Tap 'Add file' below to store documents, images, and project assets in this workspace.",
-                            actionLabel = "Add File",
-                            onAction = { showUploadDialog = true },
+                            actionLabel = null,
+                            onAction = {},
                             modifier = Modifier.fillMaxSize()
                         )
                     }

@@ -186,8 +186,8 @@ onDrawBehind {
                             icon = androidx.compose.material.icons.Icons.Default.AssignmentInd,
                             title = "No tasks yet",
                             description = "Tap the + button or create your first task to start tracking work.",
-                            actionLabel = "Create Task",
-                            onAction = { showCreateDialog = true },
+                            actionLabel = null,
+                            onAction = {},
                             modifier = Modifier.fillMaxSize()
                         )
                     }

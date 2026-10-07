@@ -133,10 +133,8 @@ fun ChannelScreen(
                             icon = Icons.Default.Tag,
                             title = "No channels yet",
                             description = "Tap 'Add channel' below to organize conversations around topics and projects.",
-                            actionLabel = "Add Channel",
-                            onAction = { 
-                                showCreateDialog = true 
-                            },
+                            actionLabel = null,
+                            onAction = {},
                             modifier = Modifier.fillMaxSize()
                         )
                     }

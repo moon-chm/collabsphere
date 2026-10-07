@@ -135,11 +135,8 @@ fun NotesScreen(
                             icon = Icons.Default.Description,
                             title = "No notes found",
                             description = "Tap 'Add note' below to jot down quick thoughts, project summaries, and shared documentation.",
-                            actionLabel = "Add Note",
-                            onAction = { 
-                                viewModel.clearInputs()
-                                showCreateDialog = true 
-                            },
+                            actionLabel = null,
+                            onAction = {},
                             modifier = Modifier.fillMaxSize()
                         )
                     }

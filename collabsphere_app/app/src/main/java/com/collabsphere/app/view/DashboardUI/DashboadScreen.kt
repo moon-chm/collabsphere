@@ -788,8 +788,8 @@ private fun DashboardEmptyState(onNavigateToWorkspace: () -> Unit) {
         icon = androidx.compose.material.icons.Icons.Outlined.Folder,
         title = "No workspaces yet",
         description = "Tap the + button below or create your first workspace to start collaborating.",
-        actionLabel = "Create Workspace",
-        onAction = onNavigateToWorkspace,
+        actionLabel = null,
+        onAction = {},
         modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f)
     )
 }

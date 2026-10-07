@@ -89,18 +89,17 @@ val databaseModule = module {
     single { get<AppDatabase>().dmReactionDao() }
 }
 
+val DynamicTokenPlugin = io.ktor.client.plugins.api.createClientPlugin("DynamicTokenPlugin") {
+    onRequest { request, _ ->
+        AuthTokenHolder.token?.let {
+            request.headers.append(io.ktor.http.HttpHeaders.Authorization, "Bearer $it")
+        }
+    }
+}
+
 val networkModule = module {
     single(named("RegularHttpClient")) {
         HttpClient(OkHttp) {
-            engine {
-                addInterceptor { chain ->
-                    val requestBuilder = chain.request().newBuilder()
-                    AuthTokenHolder.token?.let {
-                        requestBuilder.addHeader(HttpHeaders.Authorization, "Bearer $it")
-                    }
-                    chain.proceed(requestBuilder.build())
-                }
-            }
             expectSuccess = false
             install(ContentNegotiation) {
                 json(Json {
@@ -114,12 +113,13 @@ val networkModule = module {
                 connectTimeoutMillis = 60000
                 socketTimeoutMillis  = 60000
             }
+            install(DynamicTokenPlugin)
             HttpResponseValidator {
                 validateResponse { response ->
-                    if (response.status == HttpStatusCode.Unauthorized) {
+                    if (response.status == io.ktor.http.HttpStatusCode.Unauthorized) {
                         val request = response.call.request
                         if (!request.url.encodedPath.endsWith("/api/login")) {
-                            val sentToken = request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")
+                            val sentToken = request.headers[io.ktor.http.HttpHeaders.Authorization]?.removePrefix("Bearer ")
                             SessionEvents.onUnauthorized(sentToken)
                         }
                     }
@@ -135,13 +135,6 @@ val networkModule = module {
                     pingInterval(15, java.util.concurrent.TimeUnit.SECONDS)
                     retryOnConnectionFailure(true)
                 }
-                addInterceptor { chain ->
-                    val requestBuilder = chain.request().newBuilder()
-                    AuthTokenHolder.token?.let {
-                        requestBuilder.addHeader(HttpHeaders.Authorization, "Bearer $it")
-                    }
-                    chain.proceed(requestBuilder.build())
-                }
             }
             install(ContentNegotiation) {
                 json(Json {
@@ -152,6 +145,7 @@ val networkModule = module {
             install(WebSockets) {
                 pingIntervalMillis = 15000
             }
+            install(DynamicTokenPlugin)
         }
     }
 
