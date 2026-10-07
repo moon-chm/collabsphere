@@ -64,3 +64,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(ktorLibs.server.testHost)
 }
+
+tasks.withType<Test> {
+    environment("JWT_SECRET", "test-secret")
+}

@@ -705,7 +705,6 @@ internal fun Route.workspaceRoutes() {
                 val actingUserId = call.authenticatedUserId()
 
                 val password = call.request.headers["X-Workspace-Password"]
-                    ?: call.request.queryParameters["workspacePassword"]
                     ?: return@delete call.respond(
                         HttpStatusCode.BadRequest,
                         "Missing password"

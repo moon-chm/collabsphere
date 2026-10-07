@@ -119,105 +119,51 @@ fun ChannelScreen(
                 }
             }
 
-            when {
-                channels == null -> {
-                    ChannelSkeletonList(modifier = Modifier.weight(1f))
-                }
-                channels!!.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Empty state card
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.20f),
-                                    topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = SurfaceRaised,
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                                            }
-                            }
-                            .padding(28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
+            androidx.compose.animation.Crossfade(
+                targetState = channels,
+                label = "channelsCrossfade",
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) { state ->
+                when {
+                    state == null -> {
+                        ChannelSkeletonList(modifier = Modifier.fillMaxSize())
+                    }
+                    state.isEmpty() -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Tag,
+                            title = "No channels yet",
+                            description = "Tap 'Add channel' below to organize conversations around topics and projects.",
+                            actionLabel = "Add Channel",
+                            onAction = { 
+                                showCreateDialog = true 
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 18.dp,
+                                end = 18.dp,
+                                top = 6.dp,
+                                bottom = 96.dp
+                            ),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(Surface),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tag,
-                                    contentDescription = null,
-                                    tint = CoralStart,
-                                    modifier = Modifier.size(32.dp)
+                            items(state, key = { it.id }) { channel ->
+                                SkeuoChannelItem(
+                                    channel = channel,
+                                    onChannelClick = { onChannelClick(channel) },
+                                    onDeleteClick = { channelToDelete = channel },
+                                    modifier = Modifier.animateItem()
                                 )
                             }
-
-                            Text(
-                                text = "No channels yet",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Ink
-                            )
-
-                            Text(
-                                text = "Tap 'Add channel' below to organize conversations around topics and projects.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Muted,
-                                textAlign = TextAlign.Center
-                            )
                         }
-                    }
-                }
-                } // close channels.isEmpty() branch
-                else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(
-                        start = 18.dp,
-                        end = 18.dp,
-                        top = 6.dp,
-                        bottom = 96.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(channels ?: emptyList(), key = { it.id }) { channel ->
-                        SkeuoChannelItem(
-                            channel = channel,
-                            onChannelClick = { onChannelClick(channel) },
-                            onDeleteClick = { channelToDelete = channel },
-                            modifier = Modifier.animateItem()
-                        )
                     }
                 }
             }
         }
-    }
 
         // Tactile Skeuomorphic FAB
         val fabInteractionSource = remember { MutableInteractionSource() }

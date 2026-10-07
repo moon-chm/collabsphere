@@ -133,10 +133,13 @@ class TaskViewModel(
     fun syncTasks() {
         viewModelScope.launch {
             _isSyncing.value = true
-            withContext(Dispatchers.IO) {
-                repo.syncTasks(loggedWorkspaceId)
+            try {
+                withContext(Dispatchers.IO) {
+                    repo.syncTasks(loggedWorkspaceId)
+                }
+            } finally {
+                _isSyncing.value = false
             }
-            _isSyncing.value = false
         }
     }
 

@@ -76,7 +76,10 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var lastClickTime by remember { mutableStateOf(0L) }
+    var hasAttemptedSubmit by remember { mutableStateOf(false) }
 
+    val isEmailError = hasAttemptedSubmit && email.isBlank()
+    val isPasswordError = hasAttemptedSubmit && password.isBlank()
     val isFormValid = email.isNotBlank() && password.isNotBlank()
 
     LaunchedEffect(loginStatus) {
@@ -134,6 +137,7 @@ fun LoginScreen(
     }
 
     val handleLogin = {
+        hasAttemptedSubmit = true
         val currentTime = System.currentTimeMillis()
         if (isFormValid && currentTime - lastClickTime > 500L) {
             lastClickTime = currentTime
@@ -141,7 +145,8 @@ fun LoginScreen(
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
         } else if (!isFormValid) {
-            AppToast.warning("Please enter your email and password")
+            // AppToast.warning("Please enter your email and password")
+            // Replaced with inline validation
         }
     }
 
@@ -213,6 +218,8 @@ fun LoginScreen(
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next,
                 onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                isError = isEmailError,
+                errorMessage = "Email cannot be empty",
                 leadingIcon = null,
                 trailingIcon = {
                     AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -236,6 +243,8 @@ fun LoginScreen(
                 onImeAction = { handleLogin() },
                 visualTransformation = if (passwordVisible) VisualTransformation.None
                                        else PasswordVisualTransformation(),
+                isError = isPasswordError,
+                errorMessage = "Password cannot be empty",
                 leadingIcon = null,
                 trailingIcon = {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -712,7 +721,9 @@ internal fun SkeuoTextField(
     onImeAction         : () -> Unit           = {},
     visualTransformation: VisualTransformation = VisualTransformation.None,
     leadingIcon         : (@Composable () -> Unit)? = null,
-    trailingIcon        : (@Composable () -> Unit)? = null
+    trailingIcon        : (@Composable () -> Unit)? = null,
+    isError             : Boolean              = false,
+    errorMessage        : String?              = null
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -754,6 +765,18 @@ internal fun SkeuoTextField(
                     trailingIcon()
                 }
             }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = isError && errorMessage != null,
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
+        ) {
+            Text(
+                text = errorMessage ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = DestructiveStart,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+            )
         }
     }
 }

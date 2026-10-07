@@ -170,17 +170,35 @@ onDrawBehind {
             )
 
             // Kanban Horizontal Scroll Columns
-            if (isSyncing && tasks.isEmpty()) {
-                TaskSkeletonList(modifier = Modifier.weight(1f))
-            } else {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .horizontalScroll(scrollState)
-                        .padding(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
+            androidx.compose.animation.Crossfade(
+                targetState = Pair(isSyncing, tasks.isEmpty()),
+                label = "tasksCrossfade",
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { (syncing, empty) ->
+                when {
+                    syncing && empty -> {
+                        TaskSkeletonList(modifier = Modifier.fillMaxSize())
+                    }
+                    empty -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = androidx.compose.material.icons.Icons.Default.AssignmentInd,
+                            title = "No tasks yet",
+                            description = "Tap the + button or create your first task to start tracking work.",
+                            actionLabel = "Create Task",
+                            onAction = { showCreateDialog = true },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    else -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .horizontalScroll(scrollState)
+                                .padding(horizontal = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
                     val toDoTasks = tasks.filter { it.task.status == TaskStatus.TO_DO }
                 val inProgressTasks = tasks.filter { it.task.status == TaskStatus.IN_PROGRESS }
                 val doneTasks = tasks.filter { it.task.status == TaskStatus.DONE }
@@ -217,8 +235,10 @@ onDrawBehind {
                     onUpdate = { taskToUpdate = it },
                     onAssignClick = { taskToAssign = it }
                 )
-            }
-            }
+                        } // Row
+                    } // else
+                } // when
+            } // Crossfade
         }
 
         // Tactile Skeuomorphic FAB

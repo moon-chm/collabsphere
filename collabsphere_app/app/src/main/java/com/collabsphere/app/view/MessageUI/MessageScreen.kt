@@ -585,80 +585,26 @@ fun MessageScreen(
                         .zIndex(1f)
                 )
             }
-            when {
-                messages == null -> {
-                    MessageSkeletonList()
-                }
-                messages!!.isEmpty() -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                    // Tactile empty card
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.20f),
-                                    topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = SurfaceRaised,
-                                    cornerRadius = CornerRadius(24.dp.toPx())
-                                )
-                                                            }
-                            }
-                            .padding(28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .background(Surface),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tag,
-                                    contentDescription = null,
-                                    tint = CoralStart,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-
-                            Text(
-                                text = "Welcome to #$channelName",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Ink
-                            )
-
-                            Text(
-                                text = "This is the start of the #$channelName channel. Send a message to start collaborating!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Muted,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+            androidx.compose.animation.Crossfade(
+                targetState = messages,
+                label = "messagesCrossfade",
+                modifier = Modifier.fillMaxSize()
+            ) { state ->
+                when {
+                    state == null -> {
+                        MessageSkeletonList()
                     }
+                    state.isEmpty() -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Tag,
+                            title = "Welcome to #$channelName",
+                            description = "This is the start of the #$channelName channel. Send a message to start collaborating!",
+                            actionLabel = null,
+                            onAction = {},
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                }
-                else -> {
+                    else -> {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -984,9 +930,10 @@ fun MessageScreen(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-}
+                } // LazyColumn
+                    } // else
+                } // when
+            } // Crossfade
+        } // Box
+    } // Scaffold
+} // MessageScreen function

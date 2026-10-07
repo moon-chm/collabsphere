@@ -63,7 +63,11 @@ fun RegistrationScreen(
     var isLoading by remember { mutableStateOf(false) }
     val isLoadingEmail by viewModel.isLoadingEmail.collectAsStateWithLifecycle()
     var lastClickTime by remember { mutableStateOf(0L) }
+    var hasAttemptedSubmit by remember { mutableStateOf(false) }
 
+    val isUsernameError = hasAttemptedSubmit && username.isBlank()
+    val isEmailError = hasAttemptedSubmit && email.isBlank()
+    val isPasswordError = hasAttemptedSubmit && password.isBlank()
     val isFormValid = email.isNotBlank() && username.isNotBlank() && password.isNotBlank()
 
     LaunchedEffect(loginStatus) {
@@ -93,6 +97,7 @@ fun RegistrationScreen(
     }
 
     val handleRegister = {
+        hasAttemptedSubmit = true
         val currentTime = System.currentTimeMillis()
         if (isFormValid && currentTime - lastClickTime > 500L) {
             lastClickTime = currentTime
@@ -298,6 +303,8 @@ fun RegistrationScreen(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next,
                     onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                    isError = isUsernameError,
+                    errorMessage = "Username cannot be empty",
                     leadingIcon = null,
                     trailingIcon = {
                         AnimatedVisibility(username.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -319,6 +326,8 @@ fun RegistrationScreen(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
                     onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                    isError = isEmailError,
+                    errorMessage = "Email cannot be empty",
                     leadingIcon = null,
                     trailingIcon = {
                         AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -342,6 +351,8 @@ fun RegistrationScreen(
                     onImeAction = { handleRegister() },
                     visualTransformation = if (passwordVisible) VisualTransformation.None
                     else PasswordVisualTransformation(),
+                    isError = isPasswordError,
+                    errorMessage = "Password cannot be empty",
                     leadingIcon = null,
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {

@@ -92,6 +92,15 @@ val databaseModule = module {
 val networkModule = module {
     single(named("RegularHttpClient")) {
         HttpClient(OkHttp) {
+            engine {
+                addInterceptor { chain ->
+                    val requestBuilder = chain.request().newBuilder()
+                    AuthTokenHolder.token?.let {
+                        requestBuilder.addHeader(HttpHeaders.Authorization, "Bearer $it")
+                    }
+                    chain.proceed(requestBuilder.build())
+                }
+            }
             expectSuccess = false
             install(ContentNegotiation) {
                 json(Json {
@@ -104,11 +113,6 @@ val networkModule = module {
                 requestTimeoutMillis = 60000
                 connectTimeoutMillis = 60000
                 socketTimeoutMillis  = 60000
-            }
-            install(DefaultRequest) {
-                // Read lazily per-request — if captured at construction time the token
-                // is null (client is built before login completes) and never refreshes.
-                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
             HttpResponseValidator {
                 validateResponse { response ->
@@ -131,6 +135,13 @@ val networkModule = module {
                     pingInterval(15, java.util.concurrent.TimeUnit.SECONDS)
                     retryOnConnectionFailure(true)
                 }
+                addInterceptor { chain ->
+                    val requestBuilder = chain.request().newBuilder()
+                    AuthTokenHolder.token?.let {
+                        requestBuilder.addHeader(HttpHeaders.Authorization, "Bearer $it")
+                    }
+                    chain.proceed(requestBuilder.build())
+                }
             }
             install(ContentNegotiation) {
                 json(Json {
@@ -140,9 +151,6 @@ val networkModule = module {
             }
             install(WebSockets) {
                 pingIntervalMillis = 15000
-            }
-            install(DefaultRequest) {
-                AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
         }
     }

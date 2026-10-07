@@ -153,37 +153,45 @@ fun WorkspaceSearchScreen(
             }
         }
 
-        when (val current = state) {
-            SearchUiState.Idle -> CenteredMessage(
-                if (query.trim().isEmpty()) "Search messages, DMs, tasks, notes and files in this workspace."
-                else "Type at least ${WorkspaceSearchViewModel.MIN_QUERY_LENGTH} characters."
-            )
-            SearchUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
-            }
-            is SearchUiState.Error -> Column(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(current.message, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
-                TextButton(onClick = viewModel::retry) {
-                    Text("Try again", color = CoralStart, fontWeight = FontWeight.Bold)
+        androidx.compose.animation.Crossfade(
+            targetState = state,
+            label = "searchStateCrossfade"
+        ) { current ->
+            when (current) {
+                SearchUiState.Idle -> {
+                    com.collabsphere.app.view.components.SkeuoEmptyState(
+                        icon = Icons.Default.Search,
+                        title = "Search Workspace",
+                        description = if (query.trim().isEmpty()) "Search messages, DMs, tasks, notes and files in this workspace."
+                            else "Type at least ${WorkspaceSearchViewModel.MIN_QUERY_LENGTH} characters.",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SearchUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
+                }
+                is SearchUiState.Error -> {
+                    com.collabsphere.app.view.components.SkeuoEmptyState(
+                        icon = Icons.Default.Search, // Or warning icon
+                        title = "Search failed",
+                        description = current.message,
+                        actionLabel = "Try Again",
+                        onAction = { viewModel.retry() },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                is SearchUiState.Results -> if (current.response.isEmpty) {
+                    com.collabsphere.app.view.components.SkeuoEmptyState(
+                        icon = Icons.Default.Search,
+                        title = "No results found",
+                        description = "No results for \"${current.response.query}\". Try adjusting your search terms.",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    SearchResultsList(current.response, onMessageClick, onDmClick, onTaskClick, onNoteClick, onFileClick)
                 }
             }
-            is SearchUiState.Results -> if (current.response.isEmpty) {
-                CenteredMessage("No results for \"${current.response.query}\"")
-            } else {
-                SearchResultsList(current.response, onMessageClick, onDmClick, onTaskClick, onNoteClick, onFileClick)
-            }
         }
-    }
-}
-
-@Composable
-private fun CenteredMessage(text: String) {
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
     }
 }
 

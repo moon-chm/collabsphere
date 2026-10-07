@@ -468,37 +468,41 @@ fun DashboardScreen(
             Spacer(Modifier.height(12.dp))
 
             // ── List, Skeleton, or Empty state ──
-            when {
-                workspaces == null -> {
-                    WorkspaceSkeletonList(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-                }
-                workspaces!!.isEmpty() -> {
-                    DashboardEmptyState()
-                }
-                else -> {
-                    LazyColumn(
-                        modifier            = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding      = PaddingValues(bottom = 100.dp)
-                    ) {
-                        items(
-                            items = workspaces!!,
-                            key   = { ws -> "${ws.id}_${ws.workspaceName}" }
-                        ) { workspace ->
-                            val accentColor = workspaceAccents[workspace.id % workspaceAccents.size]
-                            WorkspaceItem(
-                                workspace     = workspace,
-                                modifier      = Modifier.animateItem(),
-                                accentColor   = accentColor,
-                                onItemClick   = { onWorkspaceClick(workspace) },
-                                onDeleteClick = { onDeleteWorkspaceClick(workspace) }
-                            )
+            androidx.compose.animation.Crossfade(
+                targetState = workspaces,
+                label = "workspacesCrossfade",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) { state ->
+                when {
+                    state == null -> {
+                        WorkspaceSkeletonList(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    state.isEmpty() -> {
+                        DashboardEmptyState(onNavigateToWorkspace = onNavigateToWorkspace)
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier            = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding      = PaddingValues(bottom = 100.dp)
+                        ) {
+                            items(
+                                items = state,
+                                key   = { ws -> "${ws.id}_${ws.workspaceName}" }
+                            ) { workspace ->
+                                val accentColor = workspaceAccents[workspace.id % workspaceAccents.size]
+                                WorkspaceItem(
+                                    workspace     = workspace,
+                                    modifier      = Modifier.animateItem(),
+                                    accentColor   = accentColor,
+                                    onItemClick   = { onWorkspaceClick(workspace) },
+                                    onDeleteClick = { onDeleteWorkspaceClick(workspace) }
+                                )
+                            }
                         }
                     }
                 }
@@ -774,85 +778,20 @@ fun WorkspaceItem(
 // ─────────────────────────────────────────────────────────────────
 
 @Composable
-fun EmptyState() {
-    DashboardEmptyState()
+fun EmptyState(onNavigateToWorkspace: () -> Unit) {
+    DashboardEmptyState(onNavigateToWorkspace)
 }
 
 @Composable
-private fun DashboardEmptyState() {
-    Box(
-        modifier         = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.75f),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier            = Modifier.padding(32.dp)
-        ) {
-            // Empty state icon circle with contact shadow & hairline
-            Box(
-                modifier = Modifier
-                    .size(88.dp)
-                    .drawWithCache {
-                        val r = size.minDimension / 2f
-                        onDrawBehind {
-                        // Ambient shadow
-                        drawCircle(
-                            color  = Color(0xFF2C201A).copy(alpha = 0.05f),
-                            radius = r,
-                            center = Offset(center.x, center.y + 6.dp.toPx())
-                        )
-                        // Contact shadow
-                        drawCircle(
-                            color  = Color(0xFF2C201A).copy(alpha = 0.14f),
-                            radius = r,
-                            center = Offset(center.x, center.y + 2.dp.toPx())
-                        )
-                        // Specular top halo
-                        drawCircle(
-                            color  = Color.White.copy(alpha = 0.90f),
-                            radius = r,
-                            center = Offset(center.x, center.y - 1.5.dp.toPx())
-                        )
-                        // Surface fill
-                        drawCircle(color = Surface)
-                        // 1px hairline border
-                        drawCircle(
-                            color  = Color(0xFF2C2A28).copy(alpha = 0.06f),
-                            radius = r - 0.5.dp.toPx(),
-                            style  = Stroke(width = 1.dp.toPx())
-                        )
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector        = Icons.Outlined.Folder,
-                    contentDescription = null,
-                    tint               = Muted.copy(alpha = 0.5f),
-                    modifier           = Modifier.size(38.dp)
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                text  = "No workspaces yet",
-                style = MaterialTheme.typography.headlineSmall,
-                color = Ink
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text      = "Tap the + button below to create your first workspace and start collaborating.",
-                style     = MaterialTheme.typography.bodyMedium,
-                color     = Muted,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
+private fun DashboardEmptyState(onNavigateToWorkspace: () -> Unit) {
+    com.collabsphere.app.view.components.SkeuoEmptyState(
+        icon = androidx.compose.material.icons.Icons.Outlined.Folder,
+        title = "No workspaces yet",
+        description = "Tap the + button below or create your first workspace to start collaborating.",
+        actionLabel = "Create Workspace",
+        onAction = onNavigateToWorkspace,
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f)
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────

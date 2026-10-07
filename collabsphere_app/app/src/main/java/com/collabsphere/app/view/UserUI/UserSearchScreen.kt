@@ -116,28 +116,61 @@ fun UserSearchScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            when {
-                errorMessage.isNotEmpty() -> {
-                    Text(errorMessage, style = MaterialTheme.typography.bodyMedium, color = Destructive)
-                }
-                query.trim().length in 1..1 -> {
-                    Text("Keep typing — at least 2 characters", style = MaterialTheme.typography.bodyMedium, color = Muted)
-                }
-                query.isNotBlank() && results.isEmpty() && !isSearching -> {
-                    Text("No people found", style = MaterialTheme.typography.bodyMedium, color = Muted)
+            androidx.compose.animation.Crossfade(
+                targetState = Triple(query, results, errorMessage),
+                label = "userSearchCrossfade",
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) { (currentQuery, currentResults, currentError) ->
+                when {
+                    currentError.isNotEmpty() -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "Search failed",
+                            description = currentError,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    currentQuery.trim().length in 1..1 -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "Keep typing",
+                            description = "Type at least 2 characters to search for users.",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    currentQuery.isNotBlank() && currentResults.isEmpty() && !isSearching -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "No people found",
+                            description = "No users match your search query.",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    currentQuery.isBlank() && currentResults.isEmpty() -> {
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "Find People",
+                            description = "Search by username or email to find teammates.",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(currentResults, key = { it.id }) { user ->
+                                UserRow(
+                                    avatarUrl = user.avatarUrl,
+                                    displayName = user.username,
+                                    subtitle = user.email,
+                                    onClick = { onUserClick(user.id) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
-
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(results, key = { it.id }) { user ->
-                    UserRow(
-                        avatarUrl = user.avatarUrl,
-                        displayName = user.username,
-                        subtitle = user.email,
-                        onClick = { onUserClick(user.id) }
-                    )
-                }
-            }
-        }
     }
+}
 }

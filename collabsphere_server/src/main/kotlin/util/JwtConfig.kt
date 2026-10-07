@@ -8,8 +8,9 @@ import org.slf4j.LoggerFactory
 
 object JwtConfig {
     private val logger = LoggerFactory.getLogger(JwtConfig::class.java)
-    private const val DEV_FALLBACK_SECRET = "dev-only-insecure-secret-change-me"
-    private val secret = System.getenv("JWT_SECRET") ?: DEV_FALLBACK_SECRET
+    private val secret = requireNotNull(System.getenv("JWT_SECRET")) {
+        "JWT_SECRET environment variable must be configured"
+    }
 
     const val issuer = "collabsphere-server"
     const val audience = "collabsphere-app"
@@ -60,9 +61,4 @@ object JwtConfig {
         null
     }
 
-    init {
-        if (secret == DEV_FALLBACK_SECRET) {
-            logger.warn("JWT_SECRET env var is not set — using an insecure development fallback secret. Set JWT_SECRET before deploying to production.")
-        }
-    }
 }
