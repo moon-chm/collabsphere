@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -67,6 +69,23 @@ class DashboardViewModel(
     fun logout() {
         viewModelScope.launch {
             sessionManager.logout()
+        }
+    }
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    fun refreshWorkspaces() {
+        val currentUserId = userIdState.value
+        if (currentUserId != -1 && currentUserId > 0) {
+            viewModelScope.launch {
+                _isRefreshing.value = true
+                try {
+                    repository.syncWorkspaces(currentUserId)
+                } finally {
+                    _isRefreshing.value = false
+                }
+            }
         }
     }
 }

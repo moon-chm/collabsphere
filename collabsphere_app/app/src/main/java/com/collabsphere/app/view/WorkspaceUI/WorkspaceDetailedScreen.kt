@@ -259,7 +259,6 @@ fun WorkspaceDetailedScreen(
                             BasicTextField(
                                 value = memberEmailInput,
                                 onValueChange = { memberEmailInput = it },
-                                modifier = Modifier.weight(1f),
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
                                 cursorBrush = androidx.compose.ui.graphics.SolidColor(CoralStart),
@@ -386,238 +385,199 @@ fun WorkspaceDetailedScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = if (selectedTab == 4 && isDmInConversation) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
-        topBar = {
-            if (!(selectedTab == 4 && isDmInConversation)) {
-                // Tactile Top Bar
-                Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(64.dp)
-                    .drawWithCache {
-                        onDrawBehind {
-                        // Bottom rim shadow
-                        drawRect(
-                            color = ShadowDark.copy(alpha = 0.12f),
-                            topLeft = Offset(0f, size.height),
-                            size = Size(size.width, 3.dp.toPx())
-                        )
-                        // Fill
-                        drawRect(color = SurfaceRaised)
-                        // Top hairline
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.85f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
-                        )
-                                            }
-                    }
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Back button
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.90f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = Surface,
-                                    radius = size.minDimension / 2f
-                                )
-                                                            }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Ink,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // Workspace Title
-                    Text(
-                        text = workspaceName,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Ink,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    )
-
-                    // Trailing action icons with consistent spacing
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Mute / Unmute
-                        IconButton(
-                            onClick = {
-                                muteScope.launch {
-                                    muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
-                                        .onSuccess {
-                                            AppToast.show(if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs")
-                                        }
-                                        .onFailure {
-                                            AppToast.error("Couldn't update mute. Check your connection.")
-                                        }
-                                }
-                            },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                        drawCircle(
-                                            color = ShadowDark.copy(alpha = 0.22f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = ShadowLight.copy(alpha = 0.90f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = Surface,
-                                            radius = size.minDimension / 2f
-                                        )
-                                    }
-                                }
-                        ) {
-                            Icon(
-                                imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                                contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
-                                tint = if (isWorkspaceMuted) Muted else IndigoStart,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Search
-                        IconButton(
-                            onClick = onSearchClick,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                        drawCircle(
-                                            color = ShadowDark.copy(alpha = 0.22f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = ShadowLight.copy(alpha = 0.90f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = Surface,
-                                            radius = size.minDimension / 2f
-                                        )
-                                    }
-                                }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search workspace",
-                                tint = IndigoStart,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Members / Add Member
-                        IconButton(
-                            onClick = { showMembersDialog = true },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                        drawCircle(
-                                            color = ShadowDark.copy(alpha = 0.22f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = ShadowLight.copy(alpha = 0.90f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = Surface,
-                                            radius = size.minDimension / 2f
-                                        )
-                                    }
-                                }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.GroupAdd,
-                                contentDescription = "Add Member",
-                                tint = CoralStart,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    },
     bottomBar = {
             if (!(selectedTab == 4 && isDmInConversation)) {
-                // Skeuomorphic Tactile Bottom Navigation Bar — floating tray with true contact & ambient shadow
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                ) {
+                    // Floating Context Pill
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .height(52.dp)
+                            .drawWithCache {
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = ShadowDark.copy(alpha = 0.15f),
+                                        topLeft = Offset(0f, 4.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(26.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = SurfaceRaised.copy(alpha = 0.95f),
+                                        cornerRadius = CornerRadius(26.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        topLeft = Offset(0f, -1.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(26.dp.toPx()),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Back button
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .drawWithCache {
+                                        onDrawBehind {
+                                            drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
+                                            drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
+                                            drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                        }
+                                    }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Ink,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Workspace Title
+                            Text(
+                                text = workspaceName,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp)
+                            )
+
+                            // Trailing action icons with consistent spacing
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Mute / Unmute
+                                IconButton(
+                                    onClick = {
+                                        muteScope.launch {
+                                            muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
+                                                .onSuccess {
+                                                    AppToast.show(if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs")
+                                                }
+                                                .onFailure {
+                                                    AppToast.error("Couldn't update mute. Check your connection.")
+                                                }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .drawWithCache {
+                                            onDrawBehind {
+                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
+                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
+                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                            }
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                                        contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
+                                        tint = if (isWorkspaceMuted) Muted else IndigoStart,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                // Search
+                                IconButton(
+                                    onClick = onSearchClick,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .drawWithCache {
+                                            onDrawBehind {
+                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
+                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
+                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                            }
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Search workspace",
+                                        tint = IndigoStart,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                // Members / Add Member
+                                IconButton(
+                                    onClick = { showMembersDialog = true },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .drawWithCache {
+                                            onDrawBehind {
+                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
+                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
+                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
+                                            }
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.GroupAdd,
+                                        contentDescription = "Add Member",
+                                        tint = CoralStart,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                // Ultra-frosted Tactile Capsule Dock
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .height(82.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .height(68.dp)
                         .drawWithCache {
                             onDrawBehind {
-                            // 1. Upward ambient diffuse shadow
-                            drawRect(
-                                color = Color(0xFF2C201A).copy(alpha = 0.07f),
-                                topLeft = Offset(0f, -6.dp.toPx()),
-                                size = Size(size.width, 6.dp.toPx())
-                            )
-                            // 2. Upward tight contact shadow (2.3x ambient alpha)
-                            drawRect(
-                                color = Color(0xFF2C201A).copy(alpha = 0.16f),
-                                topLeft = Offset(0f, -1.5.dp.toPx()),
-                                size = Size(size.width, 1.5.dp.toPx())
-                            )
-                            // 3. Elevated SurfaceRaised tray body (#FDFBF7)
-                            drawRect(color = SurfaceRaised)
-                            // 4. Subtle perimeter hairline boundary
-                            drawRect(
-                                color = Color(0xFF2C2A28).copy(alpha = 0.07f),
-                                topLeft = Offset(0f, 0f),
-                                size = Size(size.width, 1.dp.toPx())
-                            )
-                            // 5. Bright specular rim highlight along top edge
-                            drawRect(
-                                color = Color.White.copy(alpha = 0.95f),
-                                topLeft = Offset(0f, 1.dp.toPx()),
-                                size = Size(size.width, 1.dp.toPx())
-                            )
-                                                    }
+                                val cr = size.height / 2f
+                                // 1. Ambient capsule drop shadow
+                                drawRoundRect(
+                                    color = ShadowDark.copy(alpha = 0.12f),
+                                    topLeft = Offset(0f, 8.dp.toPx()),
+                                    size = Size(size.width, size.height),
+                                    cornerRadius = CornerRadius(cr)
+                                )
+                                // 2. Frosted glassmorphic body
+                                drawRoundRect(
+                                    color = SurfaceRaised.copy(alpha = 0.85f),
+                                    cornerRadius = CornerRadius(cr)
+                                )
+                                // 3. Subtle perimeter boundary
+                                drawRoundRect(
+                                    color = ShadowDark.copy(alpha = 0.05f),
+                                    cornerRadius = CornerRadius(cr),
+                                    style = Stroke(width = 1.dp.toPx())
+                                )
+                                // 4. Inner specular highlight
+                                drawRoundRect(
+                                    color = Color.White.copy(alpha = 0.95f),
+                                    topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                                    size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
+                                    cornerRadius = CornerRadius(cr),
+                                    style = Stroke(width = 1.dp.toPx())
+                                )
+                            }
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -629,48 +589,43 @@ fun WorkspaceDetailedScreen(
                             selected = selectedTab == 0,
                             icon = Icons.Outlined.GridView,
                             label = "Spaces",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 0 }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 4,
                             icon = Icons.Outlined.ChatBubbleOutline,
                             label = "Chat",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 4 }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 1,
                             icon = Icons.Outlined.CheckBox,
                             label = "Tasks",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 1 }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 3,
                             icon = Icons.Outlined.Description,
                             label = "Docs",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 3 }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 2,
                             icon = Icons.Outlined.Folder,
                             label = "Files",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 2 }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 5,
                             icon = Icons.Outlined.AccountTree,
                             label = "GitHub",
-                            modifier = Modifier.weight(1f),
                             onClick = { selectedTab = 5 }
                         )
                     }
                 }
             }
         }
+   }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -735,134 +690,80 @@ fun WorkspaceDetailedScreen(
 
 /** Individual skeuomorphic bottom tab squircle tile matching reference image */
 @Composable
-private fun SkeuoTabItem(
+private fun RowScope.SkeuoTabItem(
     selected: Boolean,
     icon: ImageVector,
     label: String,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Tactile depth compression on tap: sinks down when pressed or active
-    val targetScale = if (isPressed) 0.93f else if (selected) 0.98f else 1.0f
+    val targetScale = if (isPressed) 0.93f else 1.0f
     val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "tabTileScale"
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "tabScale"
     )
 
-    // Colors matching screenshot:
-    // Terracotta accent for selected: #A63F20 (WCAG AA compliant against #EAE5DC)
-    // Charcoal warm brown for unselected icon: #4F423F
-    // Muted warm brown for unselected text: #70625E
-    val selectedAccent = Color(0xFFA63F20)
-    val unselectedIconColor = Color(0xFF4F423F)
-    val unselectedTextColor = Color(0xFF70625E)
+    val weight by animateFloatAsState(
+        targetValue = if (selected) 2.5f else 1f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
+        label = "tabWeight"
+    )
 
+    val selectedAccent = CoralStart
+    val unselectedIconColor = Muted
+    
     val iconColor by animateColorAsState(
-        targetValue = if (selected) selectedAccent else unselectedIconColor,
+        targetValue = if (selected) Color.White else unselectedIconColor,
         animationSpec = tween(180),
         label = "tabIconColor"
     )
 
     val textColor by animateColorAsState(
-        targetValue = if (selected) selectedAccent else unselectedTextColor,
+        targetValue = if (selected) Color.White else unselectedIconColor,
         animationSpec = tween(180),
         label = "tabTextColor"
     )
 
     Box(
-        modifier = modifier
-            .height(64.dp)
+        modifier = Modifier
+            .weight(weight)
+            .height(52.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .drawWithCache {
                 onDrawBehind {
-                val cr = 18.dp.toPx()
-                if (selected) {
-                    // ── SUNKEN / INSET / DEBOSSED BUTTON (Exact match to "Spaces" in screenshot) ──
-                    // 1. Soft cavity edge around the debossed perimeter
-                    drawRoundRect(
-                        color = Color(0xFF281E19).copy(alpha = 0.12f),
-                        topLeft = Offset(0f, 0f),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 2. Top-left dark inner shadow (the physical sink into the tray)
-                    drawRoundRect(
-                        color = Color(0xFF221713).copy(alpha = 0.16f),
-                        topLeft = Offset(1.5.dp.toPx(), 2.dp.toPx()),
-                        size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 3. Sunken interior warm bed (slightly recessed warm gradient)
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFEAE5DC),
-                                Color(0xFFF3EFE7)
-                            )
-                        ),
-                        topLeft = Offset(1.5.dp.toPx(), 1.5.dp.toPx()),
-                        size = Size(size.width - 3.dp.toPx(), size.height - 3.dp.toPx()),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 4. Bottom-right inner specular reflection rim
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.85f),
-                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                        size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                        cornerRadius = CornerRadius(cr),
-                        style = Stroke(width = 1.2.dp.toPx())
-                    )
-                } else {
-                    // ── RAISED EXTRUDED BUTTON (Exact match to "Chat", "Tasks", "Docs" in screenshot) ──
-                    // 1. Bottom-right soft dark drop shadow
-                    drawRoundRect(
-                        color = Color(0xFF2C201A).copy(alpha = 0.10f),
-                        topLeft = Offset(1.5.dp.toPx(), 2.5.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 2. Top-left bright specular highlight
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.95f),
-                        topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 3. Elevated warm cream button fill
-                    drawRoundRect(
-                        color = Color(0xFFFAF7F2),
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    // 4. Subtle top specular hairline perfectly hugging rounded shoulders
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.85f),
-                                Color.White.copy(alpha = 0.20f),
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = cr * 1.2f
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(cr),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
+                    val cr = size.height / 2f
+                    if (selected) {
+                        // Glowing tactile Coral Pill
+                        drawRoundRect(
+                            brush = Brush.linearGradient(listOf(CoralStart, CoralEnd)),
+                            cornerRadius = CornerRadius(cr)
+                        )
+                        // Specular highlight
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.4f),
+                            topLeft = Offset(0f, 0f),
+                            size = Size(size.width, size.height),
+                            cornerRadius = CornerRadius(cr),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                        // Inner glow/shadow
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.2f),
+                            topLeft = Offset(0f, 1.dp.toPx()),
+                            size = Size(size.width, size.height - 2.dp.toPx()),
+                            cornerRadius = CornerRadius(cr),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    }
                 }
-                            }
             }
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(26.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -871,26 +772,30 @@ private fun SkeuoTabItem(
             .padding(horizontal = 4.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = iconColor,
-                modifier = Modifier.size(23.dp)
+                modifier = Modifier.size(24.dp)
             )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.5.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-                ),
-                color = textColor,
-                maxLines = 1
-            )
+            androidx.compose.animation.AnimatedVisibility(visible = selected) {
+                Row {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = textColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip
+                    )
+                }
+            }
         }
     }
 }

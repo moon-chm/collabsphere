@@ -61,6 +61,7 @@ import com.collabsphere.app.viewmodel.DashboardViewModel
 // Color palette for workspace initials (cycles through accent colors)
 private val workspaceAccents = listOf(CoralStart, IndigoStart, MintGreen, AmberWarn, Color(0xFF9B59B6))
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel             : DashboardViewModel,
@@ -79,7 +80,12 @@ fun DashboardScreen(
     onOpenWorkspaceTasks  : (WorkspaceEntity) -> Unit = {}
 ) {
     // ── All original state preserved ──
+
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    
+
+
     val myDayUserId by viewModel.userIdState.collectAsStateWithLifecycle()
     var showJoinByCodeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current

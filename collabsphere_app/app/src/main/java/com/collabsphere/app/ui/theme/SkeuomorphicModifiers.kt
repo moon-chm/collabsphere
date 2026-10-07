@@ -217,46 +217,40 @@ fun Modifier.skeuoInset(
     val cr = cornerRadius.toPx()
     val d  = depth.toPx()
 
-    val bedBrush = Brush.verticalGradient(
-        colors = if (isDark) {
-            listOf(Color(0xFF181614), Color(0xFF22201D))
-        } else {
-            listOf(Color(0xFFEDE8DF), Color(0xFFF7F4ED))
-        }
-    )
-    val innerDarkColor = if (isDark) ShadowDarkDark.copy(alpha = 0.5f) else Color(0xFF201612).copy(alpha = 0.18f)
-    val innerLightColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.85f)
-    val cavityEdgeColor = if (isDark) Color.Black.copy(alpha = 0.3f) else Color(0xFF241A15).copy(alpha = 0.12f)
-    val strokeWidth = d.coerceAtLeast(1.dp.toPx())
-
     onDrawBehind {
-        // 1. Soft cavity edge boundary around the perimeter
+        // STRICT STITCH SPECIFICATION: Debossed Input Fields (Carved Troughs)
+        
+        // 1. Bottom shelf rim highlight (simulates physical deboss cut)
+        // 0 1px 0 0 rgba(255, 255, 255, 0.9)
         drawRoundRect(
-            color = cavityEdgeColor,
-            topLeft = Offset(0f, 0f),
+            color = Color.White.copy(alpha = 0.9f),
+            topLeft = Offset(0f, 1.dp.toPx()),
             size = size,
             cornerRadius = CornerRadius(cr)
         )
-        // 2. Sunken interior warm bed
+        
+        // 2. Base Trough Inset Background
+        // background: rgba(245, 238, 233, 0.6)
         drawRoundRect(
-            brush = bedBrush,
-            topLeft = Offset(d * 0.5f, d * 0.5f),
-            size = Size(size.width - d, size.height - d),
+            color = Color(0xFFF5EEE9).copy(alpha = 0.6f),
+            size = size,
             cornerRadius = CornerRadius(cr)
         )
-        // 3. Top-left dark inner stroke (cavity sink)
+        
+        // 3. Inner shadow 1 (inset 0 2px 4px 0 rgba(0, 0, 0, 0.06))
         drawRoundRect(
-            color = innerDarkColor,
-            topLeft = Offset(d * 0.5f, d * 0.7f),
-            size = Size(size.width - d, size.height - d),
+            color = Color.Black.copy(alpha = 0.06f),
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, size.height),
             cornerRadius = CornerRadius(cr),
-            style = Stroke(width = strokeWidth)
+            style = Stroke(width = 2.dp.toPx())
         )
-        // 4. Bottom-right specular light rim reflection
+        
+        // 4. Inner shadow 2 (inset 0 1px 2px 0 rgba(0, 0, 0, 0.04))
         drawRoundRect(
-            color = innerLightColor,
-            topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-            size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+            color = Color.Black.copy(alpha = 0.04f),
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, size.height),
             cornerRadius = CornerRadius(cr),
             style = Stroke(width = 1.dp.toPx())
         )
