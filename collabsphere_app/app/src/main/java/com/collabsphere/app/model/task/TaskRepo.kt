@@ -12,6 +12,7 @@ import com.collabsphere.app.model.TempId
 import androidx.work.*
 import com.collabsphere.app.dto.task.TaskRequest
 import com.collabsphere.app.model.UserEntity
+import com.collabsphere.app.model.BackgroundSyncRegistry
 import com.collabsphere.app.model.workspace.WorkspaceDao
 import com.collabsphere.app.model.workspace.WorkspaceMemberEntity
 import com.collabsphere.app.remote.task.TaskApiService
@@ -26,6 +27,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
+import kotlin.coroutines.coroutineContext
 
 class TaskRepo(
     private val taskDao: TaskDao,
@@ -40,6 +42,8 @@ class TaskRepo(
     }
 
     private fun getSyncKey(workspaceId: Int) = longPreferencesKey("${LAST_SYNC_KEY_PREFIX}$workspaceId")
+    private fun taskQueueKey(taskId: Int) =
+        androidx.datastore.preferences.core.intPreferencesKey("task_queue_key_$taskId")
 
     // TaskRepo is a Koin singleton shared by every TaskViewModel instance — without this guard,
     // navigating to the same workspace's tasks screen more than once (without popping the earlier
@@ -120,6 +124,15 @@ class TaskRepo(
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
+        val syncJob = coroutineContext[kotlinx.coroutines.Job] ?: run {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
+        val registryKey = "tasks:$workspaceId"
+        if (!BackgroundSyncRegistry.register(registryKey, syncJob)) {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
         try {
         syncWorkspaceMembers(workspaceId)
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(1_000)
@@ -165,6 +178,7 @@ class TaskRepo(
             delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
             activeSyncLoops.remove(workspaceId)
         }
     }
@@ -192,6 +206,10 @@ class TaskRepo(
             Result.success(savedId)
         } catch (e: Exception) {
             Log.e("TaskRepo", "POST request failed.", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
+                return@withContext Result.failure(e)
+            }
             // Negative range: a positive id here (even truncated from a timestamp) can collide with
             // a real server-assigned id synced down before this pending create's own sync resolves.
             val temporaryLocalId = TempId.next()
@@ -234,6 +252,7 @@ class TaskRepo(
             Result.success(TaskSyncOutcome.CONFIRMED)
         } catch (e: Exception) {
             Log.e("TaskRepo", "PUT request failed.", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // The server answered and refused — queueing it would only fail again in the background.
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext Result.failure(e)
             val syncData = workDataOf(
@@ -270,6 +289,10 @@ class TaskRepo(
             }
         } catch (e: Exception) {
             Log.e("TaskRepo", "DELETE request failed.", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = true) == SyncDecision.DROP) {
+                return@withContext Result.failure(e)
+            }
             taskDao.deleteTask(taskId)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
@@ -284,7 +307,7 @@ class TaskRepo(
         return taskDao.getWorkspaceMembers(workspaceId)
     }
 
-    private fun enqueueSync(data: Data) {
+    private suspend fun enqueueSync(data: Data) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -298,8 +321,13 @@ class TaskRepo(
         // Unique per task, not per entity TYPE — see ChannelRepo.enqueueSync for why a shared name
         // across every task would let one permanently-failed sync cancel every other task's queue.
         val taskId = data.getInt("TASK_ID", 0)
+        val stableQueueId = if (taskId < 0) {
+            taskId
+        } else {
+            dataStore.data.first()[taskQueueKey(taskId)] ?: taskId
+        }
         workManager.enqueueUniqueWork(
-            "TASK_SYNC_$taskId",
+            "TASK_SYNC_$stableQueueId",
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             syncRequest
         )

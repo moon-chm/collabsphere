@@ -701,6 +701,7 @@ fun CreateTaskDialog(
     val dueDate by viewModel.dueDate.collectAsStateWithLifecycle()
     val priority by viewModel.priority.collectAsStateWithLifecycle()
     val labels by viewModel.labels.collectAsStateWithLifecycle()
+    val isCreatingTask by viewModel.isCreatingTask.collectAsStateWithLifecycle()
 
     var dropdownExpanded by remember { mutableStateOf(false) }
     val selectedMemberName = members.find { it.id == assignedUserId }?.userName ?: "Unassigned"
@@ -884,13 +885,13 @@ onDrawBehind {
                             .height(46.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Surface)
-                            .clickable(onClick = onDismiss),
+                            .clickable(enabled = !isCreatingTask, onClick = onDismiss),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
                     }
 
-                    val canCreate = name.trim().isNotEmpty()
+                    val canCreate = name.trim().isNotEmpty() && !isCreatingTask
                     val createAlpha = if (canCreate) 1f else 0.72f
                     Box(
                         modifier = Modifier
@@ -919,18 +920,25 @@ onDrawBehind {
 }
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = canCreate) {
-                                if (name.trim().isNotEmpty()) {
-                                    viewModel.onCreateTask()
-                                    onDismiss()
+                                if (canCreate) {
+                                    viewModel.onCreateTask(onCreated = onDismiss)
                                 }
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Create",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
-                        )
+                        if (isCreatingTask) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = "Create",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
+                            )
+                        }
                     }
                 }
             }

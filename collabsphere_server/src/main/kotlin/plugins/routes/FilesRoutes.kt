@@ -20,6 +20,32 @@ import java.util.UUID
 
 private val logger = LoggerFactory.getLogger("FilesRoutes")
 
+private fun ResultRow.toFileResponse() = FileResponse(
+    id = this[LocalFilesTable.id],
+    userId = this[LocalFilesTable.userId],
+    workspaceId = this[LocalFilesTable.workspaceId],
+    userName = this[LocalFilesTable.userName],
+    url = this[LocalFilesTable.url],
+    mimeType = this[LocalFilesTable.mimeType],
+    localpath = this[LocalFilesTable.localPath],
+    fileName = this[LocalFilesTable.fileName],
+    sizebytes = this[LocalFilesTable.sizeBytes],
+    fileLocation = this[LocalFilesTable.fileLocation]
+)
+
+private fun File.sha256Hex(): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
 internal fun Route.filesRoutes() {
     route("/api/file") {
         post {
@@ -36,6 +62,7 @@ internal fun Route.filesRoutes() {
                 var workspaceId: Int? = null
                 var userName: String? = null
                 var localpath: String? = null
+                var idempotencyKey: String? = null
 
                 var fileName: String? = null
                 var contentType: String? = null
@@ -66,6 +93,7 @@ internal fun Route.filesRoutes() {
                                 }
                                 "userName" -> userName = part.value
                                 "localpath" -> localpath = part.value
+                                "idempotencyKey" -> idempotencyKey = part.value.takeIf { it.isNotBlank() }
                             }
                             part.dispose()
                         }
@@ -106,9 +134,29 @@ internal fun Route.filesRoutes() {
                     return@post
                 }
 
-                val uniqueFileName = "${UUID.randomUUID()}_$fileName"
                 val finalMimeType = contentType ?: "application/octet-stream"
                 val fileSize = stagedFile.length()
+                val contentHash = stagedFile.sha256Hex()
+                val matchingPrior = idempotencyKey?.let { key ->
+                    dbQuery { LocalFilesTable.selectAll().where { LocalFilesTable.idempotencyKey eq key }.singleOrNull() }
+                }
+                if (matchingPrior != null) {
+                    val sameOperation = matchingPrior[LocalFilesTable.userId] == actingUserId &&
+                        matchingPrior[LocalFilesTable.workspaceId] == workspaceId &&
+                        matchingPrior[LocalFilesTable.userName] == userName &&
+                        matchingPrior[LocalFilesTable.fileName] == fileName &&
+                        matchingPrior[LocalFilesTable.mimeType] == finalMimeType &&
+                        matchingPrior[LocalFilesTable.sizeBytes] == fileSize &&
+                        matchingPrior[LocalFilesTable.contentHash] == contentHash
+                    if (!sameOperation) {
+                        call.respond(HttpStatusCode.Conflict, "Idempotency key was already used for different file content")
+                    } else {
+                        call.respond(HttpStatusCode.Created, matchingPrior.toFileResponse())
+                    }
+                    return@post
+                }
+
+                val uniqueFileName = "${UUID.randomUUID()}_$fileName"
 
                 val cloudLocation = if (CloudinaryService.isConfigured) {
                     try {
@@ -154,7 +202,7 @@ internal fun Route.filesRoutes() {
 
                 val insertedId = try {
                     dbQuery {
-                        LocalFilesTable.insert {
+                        val insertResult = LocalFilesTable.insertIgnore {
                             it[LocalFilesTable.userId] = actingUserId
                             it[LocalFilesTable.workspaceId] = workspaceId!!
                             it[LocalFilesTable.userName] = userName!!
@@ -165,9 +213,12 @@ internal fun Route.filesRoutes() {
                             it[LocalFilesTable.fileName] = fileName!!
                             it[LocalFilesTable.sizeBytes] = fileSize
                             it[LocalFilesTable.fileLocation] = generatedFileLocation
+                            it[LocalFilesTable.idempotencyKey] = idempotencyKey
+                            it[LocalFilesTable.contentHash] = contentHash
                             it[LocalFilesTable.updatedAt] = currentTimeMil
                             it[LocalFilesTable.isDeleted] = false
-                        }[LocalFilesTable.id]
+                        }
+                        insertResult.resultedValues?.singleOrNull()?.get(LocalFilesTable.id)
                     }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -178,6 +229,31 @@ internal fun Route.filesRoutes() {
                         File(generatedFileLocation).delete()
                     }
                     throw e
+                }
+
+                if (insertedId == null) {
+                    val prior = idempotencyKey?.let { key ->
+                        dbQuery { LocalFilesTable.selectAll().where { LocalFilesTable.idempotencyKey eq key }.singleOrNull() }
+                    }
+                    val sameOperation = prior != null &&
+                        prior[LocalFilesTable.userId] == actingUserId &&
+                        prior[LocalFilesTable.workspaceId] == workspaceId &&
+                        prior[LocalFilesTable.userName] == userName &&
+                        prior[LocalFilesTable.fileName] == fileName &&
+                        prior[LocalFilesTable.mimeType] == finalMimeType &&
+                        prior[LocalFilesTable.sizeBytes] == fileSize &&
+                        prior[LocalFilesTable.contentHash] == contentHash
+                    if (CloudinaryService.isCloudinaryUrl(generatedFileLocation)) {
+                        CloudinaryService.deleteRawFile(generatedFileLocation)
+                    } else {
+                        File(generatedFileLocation).delete()
+                    }
+                    if (!sameOperation) {
+                        call.respond(HttpStatusCode.Conflict, "Idempotency key was already used for different file content")
+                    } else {
+                        call.respond(HttpStatusCode.Created, prior!!.toFileResponse())
+                    }
+                    return@post
                 }
 
                 val response = FileResponse(

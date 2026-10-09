@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.collabsphere.app.dto.message.MessageRequest
@@ -25,12 +27,12 @@ class MessageSyncWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val actionType = inputData.getString("ACTION_TYPE") ?: "CREATE"
-        val messageId = inputData.getInt("MESSAGE_ID", -1)
+        val messageId = inputData.getInt("MESSAGE_ID", 0)
         val userId = inputData.getInt("USER_ID", -1)
         val workspaceIdParam = inputData.getInt("WORKSPACE_ID", -1)
         val channelIdParam = inputData.getInt("CHANNEL_ID", -1)
 
-        if (messageId == -1 || userId == -1 || workspaceIdParam == -1 || channelIdParam == -1) {
+        if (messageId == 0 || userId == -1 || workspaceIdParam == -1 || channelIdParam == -1) {
             return@withContext Result.failure()
         }
 
@@ -67,7 +69,9 @@ class MessageSyncWorker(
                 content = content,
                 status = status,
                 replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 },
-                mediaUrl = inputData.getString("MEDIA_URL")
+                mediaUrl = inputData.getString("MEDIA_URL"),
+                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
+                    ?: "message-local-${userId}-$messageId"
             )
 
             if (actionType == "UPDATE") {
@@ -77,10 +81,12 @@ class MessageSyncWorker(
                 if (messageId != remoteResponse.id) {
                     messageDao.replaceTempId(messageId, remoteResponse.id)
                 }
+                dataStore.edit { it.remove(stringPreferencesKey("message_idempotency_$messageId")) }
             }
             return@withContext Result.success()
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("MessageSyncWorker", "Operation failed", e)
             return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }

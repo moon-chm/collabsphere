@@ -20,15 +20,43 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("MessagesRoutes")
 
+private fun ResultRow.toMessageResponse() = MessageResponse(
+    id = this[MessageTable.id],
+    userId = this[MessageTable.userId],
+    workspaceId = this[MessageTable.workspaceId],
+    channelId = this[MessageTable.channelId],
+    userName = this[MessageTable.userName],
+    content = this[MessageTable.content],
+    status = this[MessageTable.status],
+    replyToId = this[MessageTable.replyToId],
+    mediaUrl = this[MessageTable.mediaUrl],
+    pinnedAt = this[MessageTable.pinnedAt]
+)
+
 internal fun Route.messagesRoutes() {
     route("/api/message") {
         post {
             try {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<MessageRequest>()
-                val newMessage = dbQuery {
+                val createResult = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) {
                         return@dbQuery null
+                    }
+                    val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
+                    val priorByKey = request.idempotencyKey?.let { key ->
+                        MessageTable.selectAll().where { MessageTable.idempotencyKey eq key }.singleOrNull()
+                    }
+                    if (priorByKey != null) {
+                        val sameOperation = priorByKey[MessageTable.userId] == actingUserId &&
+                            priorByKey[MessageTable.workspaceId] == request.workspaceId &&
+                            priorByKey[MessageTable.channelId] == request.channelId &&
+                            priorByKey[MessageTable.content] == request.content &&
+                            priorByKey[MessageTable.status] == request.status &&
+                            priorByKey[MessageTable.mediaUrl] == validMediaUrl
+                        require(sameOperation) { "Idempotency key was already used for a different message" }
+                        val prior = priorByKey.toMessageResponse()
+                        return@dbQuery prior to false
                     }
                     val validReplyToId = request.replyToId?.takeIf { targetId ->
                         MessageTable.selectAll().where {
@@ -37,8 +65,7 @@ internal fun Route.messagesRoutes() {
                                     (MessageTable.channelId eq request.channelId)
                         }.count() > 0
                     }
-                    val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
-                    val insertedId = MessageTable.insert {
+                    val insertResult = MessageTable.insertIgnore {
                         it[MessageTable.userId] = actingUserId
                         it[MessageTable.workspaceId] = request.workspaceId
                         it[MessageTable.channelId] = request.channelId
@@ -47,11 +74,27 @@ internal fun Route.messagesRoutes() {
                         it[MessageTable.replyToId] = validReplyToId
                         it[MessageTable.mediaUrl] = validMediaUrl
                         it[MessageTable.status] = request.status
+                        it[MessageTable.idempotencyKey] = request.idempotencyKey
                         it[MessageTable.isDeleted] = false
                         it[MessageTable.updatedAt] = System.currentTimeMillis()
-                    }[MessageTable.id]
+                    }
+                    val insertedId = insertResult.resultedValues?.singleOrNull()?.get(MessageTable.id)
+                    if (insertedId == null) {
+                        val rowAfterConflict = request.idempotencyKey?.let { key ->
+                            MessageTable.selectAll().where { MessageTable.idempotencyKey eq key }.singleOrNull()
+                        } ?: error("Message insert conflicted without an idempotency row")
+                        require(
+                            rowAfterConflict[MessageTable.userId] == actingUserId &&
+                                rowAfterConflict[MessageTable.workspaceId] == request.workspaceId &&
+                                rowAfterConflict[MessageTable.channelId] == request.channelId &&
+                                rowAfterConflict[MessageTable.content] == request.content &&
+                                rowAfterConflict[MessageTable.status] == request.status &&
+                                rowAfterConflict[MessageTable.mediaUrl] == validMediaUrl
+                        ) { "Idempotency key was already used for a different message" }
+                        return@dbQuery rowAfterConflict.toMessageResponse() to false
+                    }
 
-                    MessageResponse(
+                    val created = MessageResponse(
                         id = insertedId,
                         userId = actingUserId,
                         workspaceId = request.workspaceId,
@@ -62,13 +105,16 @@ internal fun Route.messagesRoutes() {
                         replyToId = validReplyToId,
                         mediaUrl = validMediaUrl
                     )
+                    created to true
                 }
-                if (newMessage == null) {
+                if (createResult == null) {
                     call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 } else {
+                    val (newMessage, wasInserted) = createResult
                     call.respond(HttpStatusCode.Created, newMessage)
-                    broadcastChannelMessageChange(newMessage.id)
+                    if (wasInserted) broadcastChannelMessageChange(newMessage.id)
                     // ── Notification hooks ────────────────────────────────────────────
+                    if (wasInserted) {
                     val senderRow = dbQuery {
                         UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                     }
@@ -123,6 +169,7 @@ internal fun Route.messagesRoutes() {
                                 referenceId = newMessage.id
                             )
                         }
+                    }
                     }
                 }
             } catch (e: Exception) {

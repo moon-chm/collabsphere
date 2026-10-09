@@ -13,12 +13,14 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.collabsphere.app.dto.notes.NotesRequest
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.BackgroundSyncRegistry
 import com.collabsphere.app.remote.note.NoteApiService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.concurrent.TimeUnit
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
+import kotlin.coroutines.coroutineContext
 
 class NotesRepo(
     private val notesDao: NotesDao,
@@ -49,6 +51,15 @@ class NotesRepo(
     // the owning ViewModel clears — instead of running for the rest of the process's life.
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
+        val syncJob = coroutineContext[kotlinx.coroutines.Job] ?: run {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
+        val registryKey = "notes:$workspaceId"
+        if (!BackgroundSyncRegistry.register(registryKey, syncJob)) {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
         try {
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
@@ -89,6 +100,7 @@ class NotesRepo(
             delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
             activeSyncLoops.remove(workspaceId)
         }
     }
@@ -111,6 +123,10 @@ class NotesRepo(
             val localId = notesDao.createNotes(notes.copy(id = remoteNote.id))
             Result.success(localId)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
+                return@withContext Result.failure(e)
+            }
             val tempId = TempId.next()
             val fallbackId = notesDao.createNotes(notes.copy(id = tempId))
 
@@ -145,6 +161,8 @@ class NotesRepo(
             }
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = true) == SyncDecision.DROP) return@withContext false
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
                 "NOTE_ID" to noteId,
@@ -161,7 +179,6 @@ class NotesRepo(
     /** False when the server refused the edit; true when it was saved or queued for background sync. */
     suspend fun updatetheNote(notes: NotesEntity): Boolean = withContext(Dispatchers.IO) {
         try {
-            notesDao.updatenotes(notes)
             apiService.updateNote(
                 noteId = notes.id,
                 request = NotesRequest(
@@ -171,8 +188,10 @@ class NotesRepo(
                     description = notes.description
                 )
             )
+            notesDao.updatenotes(notes)
             true
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext false
             val syncData = workDataOf(
                 "ACTION_TYPE" to "UPDATE",
@@ -183,6 +202,7 @@ class NotesRepo(
                 "DESCRIPTION" to notes.description
             )
             enqueueSync(syncData)
+            notesDao.updatenotes(notes)
             true
         }
     }
@@ -209,9 +229,14 @@ class NotesRepo(
     }
 
     suspend fun setPinned(noteId: Int, pinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             apiService.setPinned(noteId, pinned)
             notesDao.updatePinned(noteId, pinned)
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

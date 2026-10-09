@@ -24,6 +24,8 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
+import com.collabsphere.app.model.BackgroundSyncRegistry
+import kotlin.coroutines.coroutineContext
 
 class WorkspaceRepo(
     private val workspaceDao: WorkspaceDao,
@@ -40,6 +42,10 @@ class WorkspaceRepo(
 
         private fun lastSyncKey(userId: Int) = longPreferencesKey("workspaces_last_sync_time_$userId")
         private fun fullWorkspaceRefreshKey(userId: Int) = longPreferencesKey("workspaces_last_full_refresh_$userId")
+        private fun workspaceMappingKey(tempId: Int) =
+            androidx.datastore.preferences.core.intPreferencesKey("temp_ws_$tempId")
+        private fun workspaceQueueKey(workspaceId: Int) =
+            androidx.datastore.preferences.core.intPreferencesKey("workspace_queue_key_$workspaceId")
     }
 
     // WorkspaceRepo is a Koin singleton shared by every WorkspaceViewModel instance — without this
@@ -53,6 +59,15 @@ class WorkspaceRepo(
 
     suspend fun startDeltaSyncLoop(userId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(userId)) return@withContext
+        val syncJob = coroutineContext[kotlinx.coroutines.Job] ?: run {
+            activeSyncLoops.remove(userId)
+            return@withContext
+        }
+        val registryKey = "workspace-user:$userId"
+        if (!BackgroundSyncRegistry.register(registryKey, syncJob)) {
+            activeSyncLoops.remove(userId)
+            return@withContext
+        }
         try {
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(30_000)
         val syncKey = lastSyncKey(userId)
@@ -102,11 +117,13 @@ class WorkspaceRepo(
                 dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
             delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
             activeSyncLoops.remove(userId)
         }
     }
@@ -153,7 +170,7 @@ class WorkspaceRepo(
     /** Resolves an offline workspace route after its queued create receives a server ID. */
     fun observeCanonicalWorkspaceId(workspaceId: Int): Flow<Int> {
         if (workspaceId >= 0) return flowOf(workspaceId)
-        val key = androidx.datastore.preferences.core.intPreferencesKey("temp_ws_$workspaceId")
+        val key = workspaceMappingKey(workspaceId)
         return dataStore.data.map { preferences -> preferences[key] ?: workspaceId }
     }
 
@@ -211,6 +228,7 @@ class WorkspaceRepo(
                 )
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
                     return@withContext Result.failure(e)
                 }
@@ -269,6 +287,7 @@ class WorkspaceRepo(
             )
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
                 return@withContext Result.failure(e)
             }
@@ -294,10 +313,45 @@ class WorkspaceRepo(
         workspaceId: Int,
         workspacePassword: String
     ): Int = withContext(Dispatchers.IO) {
-        // Delete locally only after the server confirms deletion of this exact workspace ID.
-        val deletedIds = workspaceApiService.deleteWorkspaceFromServer(workspaceId, workspacePassword)
-        deletedIds.forEach { workspaceDao.deleteWorkspaceById(it) }
-        deletedIds.size
+        val canonicalId = if (workspaceId < 0) observeCanonicalWorkspaceId(workspaceId).first() else workspaceId
+
+        // A temporary workspace already has a queued CREATE operation. Append DELETE to the same
+        // unique chain so it runs only after create has either mapped the server ID or failed.
+        if (workspaceId < 0 && canonicalId == workspaceId) {
+            enqueueWorkspaceDelete(workspaceId, workspacePassword)
+            workspaceDao.deleteWorkspaceById(workspaceId)
+            return@withContext 1
+        }
+
+        // A permanent create refusal leaves no server row; its dependent delete is a local no-op.
+        if (workspaceId < 0 && canonicalId == 0) {
+            workspaceDao.deleteWorkspaceById(workspaceId)
+            return@withContext 1
+        }
+
+        try {
+            val deletedIds = workspaceApiService.deleteWorkspaceFromServer(canonicalId, workspacePassword)
+            deletedIds.forEach { workspaceDao.deleteWorkspaceById(it) }
+            if (workspaceId < 0) workspaceDao.deleteWorkspaceById(workspaceId)
+            deletedIds.size
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = true) == SyncDecision.DROP) throw e
+            enqueueWorkspaceDelete(workspaceId.takeIf { it < 0 } ?: canonicalId, workspacePassword)
+            workspaceDao.deleteWorkspaceById(canonicalId)
+            if (workspaceId < 0) workspaceDao.deleteWorkspaceById(workspaceId)
+            1
+        }
+    }
+
+    private suspend fun enqueueWorkspaceDelete(workspaceId: Int, workspacePassword: String) {
+        enqueueSync(
+            workDataOf(
+                "ACTION_TYPE" to "DELETE",
+                "WORKSPACE_ID" to workspaceId,
+                "WORKSPACE_PASSWORD" to workspacePassword
+            )
+        )
     }
 
     suspend fun isUserMember(workspaceId: Int, email: String): Boolean = withContext(Dispatchers.IO) {
@@ -305,7 +359,7 @@ class WorkspaceRepo(
         workspaceDao.isUserMember(workspaceId, userId) > 0
     }
 
-    private fun enqueueSync(data: Data) {
+    private suspend fun enqueueSync(data: Data) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -320,8 +374,13 @@ class WorkspaceRepo(
         // can be queued for the same workspace at once) — see ChannelRepo.enqueueSync for why a
         // shared name across every workspace would let one permanently-failed sync cancel the rest.
         val workspaceId = data.getInt("WORKSPACE_ID", 0)
+        val stableQueueId = if (workspaceId < 0) {
+            workspaceId
+        } else {
+            dataStore.data.first()[workspaceQueueKey(workspaceId)] ?: workspaceId
+        }
         val email = data.getString("EMAIL")
-        val uniqueKey = if (email != null) "WORKSPACE_SYNC_${workspaceId}_$email" else "WORKSPACE_SYNC_$workspaceId"
+        val uniqueKey = if (email != null) "WORKSPACE_SYNC_${stableQueueId}_$email" else "WORKSPACE_SYNC_$stableQueueId"
 
         workManager.enqueueUniqueWork(
             uniqueKey,
@@ -333,8 +392,14 @@ class WorkspaceRepo(
     suspend fun handleRemoteWorkspaceCreation(tempId: Int, realId: Int) {
         workspaceDao.swapWorkspaceId(tempId, realId)
         dataStore.edit { preferences ->
-            preferences[androidx.datastore.preferences.core.intPreferencesKey("temp_ws_$tempId")] = realId
+            preferences[workspaceMappingKey(tempId)] = realId
+            preferences[workspaceQueueKey(realId)] = tempId
         }
+    }
+
+    suspend fun markRemoteWorkspaceCreationFailed(tempId: Int) {
+        if (tempId >= 0) return
+        dataStore.edit { preferences -> preferences[workspaceMappingKey(tempId)] = 0 }
     }
 
     suspend fun sendInvitation(workspaceId: Int, email: String): Result<com.collabsphere.app.dto.workspace.InvitationResponse> = withContext(Dispatchers.IO) {
@@ -342,6 +407,7 @@ class WorkspaceRepo(
             val response = workspaceApiService.sendInvitation(workspaceId, com.collabsphere.app.dto.workspace.SendInvitationRequest(email.trim().lowercase()))
             Result.success(response)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("WorkspaceRepo", "Failed to send invitation", e)
             Result.failure(e)
         }
@@ -352,6 +418,7 @@ class WorkspaceRepo(
             val list = workspaceApiService.getPendingInvitations()
             Result.success(list)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("WorkspaceRepo", "Failed to get pending invitations", e)
             Result.failure(e)
         }
@@ -375,6 +442,7 @@ class WorkspaceRepo(
             syncWorkspaceMembers(member.workspaceId)
             Result.success(member)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("WorkspaceRepo", "Failed to accept invitation", e)
             Result.failure(e)
         }
@@ -385,6 +453,7 @@ class WorkspaceRepo(
             val ok = workspaceApiService.declineInvitation(invitationId)
             Result.success(ok)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("WorkspaceRepo", "Failed to decline invitation", e)
             Result.failure(e)
         }
@@ -408,6 +477,7 @@ class WorkspaceRepo(
             syncWorkspaceMembers(member.workspaceId)
             Result.success(member)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("WorkspaceRepo", "Failed to join workspace by code", e)
             Result.failure(e)
         }

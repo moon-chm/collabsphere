@@ -61,6 +61,7 @@ class DmRepo(
             page.forEach { saveIncomingDm(it, currentUserId) }
             Result.success(page.size >= DM_HISTORY_PAGE_SIZE)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Loading older DMs failed", e)
             Result.failure(e)
         }
@@ -105,6 +106,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Operation failed", e)
             enqueueSync(temporaryLocalEntity.toSendWorkData())
         }
@@ -142,6 +144,7 @@ class DmRepo(
             )
             RetryOutcome.SENT
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Manual retry failed", e)
             enqueueSync(dm.toSendWorkData())
             RetryOutcome.STILL_OFFLINE
@@ -193,6 +196,7 @@ class DmRepo(
         try {
             apiService.sendDm(payload)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Reaction send failed", e)
         }
     }
@@ -352,6 +356,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Operation failed", e)
         }
     }
@@ -373,6 +378,7 @@ class DmRepo(
         try {
             apiService.sendDm(socketMessage)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e("DmRepo", "Operation failed", e)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE_MESSAGE",

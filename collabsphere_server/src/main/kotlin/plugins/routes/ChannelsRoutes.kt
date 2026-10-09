@@ -15,6 +15,14 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("ChannelsRoutes")
 
+private fun ResultRow.toChannelResponse() = ChannelResponse(
+    id = this[ChannelsTable.id],
+    userId = this[ChannelsTable.userId],
+    channelName = this[ChannelsTable.channelName],
+    workspaceId = this[ChannelsTable.workspaceId],
+    description = this[ChannelsTable.description]
+)
+
 /**
  * Channels feature routes — extracted from Routing.kt.
  * Mounted inside `authenticate("auth-jwt")` in configureRouting().
@@ -28,31 +36,58 @@ internal fun Route.channelsRoutes() {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<ChannelRequest>()
 
-                val response = dbQuery {
+                val createResult = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) {
                         return@dbQuery null
                     }
-                    val insertedId = ChannelsTable.insert {
+                    val prior = request.idempotencyKey?.let { key ->
+                        ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq key }.singleOrNull()
+                    }
+                    if (prior != null) {
+                        require(
+                            prior[ChannelsTable.userId] == actingUserId &&
+                                prior[ChannelsTable.workspaceId] == request.workspaceId &&
+                                prior[ChannelsTable.channelName] == request.channelName &&
+                                prior[ChannelsTable.description] == request.description
+                        ) { "Idempotency key was already used for a different channel" }
+                        return@dbQuery prior.toChannelResponse() to false
+                    }
+                    val insertResult = ChannelsTable.insertIgnore {
                         it[ChannelsTable.userId] = actingUserId
                         it[ChannelsTable.channelName] = request.channelName
                         it[ChannelsTable.workspaceId] = request.workspaceId
                         it[ChannelsTable.description] = request.description
+                        it[ChannelsTable.idempotencyKey] = request.idempotencyKey
                         it[ChannelsTable.updatedAt] = System.currentTimeMillis()
                         it[ChannelsTable.isDeleted] = false
-                    }[ChannelsTable.id]
+                    }
+                    val insertedId = insertResult.resultedValues?.singleOrNull()?.get(ChannelsTable.id)
+                    if (insertedId == null) {
+                        val afterConflict = request.idempotencyKey?.let { key ->
+                            ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq key }.singleOrNull()
+                        } ?: error("Channel insert conflicted without an idempotency row")
+                        require(
+                            afterConflict[ChannelsTable.userId] == actingUserId &&
+                                afterConflict[ChannelsTable.workspaceId] == request.workspaceId &&
+                                afterConflict[ChannelsTable.channelName] == request.channelName &&
+                                afterConflict[ChannelsTable.description] == request.description
+                        ) { "Idempotency key was already used for a different channel" }
+                        return@dbQuery afterConflict.toChannelResponse() to false
+                    }
 
-                    ChannelResponse(
+                    val created = ChannelResponse(
                         id = insertedId,
                         userId = actingUserId,
                         channelName = request.channelName,
                         workspaceId = request.workspaceId,
                         description = request.description
                     )
+                    created to true
                 }
-                if (response == null) {
+                if (createResult == null) {
                     call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 } else {
-                    call.respond(HttpStatusCode.Created, response)
+                    call.respond(HttpStatusCode.Created, createResult.first)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

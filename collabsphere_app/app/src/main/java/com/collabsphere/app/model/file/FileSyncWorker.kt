@@ -27,9 +27,9 @@ class FileSyncWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val actionType = inputData.getString("ACTION_TYPE") ?: "UPLOAD"
-        val fileId = inputData.getLong("FILE_ID", -1L)
+        val fileId = inputData.getLong("FILE_ID", 0L)
 
-        if (fileId == -1L) {
+        if (fileId == 0L) {
             return@withContext Result.failure()
         }
 
@@ -71,7 +71,9 @@ class FileSyncWorker(
                 workspaceId = workspaceId,
                 userName = userName,
                 localPath = localPath,
-                fileToUpload = physicalFile
+                fileToUpload = physicalFile,
+                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
+                    ?: "file-local-$userId-$fileId"
             )
 
             fileDao.deleteFileById(fileId)
@@ -96,6 +98,7 @@ class FileSyncWorker(
 
             return@withContext Result.success()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("FileSyncWorker", "Operation failed", e)
             return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }

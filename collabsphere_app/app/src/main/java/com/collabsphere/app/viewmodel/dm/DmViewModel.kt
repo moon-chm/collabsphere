@@ -54,6 +54,8 @@ class DmViewModel(
     // ── Media upload progress ─────────────────────────────────────────────────────
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia: StateFlow<Boolean> = _isUploadingMedia.asStateFlow()
+    private val _isSendingMessage = MutableStateFlow(false)
+    val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
 
     private val _isLoadingOlder = MutableStateFlow(false)
     val isLoadingOlder: StateFlow<Boolean> = _isLoadingOlder.asStateFlow()
@@ -313,12 +315,18 @@ class DmViewModel(
     }
 
     fun sendMessage(id: Int, workspaceId: Int, senderId: Int, receiverId: Int, content: String, replyToId: Int? = null) {
+        if (_isSendingMessage.value || _isUploadingMedia.value || content.isBlank()) return
+        _isSendingMessage.value = true
         onUserStoppedTyping(workspaceId, receiverId)
         viewModelScope.launch {
             try {
                 repo.sendRealtimeDm(id, workspaceId, senderId, receiverId, content, replyToId = replyToId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("DmViewModel", "Operation failed", e)
+            } finally {
+                _isSendingMessage.value = false
             }
         }
     }
@@ -338,10 +346,13 @@ class DmViewModel(
         mimeType: String,
         fileName: String
     ) {
+        if (_isUploadingMedia.value || _isSendingMessage.value) return
+        _isUploadingMedia.value = true
         viewModelScope.launch {
-            _isUploadingMedia.value = true
             try {
                 repo.sendMediaDm(baseUrl, workspaceId, senderId, receiverId, fileBytes, mimeType, fileName)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("DmViewModel", "Media send failed", e)
             } finally {

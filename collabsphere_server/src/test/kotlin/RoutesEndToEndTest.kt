@@ -1,4 +1,6 @@
 import com.collabsphere.model.UsersTable
+import com.collabsphere.model.ChannelsTable
+import com.collabsphere.model.MessageTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.WorkspacesTable
 import com.collabsphere.model.NotificationsTable
@@ -142,6 +144,88 @@ class RoutesEndToEndTest {
     }
 
     @Test
+    fun `message create retry with same idempotency key returns one durable message`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val workspaceId = workspaceWith(me)
+        val channelId = transaction {
+            ChannelsTable.insert {
+                it[userId] = me
+                it[channelName] = "idempotency-${UUID.randomUUID()}"
+                it[ChannelsTable.workspaceId] = workspaceId
+                it[description] = ""
+            }[ChannelsTable.id]
+        }
+        val idempotencyKey = UUID.randomUUID().toString()
+        fun request(content: String) = """{"id":0,"userId":$me,"workspaceId":$workspaceId,"channelId":$channelId,"userName":"e2e","content":"$content","status":"Delivered","idempotencyKey":"$idempotencyKey"}"""
+
+        val first = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("hello"))
+        }
+        val retry = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("hello"))
+        }
+        val conflictingReplay = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("different body"))
+        }
+
+        assertEquals(HttpStatusCode.Created, first.status)
+        assertEquals(HttpStatusCode.Created, retry.status)
+        assertEquals(
+            json.decodeFromString<dto.MessageResponse>(first.bodyAsText()).id,
+            json.decodeFromString<dto.MessageResponse>(retry.bodyAsText()).id
+        )
+        assertEquals(HttpStatusCode.BadRequest, conflictingReplay.status)
+        assertEquals(
+            1,
+            transaction { MessageTable.selectAll().where { MessageTable.idempotencyKey eq idempotencyKey }.count() }
+        )
+    }
+
+    @Test
+    fun `channel create retry with same idempotency key returns one durable channel`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val workspaceId = workspaceWith(me)
+        val idempotencyKey = UUID.randomUUID().toString()
+        fun request(name: String) = """{"id":0,"userId":$me,"channelName":"$name","workspaceId":$workspaceId,"description":"edge test","idempotencyKey":"$idempotencyKey"}"""
+
+        val first = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("updates"))
+        }
+        val retry = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("updates"))
+        }
+        val conflictingReplay = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(request("announcements"))
+        }
+
+        assertEquals(HttpStatusCode.Created, first.status)
+        assertEquals(HttpStatusCode.Created, retry.status)
+        assertEquals(
+            json.parseToJsonElement(first.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content,
+            json.parseToJsonElement(retry.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
+        )
+        assertEquals(HttpStatusCode.BadRequest, conflictingReplay.status)
+        assertEquals(
+            1,
+            transaction { ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq idempotencyKey }.count() }
+        )
+    }
+
+    @Test
     fun `workspace creation retry with same request id returns the original workspace`() = testApplication {
         application { module() }
         val (me, token) = client.signUp()
@@ -205,17 +289,28 @@ class RoutesEndToEndTest {
         val (_, outsiderToken) = client.signUp()
         val ws = workspaceWith(me)
         val content = "hello, streamed upload".toByteArray()
+        val idempotencyKey = UUID.randomUUID().toString()
 
-        val upload = client.submitFormWithBinaryData("/api/file", formData {
+        suspend fun upload(bytes: ByteArray) = client.submitFormWithBinaryData("/api/file", formData {
             append("workspaceId", ws.toString())
             append("userName", "e2e")
-            append("file", content, Headers.build {
+            append("idempotencyKey", idempotencyKey)
+            append("file", bytes, Headers.build {
                 append(HttpHeaders.ContentDisposition, "filename=\"notes v2.txt\"")
                 append(HttpHeaders.ContentType, "text/plain")
             })
         }) { bearerAuth(token) }
-        assertEquals(HttpStatusCode.Created, upload.status, upload.bodyAsText())
-        val url = json.parseToJsonElement(upload.bodyAsText()).jsonObject["url"]!!.jsonPrimitive.content
+
+        val upload = upload(content)
+        val uploadBody = upload.bodyAsText()
+        assertEquals(HttpStatusCode.Created, upload.status, uploadBody)
+        val uploadId = json.parseToJsonElement(uploadBody).jsonObject["id"]!!.jsonPrimitive.content
+        val replay = upload(content)
+        val replayBody = replay.bodyAsText()
+        assertEquals(HttpStatusCode.Created, replay.status, replayBody)
+        assertEquals(uploadId, json.parseToJsonElement(replayBody).jsonObject["id"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.Conflict, upload("different content".toByteArray()).status)
+        val url = json.parseToJsonElement(uploadBody).jsonObject["url"]!!.jsonPrimitive.content
         val key = url.substringAfter("/api/file/download/")
         assertTrue(key.endsWith("_notes v2.txt"))
 

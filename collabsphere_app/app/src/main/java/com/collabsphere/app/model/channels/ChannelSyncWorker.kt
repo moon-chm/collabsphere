@@ -51,11 +51,13 @@ class ChannelSyncWorker(
                 userId = if (userId == -1) null else userId,
                 channelName = channelName,
                 workspaceId = workspaceId,
-                description = description
+                description = description,
+                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
+                    ?: "channel-local-${inputData.getInt("CHANNEL_ID", 0)}-${userId}-$workspaceId-${channelName.hashCode()}"
             )
             val remoteResponse = apiService.createChannel(request)
-            val tempChannelId = inputData.getInt("CHANNEL_ID", -1)
-            if (tempChannelId != -1) {
+            val tempChannelId = inputData.getInt("CHANNEL_ID", 0)
+            if (tempChannelId != 0) {
                 val localChannelId = channelDao.getChannelIdByName(channelName, workspaceId)
                 if (localChannelId != null && localChannelId != remoteResponse.id) {
                     channelDao.swapChannelId(localChannelId, remoteResponse.id)
@@ -67,6 +69,7 @@ class ChannelSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("ChannelSyncWorker", "Operation failed", e)
             return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }

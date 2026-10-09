@@ -6,6 +6,7 @@ import io.ktor.server.request.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import javax.imageio.ImageIO
 
 internal class UploadTooLargeException(limitBytes: Long) :
     Exception("File exceeds the ${limitBytes / (1024 * 1024)}MB upload limit")
@@ -50,3 +51,21 @@ internal suspend fun PartData.FileItem.stageToTempFile(maxBytes: Long): File = w
         throw e
     }
 }
+
+/** Reject non-images and unreasonable pixel dimensions before sending an avatar to storage. */
+internal fun isValidAvatarImage(file: File): Boolean = runCatching {
+    val imageInput = ImageIO.createImageInputStream(file) ?: return@runCatching false
+    imageInput.use { input ->
+        val readers = ImageIO.getImageReaders(input)
+        if (!readers.hasNext()) return@runCatching false
+        val reader = readers.next()
+        try {
+            reader.input = input
+            val width = reader.getWidth(0)
+            val height = reader.getHeight(0)
+            width > 0 && height > 0 && width <= 10_000 && height <= 10_000 && width.toLong() * height <= 50_000_000L
+        } finally {
+            reader.dispose()
+        }
+    }
+}.getOrDefault(false)

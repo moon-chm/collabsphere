@@ -124,6 +124,12 @@ class TaskViewModel(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing = _isSyncing.asStateFlow()
 
+    private val _isCreatingTask = MutableStateFlow(false)
+    val isCreatingTask = _isCreatingTask.asStateFlow()
+
+    private val _deletingTaskIds = MutableStateFlow<Set<Int>>(emptySet())
+    val deletingTaskIds = _deletingTaskIds.asStateFlow()
+
     init {
         viewModelScope.launch {
             repo.startDeltaSyncLoop(loggedWorkspaceId)
@@ -170,34 +176,47 @@ class TaskViewModel(
         _labels.value = labels
     }
 
-    fun onCreateTask() {
+    fun onCreateTask(onCreated: (() -> Unit)? = null) {
+        if (_isCreatingTask.value) return
         val name = _taskName.value.trim()
         val desc = _taskDescription.value.trim()
 
         if (name.isEmpty()) return
 
+        _isCreatingTask.value = true
         viewModelScope.launch {
-            val task = TaskEntity(
-                id = 0,
-                createdByUserId = loggedUserId,
-                assignedToUserId = _assignedUserId.value,
-                workspaceId = loggedWorkspaceId,
-                taskName = name,
-                taskDescription = desc,
-                status = TaskStatus.TO_DO,
-                dueDate = _dueDate.value,
-                priority = _priority.value,
-                labels = _labels.value
-            )
-            withContext(Dispatchers.IO) {
-                repo.addTask(task)
+            try {
+                val task = TaskEntity(
+                    id = 0,
+                    createdByUserId = loggedUserId,
+                    assignedToUserId = _assignedUserId.value,
+                    workspaceId = loggedWorkspaceId,
+                    taskName = name,
+                    taskDescription = desc,
+                    status = TaskStatus.TO_DO,
+                    dueDate = _dueDate.value,
+                    priority = _priority.value,
+                    labels = _labels.value
+                )
+                val result = withContext(Dispatchers.IO) { repo.addTask(task) }
+                result.onSuccess {
+                    _taskName.value = ""
+                    _taskDescription.value = ""
+                    _assignedUserId.value = null
+                    _dueDate.value = null
+                    _priority.value = TaskPriority.MEDIUM
+                    _labels.value = emptyList()
+                    onCreated?.invoke()
+                }.onFailure {
+                    sendUiEvent(it.localizedMessage ?: "Failed to create task")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sendUiEvent(e.localizedMessage ?: "Failed to create task")
+            } finally {
+                _isCreatingTask.value = false
             }
-            _taskName.value = ""
-            _taskDescription.value = ""
-            _assignedUserId.value = null
-            _dueDate.value = null
-            _priority.value = TaskPriority.MEDIUM
-            _labels.value = emptyList()
         }
     }
 
@@ -238,14 +257,22 @@ class TaskViewModel(
     }
 
     fun onDeleteTask(taskId: Int) {
+        if (taskId in _deletingTaskIds.value) return
+        _deletingTaskIds.value = _deletingTaskIds.value + taskId
         viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                repo.deleteTask(taskId)
-            }
-            if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
-                sendUiEvent("Deleted offline — will sync when you're back online.")
-            } else if (outcome.isFailure) {
-                sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
+            try {
+                val outcome = withContext(Dispatchers.IO) { repo.deleteTask(taskId) }
+                if (outcome.getOrNull() == TaskSyncOutcome.QUEUED) {
+                    sendUiEvent("Deleted offline — will sync when you're back online.")
+                } else if (outcome.isFailure) {
+                    sendUiEvent(SyncPolicy.REFUSED_MESSAGE)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sendUiEvent(e.localizedMessage ?: "Failed to delete task")
+            } finally {
+                _deletingTaskIds.value = _deletingTaskIds.value - taskId
             }
         }
     }

@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.work.*
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.BackgroundSyncRegistry
 import com.collabsphere.app.remote.file.FileApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,6 +22,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
 
@@ -56,13 +58,15 @@ class FileRepo(
             return@withContext -1L
         }
 
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
             val serverResponse = fileApiService.uploadFile(
                 userId = local_files.userId,
                 workspaceId = local_files.workspaceId,
                 userName = local_files.userName,
                 localPath = path,
-                fileToUpload = physicalFile
+                fileToUpload = physicalFile,
+                idempotencyKey = idempotencyKey
             )
 
             val updatedEntity = local_files.copy(
@@ -74,6 +78,7 @@ class FileRepo(
             fileDoa.insertFile(updatedEntity)
             serverResponse.id
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             System.err.println("Network Upload Pipeline Mismatch Failure Exception:")
             Log.e("FileRepo", "Operation failed", e)
 
@@ -90,7 +95,8 @@ class FileRepo(
                 "LOCAL_PATH" to path,
                 "FILE_NAME" to local_files.fileName,
                 "MIME_TYPE" to local_files.mimeType,
-                "SIZE_BYTES" to local_files.sizebytes
+                "SIZE_BYTES" to local_files.sizebytes,
+                "IDEMPOTENCY_KEY" to idempotencyKey
             )
             enqueueSync(syncData)
             allocatedLocalId
@@ -115,6 +121,11 @@ class FileRepo(
                 SyncDecision.DROP -> Log.w("FileRepo", "Server refused delete for file $fileId (HTTP ${status.value})")
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (SyncPolicy.forFailure(e, isDelete = true) == SyncDecision.DROP) {
+                Log.w("FileRepo", "Permanent refusal; keeping file $fileId visible", e)
+                return@withContext
+            }
             System.err.println("Network Delete Exception encountered, deferring execution to background sync:")
             Log.e("FileRepo", "Operation failed", e)
 
@@ -130,6 +141,15 @@ class FileRepo(
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
+        val syncJob = coroutineContext[kotlinx.coroutines.Job] ?: run {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
+        val registryKey = "files:$workspaceId"
+        if (!BackgroundSyncRegistry.register(registryKey, syncJob)) {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
         try {
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
@@ -173,6 +193,7 @@ class FileRepo(
             delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
             activeSyncLoops.remove(workspaceId)
         }
     }

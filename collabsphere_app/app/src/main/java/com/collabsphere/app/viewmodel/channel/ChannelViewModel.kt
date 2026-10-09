@@ -41,6 +41,11 @@ class ChannelViewModel(
     private val _channelStatus = MutableStateFlow<String?>(null)
     val channelStatus = _channelStatus.asStateFlow()
 
+    private val _isCreatingChannel = MutableStateFlow(false)
+    val isCreatingChannel = _isCreatingChannel.asStateFlow()
+    private val _deletingChannelKeys = MutableStateFlow<Set<String>>(emptySet())
+    val deletingChannelKeys = _deletingChannelKeys.asStateFlow()
+
     fun onChannelNamechange(name: String) {
         _channelName.value = name
     }
@@ -54,6 +59,7 @@ class ChannelViewModel(
     }
 
     fun onCreateChannel() {
+        if (_isCreatingChannel.value) return
         val name = _channelName.value.trim()
         val desc = _description.value.trim()
 
@@ -62,43 +68,63 @@ class ChannelViewModel(
             return
         }
 
+        _isCreatingChannel.value = true
         viewModelScope.launch {
-            val fallbackEntity = ChannelEntity(
-                userId = loggeduserID,
-                workspaceId = loggedWorkspaceId,
-                channelName = name,
-                description = desc
-            )
+            try {
+                val fallbackEntity = ChannelEntity(
+                    userId = loggeduserID,
+                    workspaceId = loggedWorkspaceId,
+                    channelName = name,
+                    description = desc
+                )
 
-            val result = repo.addchanneltoscreen(
-                workspaceId = loggedWorkspaceId,
-                channelName = name,
-                userId = loggeduserID,
-                description = desc,
-                fallbackEntity = fallbackEntity
-            )
+                val result = repo.addchanneltoscreen(
+                    workspaceId = loggedWorkspaceId,
+                    channelName = name,
+                    userId = loggeduserID,
+                    description = desc,
+                    fallbackEntity = fallbackEntity
+                )
 
-            if (result.isSuccess) {
-                _channelStatus.value = "Channel #$name created successfully"
-                _channelName.value = ""
-                _description.value = ""
-            } else {
-                _channelStatus.value = "Failed to create channel"
+                if (result.isSuccess) {
+                    _channelStatus.value = "Channel #$name created successfully"
+                    _channelName.value = ""
+                    _description.value = ""
+                } else {
+                    _channelStatus.value = result.exceptionOrNull()?.localizedMessage ?: "Failed to create channel"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _channelStatus.value = e.localizedMessage ?: "Failed to create channel"
+            } finally {
+                _isCreatingChannel.value = false
             }
         }
     }
 
     fun onDeleteChannel(channel: ChannelEntity) {
+        val key = "${channel.workspaceId}:${channel.channelName.lowercase()}:${channel.userId}"
+        if (key in _deletingChannelKeys.value) return
+        _deletingChannelKeys.value = _deletingChannelKeys.value + key
         viewModelScope.launch {
-            val result = repo.deletechanneltoscreen(
-                channelName = channel.channelName,
-                workspaceId = loggedWorkspaceId,
-                userId = channel.userId
-            )
-            _channelStatus.value = when (result) {
-                ChannelDeleteResult.DELETED -> "Channel #${channel.channelName} deleted"
-                ChannelDeleteResult.FORBIDDEN -> "Only workspace admins or the channel's creator can delete #${channel.channelName}"
-                ChannelDeleteResult.FAILED -> "Failed to delete channel"
+            try {
+                val result = repo.deletechanneltoscreen(
+                    channelName = channel.channelName,
+                    workspaceId = loggedWorkspaceId,
+                    userId = channel.userId
+                )
+                _channelStatus.value = when (result) {
+                    ChannelDeleteResult.DELETED -> "Channel #${channel.channelName} deleted"
+                    ChannelDeleteResult.FORBIDDEN -> "Only workspace admins or the channel's creator can delete #${channel.channelName}"
+                    ChannelDeleteResult.FAILED -> "Failed to delete channel"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _channelStatus.value = e.localizedMessage ?: "Failed to delete channel"
+            } finally {
+                _deletingChannelKeys.value = _deletingChannelKeys.value - key
             }
         }
     }

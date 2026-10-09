@@ -70,11 +70,11 @@ fun LoginScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val loginStatus by viewModel.loginStatus.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoadingLogin.collectAsStateWithLifecycle()
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
     var lastClickTime by remember { mutableStateOf(0L) }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
 
@@ -84,7 +84,6 @@ fun LoginScreen(
 
     LaunchedEffect(loginStatus) {
         loginStatus?.let {
-            isLoading = false
             AppToast.show(it)
             viewModel.clearLoginStatus()
         }
@@ -97,6 +96,7 @@ fun LoginScreen(
     val verificationStatus by viewModel.verificationStatus.collectAsStateWithLifecycle()
     val isVerificationSuccess by viewModel.isVerificationSuccess.collectAsStateWithLifecycle()
     val isLoadingEmail by viewModel.isLoadingEmail.collectAsStateWithLifecycle()
+    val isVerifyingRegistration by viewModel.isVerifyingRegistration.collectAsStateWithLifecycle()
 
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var showVerifyEmailDialog by remember { mutableStateOf(false) }
@@ -141,7 +141,6 @@ fun LoginScreen(
         val currentTime = System.currentTimeMillis()
         if (isFormValid && currentTime - lastClickTime > 500L) {
             lastClickTime = currentTime
-            isLoading = true
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
         } else if (!isFormValid) {
@@ -347,7 +346,7 @@ fun LoginScreen(
             ForgotPasswordDialog(
                 initialEmail = email,
                 step = forgotPasswordStep,
-                isLoading = isLoadingEmail,
+                isLoading = isLoadingEmail || isVerifyingRegistration,
                 onDismiss = {
                     showForgotPasswordDialog = false
                     viewModel.clearForgotPasswordState()
@@ -488,7 +487,7 @@ fun ForgotPasswordDialog(
                         isLoading = isLoading,
                         enabled = !isLoading,
                         accentColor = CoralStart,
-                        onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword.trim(), confirmPassword.trim()) }
+                        onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword, confirmPassword) }
                     )
                 }
 

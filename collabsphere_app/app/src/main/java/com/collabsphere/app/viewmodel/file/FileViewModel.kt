@@ -39,13 +39,17 @@ class FileViewModel(
     private val _uploadingStatus = MutableStateFlow<Boolean>(false)
     val uploadingStatus = _uploadingStatus.asStateFlow()
 
+    private val _deletingFileIds = MutableStateFlow<Set<Long>>(emptySet())
+    val deletingFileIds = _deletingFileIds.asStateFlow()
+
     fun uploadPhysicalFile(selectedFile: File, customMimeType: String? = null) {
         if (!selectedFile.exists() || selectedFile.length() == 0L) return
+        if (_uploadingStatus.value) return
 
+        // Set synchronously so rapid picker callbacks cannot enqueue two uploads before launch runs.
+        _uploadingStatus.value = true
         viewModelScope.launch {
             try {
-                _uploadingStatus.value = true
-
                 val tentativeEntity = FileEntity(
                     id = 0L,
                     userId = loggedUserId,
@@ -60,6 +64,8 @@ class FileViewModel(
                 )
 
                 repo.uploadfilestoscreen(tentativeEntity)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("FileViewModel", "Operation failed", e)
             } finally {
@@ -92,8 +98,18 @@ class FileViewModel(
     }
 
     fun deleteFile(fileId: Long) {
+        if (fileId in _deletingFileIds.value) return
+        _deletingFileIds.value = _deletingFileIds.value + fileId
         viewModelScope.launch {
-            repo.deletefiles(fileId)
+            try {
+                repo.deletefiles(fileId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("FileViewModel", "Delete failed", e)
+            } finally {
+                _deletingFileIds.value = _deletingFileIds.value - fileId
+            }
         }
     }
 }

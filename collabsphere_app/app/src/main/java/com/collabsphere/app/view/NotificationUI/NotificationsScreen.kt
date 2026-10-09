@@ -44,7 +44,8 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     onNotificationClick: (NotificationResponse) -> Unit,
     onAcceptInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
-    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null
+    onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
+    pendingInvitationIds: Set<Int> = emptySet()
 ) {
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -156,6 +157,7 @@ fun NotificationsScreen(
                                 onDelete = { viewModel.onDelete(notification.id) },
                                 onAcceptInvitation = onAcceptInvitation,
                                 onDeclineInvitation = onDeclineInvitation,
+                                isInvitationActionPending = notification.referenceId in pendingInvitationIds,
                                 unfurlViewModel = unfurlViewModel,
                                 githubPreviews = githubPreviews,
                                 githubActionStates = githubActionStates,
@@ -184,6 +186,7 @@ private fun NotificationRow(
     onDelete: () -> Unit,
     onAcceptInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
     onDeclineInvitation: ((invitationId: Int, notificationId: Int) -> Unit)? = null,
+    isInvitationActionPending: Boolean = false,
     unfurlViewModel: GitHubUnfurlViewModel? = null,
     githubPreviews: Map<String, com.collabsphere.app.viewmodel.GitHubPreviewItem>? = null,
     githubActionStates: Map<String, com.collabsphere.app.viewmodel.GitHubActionClientState>? = null,
@@ -247,14 +250,14 @@ private fun NotificationRow(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(MintGreen)
-                                .clickable {
+                                .clickable(enabled = !isInvitationActionPending) {
                                     onAcceptInvitation?.invoke(notification.referenceId, notification.id)
                                 }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Accept",
+                                text = if (isInvitationActionPending) "Working…" else "Accept",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
@@ -264,14 +267,14 @@ private fun NotificationRow(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Surface)
-                                .clickable {
+                                .clickable(enabled = !isInvitationActionPending) {
                                     onDeclineInvitation?.invoke(notification.referenceId, notification.id)
                                 }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Decline",
+                                text = if (isInvitationActionPending) "Working…" else "Decline",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = Muted
                             )

@@ -18,7 +18,7 @@ This plan is additive to [MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_P
 ## Current verification constraints
 
 - Existing tests cover selected login validation, sync cursor/paging rules, workspace ID mapping, retry policies, workspace roles, DM rules/history, upload limits/access, and reminder outbox behavior.
-- Recent workspace create idempotency and UI changes are local and unverified. The Android and server Gradle wrapper currently cannot start because the shared Gradle lock file returns “Access is denied.”
+- The server test suite has passed locally (`BUILD SUCCESSFUL in 24s`). Android verification is still blocked in this environment because the Gradle wrapper cannot access the shared wrapper lock file; the user has separately launched an Android run, whose result is pending.
 - Emulator and two-instance Redis checks require CI or dedicated fixtures. Do not mark these gates complete based only on compilation.
 
 ## Phase 0 — Make the test baseline runnable and safe
@@ -45,7 +45,8 @@ This plan is additive to [MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_P
 - [x] Added a shared `ExternalProviderPolicy` and unit cases for the test-disable switch.
 - [x] Gated GitHub digest scheduling in tests; email, FCM, webhook, and reminder code also reads the shared policy.
 - [x] Documented server and Android commands and isolated PostgreSQL requirements.
-- [ ] Run server unit tests, Android unit tests, and CI integration/emulator jobs. Local Gradle currently stops before configuration because it cannot access the shared wrapper lock at `%USERPROFILE%\\.gradle\\wrapper\\dists\\gradle-9.4.1-bin\\...zip.lck`; hosted CI execution is still required.
+- [x] Server test suite passed (`BUILD SUCCESSFUL in 24s`, reported by the user).
+- [ ] Android unit tests and CI integration/emulator jobs. Local Gradle stops before configuration because it cannot access the shared wrapper lock at `%USERPROFILE%\\.gradle\\wrapper\\dists\\gradle-9.4.1-bin\\...zip.lck`; the Android result from the user's background run is pending.
 
 ## Phase 1 — Cross-cutting action safety, retries, and lifecycle
 
@@ -72,6 +73,39 @@ This plan is additive to [MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_P
 - Queued work belongs to its original user and resolves dependencies in order.
 - Pending UI state always clears on success, refusal, exception, or cancellation.
 
+**Execution status (2026-10-10)**
+
+- [x] Workspace create double-submit guard is claimed synchronously before launching the request coroutine.
+- [x] Workspace delete double-submit guard is claimed synchronously before launching the request coroutine.
+- [x] Invitation send rejects duplicate in-flight calls and always clears loading state, including unexpected exceptions.
+- [x] File upload now rejects duplicate in-flight calls; the uploading state is set before launching its request.
+- [x] DM media sending now rejects duplicate in-flight submissions; file and DM upload handlers preserve coroutine cancellation while clearing loading state.
+- [x] Channel and DM text sends now reject rapid duplicate submissions, are mutually exclusive with media sends, and expose loading state to disable the composer action while pending. Added a rapid-repeat DM send regression case. Channel media loading also recovers in `finally` if its send is cancelled.
+- [x] Profile avatar upload/removal now share an in-flight guard, preventing overlap and keeping loading cleanup exception-safe.
+- [x] Join-by-code now rejects repeat in-flight submissions and clears its pending state after failures or cancellation.
+- [x] Invitation accept and decline share a per-invitation guard; both buttons are disabled with progress feedback while either action runs.
+- [x] Task creation guards repeated submits, keeps its dialog open while pending, and only clears form state after a successful or queued save.
+- [x] Account deletion guards repeated confirmation and clears pending UI state on all outcomes.
+- [x] Task create/delete now prevent duplicate in-flight writes; create waits for a saved/queued result before closing the form.
+- [x] Permanent task/file delete refusals preserve local records instead of hiding them and enqueuing doomed retries; transient failures still use the offline queue.
+- [x] Channel/note create and delete flows guard duplicate operations, preserve permanent refusals, and keep temporary negative IDs as valid offline success values.
+- [x] Added ViewModel regression cases for rapid repeated create, delete, invitation, file upload, DM media send, avatar, join-by-code, and invitation decision actions while requests are pending.
+- [x] Ambiguous workspace, task, and note creates reuse stable client request IDs across retries; server route coverage verifies workspace replay idempotency.
+- [x] Message and channel creates now carry stable idempotency keys through offline retries; server stores unique nullable keys for compatibility with old clients, returns the existing row for a matching replay, and rejects key reuse with different content. Added route/repository regression cases.
+- [x] File uploads carry a stable operation key through WorkManager retries. The server fingerprints staged content, reuses an existing matching file row, rejects a reused key with different metadata/content, and deletes any competing storage object after a concurrent insert loses. Added client queue and server route regression cases.
+- [x] Replaced negative temporary-ID `-1` sentinels with zero/missing sentinels in file, note, message, and channel workers so the valid `-1` temporary-ID boundary is processed normally.
+- [x] Workspace sync worker resolves temporary IDs before queued add-member/delete actions and retries if the create-to-canonical mapping is not yet available; the `-1` temporary-ID boundary is no longer mistaken for a missing-ID sentinel.
+- [x] Deleting an unmapped offline workspace now appends DELETE after its CREATE operation and removes the local placeholder; worker resolves the canonical ID, and a permanent create refusal makes the dependent delete a no-op.
+- [x] Workspace queue keys now remain stable after temp-ID mapping, so actions created with the canonical ID still append behind the original workspace chain.
+- [x] Logout waits for WorkManager cancellation and cancels/joins registered delta-sync pollers before clearing Room and session preferences.
+- [x] Added regression coverage for task/account-delete duplicates and logout/poller shutdown ordering.
+- [x] Added policy tests for permanent task/file mutation refusals and file-delete duplicate requests.
+- [x] Added regression cases for duplicate channel/note creates and offline negative note IDs.
+- [x] Permanent note-update refusals now leave the cached Room row unchanged; retryable update failures still update locally and queue sync. Added a regression test for the refusal case.
+- [x] Message, DM, note, file, channel, workspace, and their WorkManager workers now propagate coroutine cancellation instead of converting logout/screen cancellation into retries or fallback writes.
+- [ ] Run the offline-ordering regression tests and verify queued delete recovery in the final test pass.
+- [ ] Run Android unit/Compose regressions and complete account-boundary, process-recreation, and multi-instance checks in the final verification pass. Local wrapper launch still fails on the shared Gradle lock; user-reported Android run is pending.
+
 ## Phase 2 — Authentication, profile, and account security
 
 **Why after Phase 1:** Session ownership and cleanup are prerequisites for safely testing account actions.
@@ -87,6 +121,28 @@ This plan is additive to [MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_P
 **Where:** `SecurityRoutesTest.kt` and authenticated route tests; Login/Profile/SessionManager ViewModel tests; focused Compose tests for validation, pending, error, and logout navigation.
 
 **Acceptance:** authorization uses the authenticated principal, one-time tokens cannot be reused, and no old-account state survives logout or account switch.
+
+**Execution status (2026-10-10)**
+
+- [x] Fixed password reset so it verifies a live stored OTP before changing credentials, counts and burns repeated wrong guesses, enforces the shared password policy, consumes the OTP in the same transaction as the password update, and increments the JWT token version.
+- [x] Reset request responses no longer echo the submitted email, and code issuance uses the shared secure OTP generator and cooldown policy.
+- [x] Registration now applies the shared email, username, and password boundary rules; registration, resend, and email-verification issuance use cryptographically secure OTP generation.
+- [x] Registration verification and authenticated email verification now expire and burn codes after the configured failed-attempt limit; resend paths enforce cooldowns and clear newly issued codes when email delivery fails.
+- [x] Verification codes are bound to their intended email address and per-account advisory locks serialize confirmation, resend, and email-change operations; consumed codes remain as cooldown records so redeeming a code cannot immediately reset the resend limit.
+- [x] Email change requests validate and normalize addresses, require the current password, reject already-current or already-used addresses, and keep email ownership unchanged until code confirmation.
+- [x] Profile updates enforce username, bio, status, and password boundaries; an incomplete password-change request no longer silently succeeds, and a wrong current password returns unauthorized.
+- [x] `members_only` visibility is enforced by profile reads and search; hidden email addresses no longer match user search, and blocks hide profiles in either direction.
+- [x] Avatar upload rejects unsupported/oversized-dimension images and uses a fresh storage ID so a failed profile write preserves the old avatar; avatar removal clears the DB reference before attempting provider cleanup.
+- [x] Added an injectable avatar-storage seam plus regressions for malformed images, provider timeout after object creation, orphan cleanup, replacement, and repeated removal.
+- [x] Account deletion now refuses to cascade-delete an owned workspace that still has other members and clears outstanding reset codes. Added route regressions for profile visibility, repeated blocking, and the shared-workspace guard.
+- [x] A unique case-insensitive DB index prevents two concurrent accounts reserving the same pending email; startup clears any pre-existing duplicate pending reservations before installing it.
+- [x] PostgreSQL transaction advisory locks serialize DM writes with block/unblock changes; added repeated login-submit protection and account-switch cleanup before a new session is saved.
+- [x] Registration remains recoverable after mail-provider failure: the account and resendable OTP stay available, and the app guides the user to retry verification.
+- [x] Added client regressions for repeated login taps, login validation, profile input/password boundaries, and session account switching; tests remain unrun until the final pass.
+- [x] Added a route regression case for wrong-code bypass, successful reset, and OTP replay. It is intentionally unrun until the final all-phase verification pass, per the user's instruction.
+- [x] Added an integration regression for symmetric user-pair advisory locking plus cases for expired verification codes and successful account deletion revoking its stale JWT.
+- [x] Phase 2 implementation and planned server/client regression cases are in place. All tests remain intentionally unrun until every phase is implemented.
+- [ ] Run server/Android and integration tests in the final verification pass after all phases are implemented.
 
 ## Phase 3 — Workspace, membership, invitations, search, and presence
 
@@ -142,6 +198,7 @@ This plan is additive to [MASTER_IMPLEMENTATION_PLAN.md](MASTER_IMPLEMENTATION_P
 **Actions and edge cases**
 
 - Files: zero-byte, over-limit, unsupported MIME, deceptive filename/path, interrupted multipart stream, disk full, provider timeout after object creation, DB failure after upload, cleanup after failure, unauthorized download/delete, soft-delete sync, restart access, old local-row dual-read and checksum migration.
+- Offline upload retry: verify content fingerprints and duplicate-object cleanup for Cloudinary and local fallback providers, including provider timeout and database failure after object creation.
 - Notifications: empty list/count, mark read twice, delete wrong user’s notification, mute/unmute repeated, quiet-hours across midnight/time-zone/DST, settings change while delivery is queued, unread count after tombstone.
 - FCM tokens: unauthenticated registration; body user ID spoofing; same device refresh; device changes accounts; logout removes only that device; stale/invalid token; multiple device partial delivery and retry.
 

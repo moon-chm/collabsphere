@@ -4,7 +4,6 @@ import com.collabsphere.dto.*
 import dto.*
 import com.collabsphere.model.*
 import com.collabsphere.util.AvatarGenerator
-import com.collabsphere.util.CloudinaryService
 import com.collabsphere.util.EmailService
 import com.collabsphere.util.JwtConfig
 import com.collabsphere.util.PasswordHasher
@@ -20,13 +19,16 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import com.collabsphere.DatabaseFactory
 import java.io.File
@@ -37,6 +39,26 @@ private val logger = LoggerFactory.getLogger("Routing")
 
 /** Postgres SQLSTATE codes for transient conflicts worth retrying instead of surfacing as a 500. */
 private val RETRYABLE_SQLSTATES = setOf("40001", "40P01") // serialization_failure, deadlock_detected
+
+/** Serializes a user-pair block/unblock with DM writes involving the same pair. */
+internal fun Transaction.lockUserPair(firstUserId: Int, secondUserId: Int) {
+    val low = minOf(firstUserId, secondUserId)
+    val high = maxOf(firstUserId, secondUserId)
+    val lockKey = (low.toLong() shl 32) or (high.toLong() and 0xffff_ffffL)
+    exec("SELECT pg_advisory_xact_lock($lockKey)") { result ->
+        result.next()
+        Unit
+    }
+}
+
+/** Serializes verification-code confirmation, replacement, and email-target changes per account. */
+private fun Transaction.lockVerificationCode(userId: Int) {
+    val lockKey = Long.MIN_VALUE + userId.toLong()
+    exec("SELECT pg_advisory_xact_lock($lockKey)") { result ->
+        result.next()
+        Unit
+    }
+}
 
 suspend fun <T> dbQuery(block: suspend () -> T): T {
     var attempt = 0
@@ -280,6 +302,7 @@ internal suspend fun createAndPushNotification(
 }
 
 fun Application.configureRouting() {
+    val avatarStorage = attributes.getOrNull(AvatarStorageAttribute) ?: CloudinaryAvatarStorage
     routing {
         get("/") {
             call.respondText("CollabSphere Server is running!", ContentType.Text.Plain, HttpStatusCode.OK)
@@ -318,7 +341,7 @@ fun Application.configureRouting() {
             post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
 
                 val userRow = dbQuery {
                     UsersTable.selectAll()
@@ -371,11 +394,20 @@ fun Application.configureRouting() {
         post("/api/register") {
             try {
                 val request = call.receive<RegisterRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
                 val trimmedUsername = request.userName.trim()
 
                 if (trimmedEmail.isBlank() || trimmedUsername.isBlank() || request.password.isBlank()) {
                     call.respond(HttpStatusCode.BadRequest, "All fields are required")
+                    return@post
+                }
+
+                val passwordError = AuthRules.passwordError(request.password)
+                if (!AuthRules.isValidEmail(trimmedEmail) ||
+                    trimmedUsername.length !in AuthRules.USERNAME_MIN_LENGTH..AuthRules.USERNAME_MAX_LENGTH ||
+                    passwordError != null
+                ) {
+                    call.respond(HttpStatusCode.BadRequest, passwordError ?: "Invalid email or username.")
                     return@post
                 }
 
@@ -399,19 +431,31 @@ fun Application.configureRouting() {
                 }
 
                 // Generate 6-digit OTP valid for 15 minutes
-                val otp = String.format("%06d", (100000..999999).random())
-                val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+                val otp = AuthRules.generateOtp()
+                val expiresAt = System.currentTimeMillis() + AuthRules.OTP_TTL_MS
 
                 dbQuery {
+                    lockVerificationCode(generatedId)
                     UserVerificationTable.deleteWhere { UserVerificationTable.userId eq generatedId }
                     UserVerificationTable.insert {
                         it[userId] = generatedId
                         it[token] = otp
+                        it[UserVerificationTable.targetEmail] = trimmedEmail
                         it[UserVerificationTable.expiresAt] = expiresAt
                     }
                 }
 
-                EmailService.sendVerificationOtp(trimmedEmail, otp)
+                if (!EmailService.sendVerificationOtp(trimmedEmail, otp)) {
+                    call.respond(
+                        HttpStatusCode.Created,
+                        RegisterResponse(
+                            userId = generatedId,
+                            email = trimmedEmail,
+                            message = "Account created, but email delivery failed. Wait a minute, then resend the verification code."
+                        )
+                    )
+                    return@post
+                }
 
                 call.respond(
                     HttpStatusCode.Created,
@@ -423,17 +467,22 @@ fun Application.configureRouting() {
                 )
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Server Error: ${e.message}")
+                if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email already registered")
+                else call.respond(HttpStatusCode.BadRequest, "Invalid registration request")
             }
         }
 
         post("/api/auth/verify-registration") {
             try {
                 val request = call.receive<VerifyRegistrationRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
                 val trimmedOtp = request.otp.trim()
 
                 val result = dbQuery {
+                    val uidForLock = UsersTable.selectAll()
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
+                        .singleOrNull()?.get(UsersTable.id) ?: return@dbQuery "NOT_FOUND"
+                    lockVerificationCode(uidForLock)
                     val userRow = UsersTable.selectAll()
                         .where { UsersTable.email.lowerCase() eq trimmedEmail }
                         .singleOrNull() ?: return@dbQuery "NOT_FOUND"
@@ -443,18 +492,48 @@ fun Application.configureRouting() {
                         .where { UserVerificationTable.userId eq uid }
                         .singleOrNull() ?: return@dbQuery "NO_CODE"
 
-                    if (System.currentTimeMillis() > verificationRow[UserVerificationTable.expiresAt]) {
+                    if (System.currentTimeMillis() >= verificationRow[UserVerificationTable.expiresAt]) {
+                        UserVerificationTable.update({ UserVerificationTable.userId eq uid }) {
+                            it[UserVerificationTable.consumed] = true
+                        }
                         return@dbQuery "EXPIRED"
                     }
+                    if (verificationRow[UserVerificationTable.consumed]) return@dbQuery "INVALID"
 
                     if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
+                        val attempts = verificationRow[UserVerificationTable.attempts] + 1
+                        UserVerificationTable.update({ UserVerificationTable.userId eq uid }) {
+                            it[UserVerificationTable.attempts] = UserVerificationTable.attempts + 1
+                            if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) it[UserVerificationTable.consumed] = true
+                        }
+                        if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) return@dbQuery "TOO_MANY_ATTEMPTS"
                         return@dbQuery "INVALID"
                     }
+
+                    val expectedTargetEmail = userRow[UsersTable.pendingEmail] ?: userRow[UsersTable.email]
+                    val codeTargetEmail = verificationRow[UserVerificationTable.targetEmail]
+                    if ((userRow[UsersTable.pendingEmail] != null && codeTargetEmail != expectedTargetEmail) ||
+                        (codeTargetEmail != null && codeTargetEmail != expectedTargetEmail)
+                    ) {
+                        UserVerificationTable.update({ UserVerificationTable.userId eq uid }) {
+                            it[UserVerificationTable.consumed] = true
+                        }
+                        return@dbQuery "INVALID"
+                    }
+
+                    val consumed = UserVerificationTable.update({
+                        (UserVerificationTable.userId eq uid) and
+                            (UserVerificationTable.token eq trimmedOtp) and
+                            (UserVerificationTable.expiresAt greater System.currentTimeMillis()) and
+                            (UserVerificationTable.consumed eq false)
+                    }) {
+                        it[UserVerificationTable.consumed] = true
+                    }
+                    if (consumed != 1) return@dbQuery "INVALID"
 
                     UsersTable.update({ UsersTable.id eq uid }) {
                         it[isEmailVerified] = true
                     }
-                    UserVerificationTable.deleteWhere { UserVerificationTable.userId eq uid }
                     "OK"
                 }
 
@@ -462,6 +541,7 @@ fun Application.configureRouting() {
                     "OK" -> call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Email verified successfully! You can now log in."))
                     "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Verification code expired. Please request a new code."))
                     "INVALID" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid verification code. Please check and try again."))
+                    "TOO_MANY_ATTEMPTS" -> call.respond(HttpStatusCode.TooManyRequests, AuthMessageResponse(false, "Too many incorrect codes. Request a new code."))
                     "NO_CODE" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "No pending verification found for this account."))
                     else -> call.respond(HttpStatusCode.NotFound, AuthMessageResponse(false, "Account not found."))
                 }
@@ -474,7 +554,7 @@ fun Application.configureRouting() {
         post("/api/auth/resend-verification") {
             try {
                 val request = call.receive<ResendVerificationRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
 
                 val userRow = dbQuery {
                     UsersTable.selectAll()
@@ -493,19 +573,43 @@ fun Application.configureRouting() {
                 }
 
                 val uid = userRow[UsersTable.id]
-                val otp = String.format("%06d", (100000..999999).random())
-                val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+                val otp = AuthRules.generateOtp()
+                val expiresAt = System.currentTimeMillis() + AuthRules.OTP_TTL_MS
 
-                dbQuery {
+                val issued = dbQuery {
+                    lockVerificationCode(uid)
+                    val latestUser = UsersTable.selectAll().where { UsersTable.id eq uid }.singleOrNull()
+                        ?: return@dbQuery "NOT_FOUND"
+                    if (latestUser[UsersTable.isEmailVerified]) return@dbQuery "VERIFIED"
+                    val current = UserVerificationTable.selectAll()
+                        .where { UserVerificationTable.userId eq uid }
+                        .singleOrNull()
+                    if (AuthRules.inResendCooldown(current?.get(UserVerificationTable.expiresAt))) return@dbQuery "COOLDOWN"
                     UserVerificationTable.deleteWhere { UserVerificationTable.userId eq uid }
                     UserVerificationTable.insert {
                         it[userId] = uid
                         it[token] = otp
+                        it[UserVerificationTable.targetEmail] = userRow[UsersTable.email]
                         it[UserVerificationTable.expiresAt] = expiresAt
+                        it[UserVerificationTable.attempts] = 0
                     }
+                    "OK"
+                }
+                when (issued) {
+                    "NOT_FOUND" -> return@post call.respond(HttpStatusCode.NotFound, AuthMessageResponse(false, "Account not found."))
+                    "VERIFIED" -> return@post call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Email is already verified. You can log in."))
+                    "COOLDOWN" -> return@post call.respond(HttpStatusCode.TooManyRequests, AuthMessageResponse(false, "Please wait before requesting another code."))
                 }
 
-                EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)
+                if (!EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)) {
+                    dbQuery {
+                        UserVerificationTable.deleteWhere {
+                            (UserVerificationTable.userId eq uid) and (UserVerificationTable.token eq otp)
+                        }
+                    }
+                    call.respond(HttpStatusCode.BadGateway, AuthMessageResponse(false, "Couldn't send the verification email. Please try again."))
+                    return@post
+                }
                 call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "A new 6-digit verification code has been sent to your email."))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -516,7 +620,7 @@ fun Application.configureRouting() {
         post("/api/auth/forgot-password") {
             try {
                 val request = call.receive<ForgotPasswordRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
 
                 val userExists = dbQuery {
                     UsersTable.selectAll()
@@ -525,22 +629,37 @@ fun Application.configureRouting() {
                 }
 
                 if (userExists) {
-                    val otp = String.format("%06d", (100000..999999).random())
-                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+                    val otp = AuthRules.generateOtp()
+                    val expiresAt = System.currentTimeMillis() + AuthRules.OTP_TTL_MS
 
-                    dbQuery {
-                        PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
-                        PasswordResetTable.insert {
-                            it[email] = trimmedEmail
-                            it[PasswordResetTable.otp] = otp
-                            it[PasswordResetTable.expiresAt] = expiresAt
+                    val canIssue = dbQuery {
+                        val existing = PasswordResetTable.selectAll()
+                            .where { PasswordResetTable.email eq trimmedEmail }
+                            .singleOrNull()
+                        if (AuthRules.inResendCooldown(existing?.get(PasswordResetTable.expiresAt))) {
+                            false
+                        } else {
+                            PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
+                            PasswordResetTable.insert {
+                                it[email] = trimmedEmail
+                                it[PasswordResetTable.otp] = otp
+                                it[PasswordResetTable.expiresAt] = expiresAt
+                                it[PasswordResetTable.attempts] = 0
+                            }
+                            true
                         }
                     }
 
-                    EmailService.sendPasswordResetOtp(trimmedEmail, otp)
+                    if (canIssue && !EmailService.sendPasswordResetOtp(trimmedEmail, otp)) {
+                        dbQuery {
+                            PasswordResetTable.deleteWhere {
+                                (PasswordResetTable.email eq trimmedEmail) and (PasswordResetTable.otp eq otp)
+                            }
+                        }
+                    }
                 }
 
-                call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "If an account exists for $trimmedEmail, a reset code has been sent."))
+                call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "If an account exists, a reset code has been sent."))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
@@ -550,24 +669,70 @@ fun Application.configureRouting() {
         post("/api/auth/reset-password") {
             try {
                 val request = call.receive<ResetPasswordRequest>()
-                val trimmedEmail = request.email.trim().lowercase()
+                val trimmedEmail = AuthRules.normalizeEmail(request.email)
                 val trimmedOtp = request.otp.trim()
 
-                if (request.newPassword.length < 4) {
-                    call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Password must be at least 4 characters."))
+                val passwordError = AuthRules.passwordError(request.newPassword)
+                if (passwordError != null) {
+                    call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, passwordError))
+                    return@post
+                }
+                if (!AuthRules.isValidEmail(trimmedEmail) || !Regex("^\\d{6}$").matches(trimmedOtp)) {
+                    call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset request."))
                     return@post
                 }
 
                 val resetResult = dbQuery {
-                    val userRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
+                    val resetRow = PasswordResetTable.selectAll()
+                        .where { PasswordResetTable.email eq trimmedEmail }
+                        .singleOrNull() ?: return@dbQuery "INVALID"
+                    val now = System.currentTimeMillis()
+                    if (resetRow[PasswordResetTable.expiresAt] <= now) {
+                        PasswordResetTable.update({ PasswordResetTable.email eq trimmedEmail }) {
+                            it[PasswordResetTable.consumed] = true
+                        }
+                        return@dbQuery "EXPIRED"
+                    }
+                    if (resetRow[PasswordResetTable.consumed]) return@dbQuery "CONSUMED"
+                    if (resetRow[PasswordResetTable.attempts] >= AuthRules.OTP_MAX_ATTEMPTS) {
+                        PasswordResetTable.update({ PasswordResetTable.email eq trimmedEmail }) {
+                            it[PasswordResetTable.consumed] = true
+                        }
+                        return@dbQuery "TOO_MANY_ATTEMPTS"
+                    }
+                    if (resetRow[PasswordResetTable.otp] != trimmedOtp) {
+                        PasswordResetTable.update({ PasswordResetTable.email eq trimmedEmail }) {
+                        it[PasswordResetTable.attempts] = PasswordResetTable.attempts + 1
+                            if (resetRow[PasswordResetTable.attempts] + 1 >= AuthRules.OTP_MAX_ATTEMPTS) {
+                                it[PasswordResetTable.consumed] = true
+                            }
+                        }
+                        if (resetRow[PasswordResetTable.attempts] + 1 >= AuthRules.OTP_MAX_ATTEMPTS) {
+                            return@dbQuery "TOO_MANY_ATTEMPTS"
+                        }
+                        return@dbQuery "INVALID"
+                    }
+
+                    val userRow = UsersTable.selectAll().where { UsersTable.email eq trimmedEmail }.singleOrNull()
                         ?: return@dbQuery "USER_NOT_FOUND"
+
+                    // Mark the matching, still-live code consumed before changing credentials. A
+                    // concurrent request cannot reuse it after this conditional update succeeds.
+                    val consumed = PasswordResetTable.update({
+                        (PasswordResetTable.email eq trimmedEmail) and
+                            (PasswordResetTable.otp eq trimmedOtp) and
+                            (PasswordResetTable.expiresAt greater now) and
+                            (PasswordResetTable.consumed eq false)
+                    }) {
+                        it[PasswordResetTable.consumed] = true
+                    }
+                    if (consumed != 1) return@dbQuery "INVALID"
 
                     val updated = UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) {
                         it[password] = PasswordHasher.hash(request.newPassword)
                         it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                     }
 
-                    PasswordResetTable.deleteWhere { PasswordResetTable.email eq trimmedEmail }
                     TokenVersions.invalidate(userRow[UsersTable.id])
                     if (updated > 0) "OK" else "USER_NOT_FOUND"
                 }
@@ -576,6 +741,7 @@ fun Application.configureRouting() {
                     "OK" -> call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Password reset successfully! You can now log in."))
                     "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Reset code expired. Please request a new code."))
                     "INVALID" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset code. Please check and try again."))
+                    "TOO_MANY_ATTEMPTS" -> call.respond(HttpStatusCode.TooManyRequests, AuthMessageResponse(false, "Too many incorrect codes. Request a new reset code."))
                     else -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset request."))
                 }
             } catch (e: Exception) {
@@ -708,17 +874,30 @@ fun Application.configureRouting() {
                 try {
                     val request = call.receive<UpdateProfileRequest>()
                     val actingUserId = call.authenticatedUserId()
-                    val isSuccess = dbQuery {
+                    val username = request.userName.trim()
+                    val newPassword = request.newPassword
+                    val currentPassword = request.currentPassword
+                    val changingPassword = !newPassword.isNullOrEmpty() || !currentPassword.isNullOrEmpty()
+                    val passwordError = newPassword?.let { AuthRules.passwordError(it) }
+                    if (username.length !in AuthRules.USERNAME_MIN_LENGTH..AuthRules.USERNAME_MAX_LENGTH ||
+                        (request.bio?.length ?: 0) > AuthRules.BIO_MAX_LENGTH ||
+                        (request.statusMessage?.length ?: 0) > AuthRules.STATUS_MAX_LENGTH ||
+                        (changingPassword && (newPassword.isNullOrEmpty() || currentPassword.isNullOrEmpty() || passwordError != null))
+                    ) {
+                        call.respond(HttpStatusCode.BadRequest, passwordError ?: "Invalid profile fields.")
+                        return@post
+                    }
+                    val updateResult = dbQuery {
                         val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                         if (userRow == null) {
-                            false
+                            "NOT_FOUND"
                         } else {
-                            if (!request.newPassword.isNullOrBlank() && !request.currentPassword.isNullOrBlank()) {
-                                if (!PasswordHasher.matches(request.currentPassword, userRow[UsersTable.password])) {
-                                    return@dbQuery false
+                            if (changingPassword) {
+                                if (!PasswordHasher.matches(currentPassword!!, userRow[UsersTable.password])) {
+                                    return@dbQuery "UNAUTHORIZED"
                                 }
                                 UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                    it[username] = request.userName
+                                    it[UsersTable.username] = username
                                     it[bio] = request.bio
                                     it[statusMessage] = request.statusMessage
                                     it[password] = PasswordHasher.hash(request.newPassword)
@@ -727,16 +906,19 @@ fun Application.configureRouting() {
                                 TokenVersions.invalidate(actingUserId)
                             } else {
                                 UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                    it[username] = request.userName
+                                    it[UsersTable.username] = username
                                     it[bio] = request.bio
                                     it[statusMessage] = request.statusMessage
                                 }
                             }
-                            true
+                            "OK"
                         }
                     }
-                    if (isSuccess) call.respond(HttpStatusCode.OK, true)
-                    else call.respond(HttpStatusCode.BadRequest, false)
+                    when (updateResult) {
+                        "OK" -> call.respond(HttpStatusCode.OK, true)
+                        "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, false)
+                        else -> call.respond(HttpStatusCode.NotFound, false)
+                    }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, false)
@@ -747,6 +929,7 @@ fun Application.configureRouting() {
             post("/api/user/avatar") {
                 val avatarMaxBytes = 5L * 1024 * 1024 // 5 MB
                 var staged: File? = null
+                var newlyUploadedPublicId: String? = null
                 try {
                     val actingUserId = call.authenticatedUserId()
                     if (call.declaredBodyExceeds(avatarMaxBytes)) throw UploadTooLargeException(avatarMaxBytes)
@@ -761,14 +944,27 @@ fun Application.configureRouting() {
 
                     val imageFile = staged
                     if (imageFile != null) {
-                        // publicId is stable per-user so re-uploads overwrite the old file automatically
-                        val publicId = "avatar_$actingUserId"
-                        val cloudUrl = CloudinaryService.uploadAvatar(imageFile, publicId)
-                        dbQuery {
-                            UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                it[avatarUrl] = cloudUrl
-                            }
+                        if (!isValidAvatarImage(imageFile)) {
+                            call.respond(HttpStatusCode.BadRequest, "Uploaded file is not a supported image")
+                            return@post
                         }
+                        // Upload under a fresh ID so a failed DB write cannot replace the currently referenced avatar.
+                        val publicId = "avatar_${actingUserId}_${UUID.randomUUID()}"
+                        newlyUploadedPublicId = publicId
+                        val cloudUrl = avatarStorage.upload(imageFile, publicId)
+                        val oldPublicId = dbQuery {
+                            val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                                ?: throw IllegalStateException("User profile disappeared during avatar upload")
+                            val updated = UsersTable.update({ UsersTable.id eq actingUserId }) {
+                                it[avatarUrl] = cloudUrl
+                                it[avatarPublicId] = publicId
+                            }
+                            check(updated == 1) { "Avatar profile update did not affect the user" }
+                            userRow[UsersTable.avatarPublicId]
+                                ?: if (userRow[UsersTable.avatarUrl] != null) "avatar_$actingUserId" else null
+                        }
+                        newlyUploadedPublicId = null
+                        oldPublicId?.let { avatarStorage.delete(it) }
                         call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = cloudUrl))
                     } else {
                         call.respond(HttpStatusCode.BadRequest, "No file received")
@@ -780,6 +976,9 @@ fun Application.configureRouting() {
                     logger.error("[Avatar] Upload failed", e)
                     call.respond(HttpStatusCode.InternalServerError, "Avatar upload failed")
                 } finally {
+                    newlyUploadedPublicId?.let { publicId ->
+                        withContext(NonCancellable) { avatarStorage.delete(publicId) }
+                    }
                     staged?.delete()
                 }
             }
@@ -788,13 +987,16 @@ fun Application.configureRouting() {
             delete("/api/user/avatar") {
                 try {
                     val actingUserId = call.authenticatedUserId()
-                    // Fire-and-forget Cloudinary deletion (stable publicId)
-                    CloudinaryService.deleteAvatar("avatar_$actingUserId")
-                    dbQuery {
+                    val oldPublicId = dbQuery {
+                        val row = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            ?: return@dbQuery null
                         UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[avatarUrl] = null
+                            it[avatarPublicId] = null
                         }
+                        row[UsersTable.avatarPublicId] ?: if (row[UsersTable.avatarUrl] != null) "avatar_$actingUserId" else null
                     }
+                    oldPublicId?.let { avatarStorage.delete(it) }
                     call.respond(HttpStatusCode.OK, AvatarUploadResponse(avatarUrl = AvatarGenerator.avatarUrlFor(actingUserId, null)))
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -807,9 +1009,14 @@ fun Application.configureRouting() {
                 try {
                     val request = call.receive<ChangeEmailRequest>()
                     val actingUserId = call.authenticatedUserId()
-                    val newEmail = request.newEmail.trim().lowercase()
+                    val newEmail = AuthRules.normalizeEmail(request.newEmail)
+                    if (!AuthRules.isValidEmail(newEmail)) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid email address")
+                        return@put
+                    }
 
                     val result = dbQuery {
+                        lockVerificationCode(actingUserId)
                         val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                             ?: return@dbQuery "NOT_FOUND"
 
@@ -817,10 +1024,21 @@ fun Application.configureRouting() {
                             return@dbQuery "UNAUTHORIZED"
                         }
 
-                        if (UsersTable.selectAll().where { (UsersTable.email.lowerCase() eq newEmail) and (UsersTable.id neq actingUserId) }.count() > 0) {
+                        if (newEmail == userRow[UsersTable.email]) return@dbQuery "SAME"
+
+                        if (UsersTable.selectAll().where {
+                                ((UsersTable.email.lowerCase() eq newEmail) or (UsersTable.pendingEmail.lowerCase() eq newEmail)) and
+                                    (UsersTable.id neq actingUserId)
+                            }.count() > 0
+                        ) {
                             return@dbQuery "CONFLICT"
                         }
 
+                        if (newEmail == userRow[UsersTable.pendingEmail]) return@dbQuery "OK"
+
+                        UserVerificationTable.update({ UserVerificationTable.userId eq actingUserId }) {
+                            it[UserVerificationTable.consumed] = true
+                        }
                         UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[pendingEmail] = newEmail
                         }
@@ -831,11 +1049,13 @@ fun Application.configureRouting() {
                         "OK" -> call.respond(HttpStatusCode.OK, "Email change requested")
                         "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
                         "CONFLICT" -> call.respond(HttpStatusCode.Conflict, "Email already in use")
+                        "SAME" -> call.respond(HttpStatusCode.BadRequest, "Email is already the current address")
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                    if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email already in use")
+                    else call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
 
@@ -850,22 +1070,51 @@ fun Application.configureRouting() {
                         return@post call.respond(HttpStatusCode.Conflict, "Email is already verified")
                     }
 
-                    val emailTarget = userRow[UsersTable.pendingEmail] ?: userRow[UsersTable.email]
-                    val otp = String.format("%06d", (100000..999999).random())
-                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
+                    val otp = AuthRules.generateOtp()
+                    val expiresAt = System.currentTimeMillis() + AuthRules.OTP_TTL_MS
 
-                    dbQuery {
+                    val issuance = dbQuery {
+                        lockVerificationCode(actingUserId)
+                        val currentUser = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+                            ?: return@dbQuery "NOT_FOUND" to null
+                        if (currentUser[UsersTable.isEmailVerified] && currentUser[UsersTable.pendingEmail] == null) {
+                            return@dbQuery "VERIFIED" to null
+                        }
+                        val emailTarget = currentUser[UsersTable.pendingEmail] ?: currentUser[UsersTable.email]
+                        val current = UserVerificationTable.selectAll()
+                            .where { UserVerificationTable.userId eq actingUserId }
+                            .singleOrNull()
+                        val existingTarget = current?.get(UserVerificationTable.targetEmail)
+                        val sameTarget = existingTarget == emailTarget ||
+                            (existingTarget == null && currentUser[UsersTable.pendingEmail] == null)
+                        if (sameTarget && AuthRules.inResendCooldown(current?.get(UserVerificationTable.expiresAt))) {
+                            return@dbQuery "COOLDOWN" to null
+                        }
                         UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
                         UserVerificationTable.insert {
                             it[userId] = actingUserId
                             it[token] = otp
+                            it[UserVerificationTable.targetEmail] = emailTarget
                             it[UserVerificationTable.expiresAt] = expiresAt
+                            it[UserVerificationTable.attempts] = 0
                         }
+                        "OK" to emailTarget
                     }
+                    when (issuance.first) {
+                        "NOT_FOUND" -> return@post call.respond(HttpStatusCode.NotFound, "User not found")
+                        "VERIFIED" -> return@post call.respond(HttpStatusCode.Conflict, "Email is already verified")
+                        "COOLDOWN" -> return@post call.respond(HttpStatusCode.TooManyRequests, "Please wait before requesting another code")
+                    }
+                    val emailTarget = issuance.second ?: return@post call.respond(HttpStatusCode.InternalServerError, "Failed to issue verification code")
 
                     if (EmailService.sendVerificationOtp(emailTarget, otp)) {
                         call.respond(HttpStatusCode.OK, "Verification email sent")
                     } else {
+                        dbQuery {
+                            UserVerificationTable.deleteWhere {
+                                (UserVerificationTable.userId eq actingUserId) and (UserVerificationTable.token eq otp)
+                            }
+                        }
                         call.respond(HttpStatusCode.BadGateway, "Couldn't send the verification email. Please try again.")
                     }
                 } catch (e: Exception) {
@@ -881,6 +1130,7 @@ fun Application.configureRouting() {
                     val trimmedOtp = request.token.trim()
 
                     val result = dbQuery {
+                        lockVerificationCode(actingUserId)
                         val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                             ?: return@dbQuery "NOT_FOUND"
 
@@ -888,13 +1138,44 @@ fun Application.configureRouting() {
                             .where { UserVerificationTable.userId eq actingUserId }
                             .singleOrNull() ?: return@dbQuery "NO_CODE"
 
-                        if (System.currentTimeMillis() > verificationRow[UserVerificationTable.expiresAt]) {
+                        if (System.currentTimeMillis() >= verificationRow[UserVerificationTable.expiresAt]) {
+                            UserVerificationTable.update({ UserVerificationTable.userId eq actingUserId }) {
+                                it[UserVerificationTable.consumed] = true
+                            }
                             return@dbQuery "EXPIRED"
                         }
+                        if (verificationRow[UserVerificationTable.consumed]) return@dbQuery "INVALID"
 
                         if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
+                            val attempts = verificationRow[UserVerificationTable.attempts] + 1
+                            UserVerificationTable.update({ UserVerificationTable.userId eq actingUserId }) {
+                                it[UserVerificationTable.attempts] = UserVerificationTable.attempts + 1
+                                if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) it[UserVerificationTable.consumed] = true
+                            }
+                            if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) return@dbQuery "TOO_MANY_ATTEMPTS"
                             return@dbQuery "INVALID"
                         }
+
+                        val expectedTargetEmail = userRow[UsersTable.pendingEmail] ?: userRow[UsersTable.email]
+                        val codeTargetEmail = verificationRow[UserVerificationTable.targetEmail]
+                        if ((userRow[UsersTable.pendingEmail] != null && codeTargetEmail != expectedTargetEmail) ||
+                            (codeTargetEmail != null && codeTargetEmail != expectedTargetEmail)
+                        ) {
+                            UserVerificationTable.update({ UserVerificationTable.userId eq actingUserId }) {
+                                it[UserVerificationTable.consumed] = true
+                            }
+                            return@dbQuery "INVALID"
+                        }
+
+                        val consumed = UserVerificationTable.update({
+                            (UserVerificationTable.userId eq actingUserId) and
+                                (UserVerificationTable.token eq trimmedOtp) and
+                                (UserVerificationTable.expiresAt greater System.currentTimeMillis()) and
+                                (UserVerificationTable.consumed eq false)
+                        }) {
+                            it[UserVerificationTable.consumed] = true
+                        }
+                        if (consumed != 1) return@dbQuery "INVALID"
 
                         UsersTable.update({ UsersTable.id eq actingUserId }) {
                             it[isEmailVerified] = true
@@ -903,7 +1184,6 @@ fun Application.configureRouting() {
                                 it[pendingEmail] = null
                             }
                         }
-                        UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
                         "OK"
                     }
 
@@ -911,11 +1191,13 @@ fun Application.configureRouting() {
                         "OK" -> call.respond(HttpStatusCode.OK, "Email verified")
                         "EXPIRED" -> call.respond(HttpStatusCode.Gone, "Code expired")
                         "INVALID" -> call.respond(HttpStatusCode.BadRequest, "Invalid code")
+                        "TOO_MANY_ATTEMPTS" -> call.respond(HttpStatusCode.TooManyRequests, "Too many incorrect codes. Request a new code.")
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                    if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email address is already in use")
+                    else call.respond(HttpStatusCode.BadRequest, "Malformed request")
                 }
             }
 
@@ -931,6 +1213,19 @@ fun Application.configureRouting() {
                         if (!PasswordHasher.matches(request.password, userRow[UsersTable.password])) {
                             return@dbQuery "UNAUTHORIZED"
                         }
+
+                        val ownedWorkspaceIds = WorkspacesTable.select(WorkspacesTable.id)
+                            .where { WorkspacesTable.userId eq actingUserId }
+                            .map { it[WorkspacesTable.id] }
+                        val ownsSharedWorkspace = ownedWorkspaceIds.any { workspaceId ->
+                            WorkspaceMembersTable.selectAll().where {
+                                (WorkspaceMembersTable.workspaceId eq workspaceId) and
+                                    (WorkspaceMembersTable.userId neq actingUserId)
+                            }.count() > 0
+                        }
+                        if (ownsSharedWorkspace) return@dbQuery "OWNED_SHARED_WORKSPACES"
+
+                        PasswordResetTable.deleteWhere { PasswordResetTable.email eq userRow[UsersTable.email] }
                         
                         UsersTable.deleteWhere { UsersTable.id eq actingUserId }
                         TokenVersions.invalidate(actingUserId)
@@ -940,6 +1235,7 @@ fun Application.configureRouting() {
                     when (result) {
                         "OK" -> call.respond(HttpStatusCode.OK, "Account deleted")
                         "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
+                        "OWNED_SHARED_WORKSPACES" -> call.respond(HttpStatusCode.Conflict, "Transfer or delete your shared workspaces before deleting this account")
                         else -> call.respond(HttpStatusCode.NotFound, "User not found")
                     }
                 } catch (e: Exception) {
@@ -988,11 +1284,23 @@ fun Application.configureRouting() {
 
                     val response = dbQuery {
                         val isBlocked = UserBlocksTable.selectAll().where {
-                            (UserBlocksTable.blockerId eq targetId) and (UserBlocksTable.blockedId eq actingUserId)
+                            ((UserBlocksTable.blockerId eq targetId) and (UserBlocksTable.blockedId eq actingUserId)) or
+                                ((UserBlocksTable.blockerId eq actingUserId) and (UserBlocksTable.blockedId eq targetId))
                         }.count() > 0
                         if (isBlocked) return@dbQuery null
 
                         UsersTable.selectAll().where { UsersTable.id eq targetId }.singleOrNull()?.let { row ->
+                            if (row[UsersTable.profileVisibility] == "members_only" && targetId != actingUserId) {
+                                val viewerWorkspaces = WorkspaceMembersTable.select(WorkspaceMembersTable.workspaceId)
+                                    .where { WorkspaceMembersTable.userId eq actingUserId }
+                                    .map { it[WorkspaceMembersTable.workspaceId] }
+                                    .toSet()
+                                val sharesWorkspace = viewerWorkspaces.isNotEmpty() && WorkspaceMembersTable.selectAll().where {
+                                    (WorkspaceMembersTable.userId eq targetId) and
+                                        (WorkspaceMembersTable.workspaceId inList viewerWorkspaces)
+                                }.count() > 0
+                                if (!sharesWorkspace) return@dbQuery null
+                            }
                             val isOnlineNow = WebSocketBroker.isUserConnected(targetId.toLong())
                             PublicProfileResponse(
                                 id = row[UsersTable.id],
@@ -1019,8 +1327,8 @@ fun Application.configureRouting() {
                 try {
                     val actingUserId = call.authenticatedUserId()
                     val query = call.request.queryParameters["q"]?.trim() ?: ""
-                    if (query.length < 2) {
-                        call.respond(HttpStatusCode.BadRequest, "Search query must be at least 2 characters")
+                    if (query.length !in 2..100 || '%' in query || '_' in query) {
+                        call.respond(HttpStatusCode.BadRequest, "Search query must be 2 to 100 characters and cannot contain wildcard characters")
                         return@get
                     }
 
@@ -1029,11 +1337,23 @@ fun Application.configureRouting() {
                             (UserBlocksTable.blockerId eq actingUserId) or (UserBlocksTable.blockedId eq actingUserId)
                         }.map { if (it[UserBlocksTable.blockerId] == actingUserId) it[UserBlocksTable.blockedId] else it[UserBlocksTable.blockerId] }.toSet()
 
-                        UsersTable.selectAll().where {
-                            (UsersTable.username like "%$query%") or (UsersTable.email like "%$query%")
-                        }.filter {
+                        val matches = UsersTable.selectAll().where {
+                            (UsersTable.username like "%$query%") or
+                                ((UsersTable.showEmail eq true) and (UsersTable.email like "%$query%"))
+                        }.toList()
+                        val viewerWorkspaces = WorkspaceMembersTable.select(WorkspaceMembersTable.workspaceId)
+                            .where { WorkspaceMembersTable.userId eq actingUserId }
+                            .map { it[WorkspaceMembersTable.workspaceId] }
+                            .toSet()
+                        val membersOnlyVisibleIds = if (viewerWorkspaces.isEmpty()) emptySet() else {
+                            WorkspaceMembersTable.select(WorkspaceMembersTable.userId).where {
+                                WorkspaceMembersTable.workspaceId inList viewerWorkspaces
+                            }.map { it[WorkspaceMembersTable.userId] }.toSet()
+                        }
+                        matches.filter {
                             it[UsersTable.id] !in blockedIds &&
                                 it[UsersTable.id] != actingUserId &&
+                                (it[UsersTable.profileVisibility] != "members_only" || it[UsersTable.id] in membersOnlyVisibleIds) &&
                                 it[UsersTable.email] != com.collabsphere.util.GitHubBot.EMAIL
                         }
                             .map { row ->
@@ -1061,17 +1381,16 @@ fun Application.configureRouting() {
                     if (actingUserId == targetId)
                         return@post call.respond(HttpStatusCode.BadRequest, "Cannot block yourself")
 
-                    dbQuery {
-                        val alreadyBlocked = UserBlocksTable.selectAll().where {
-                            (UserBlocksTable.blockerId eq actingUserId) and (UserBlocksTable.blockedId eq targetId)
-                        }.count() > 0
-                        if (!alreadyBlocked) {
-                            UserBlocksTable.insert {
-                                it[blockerId] = actingUserId
-                                it[blockedId] = targetId
-                            }
+                    val targetExists = dbQuery {
+                        lockUserPair(actingUserId, targetId)
+                        if (UsersTable.selectAll().where { UsersTable.id eq targetId }.count() == 0) return@dbQuery false
+                        UserBlocksTable.insertIgnore {
+                            it[blockerId] = actingUserId
+                            it[blockedId] = targetId
                         }
+                        true
                     }
+                    if (!targetExists) return@post call.respond(HttpStatusCode.NotFound, "User not found")
                     call.respond(HttpStatusCode.OK, BlockUserResponse(actingUserId, targetId, "blocked"))
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -1086,6 +1405,7 @@ fun Application.configureRouting() {
                     val targetId = call.parameters["targetUserId"]?.toIntOrNull()
                         ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid targetUserId")
                     dbQuery {
+                        lockUserPair(actingUserId, targetId)
                         UserBlocksTable.deleteWhere {
                             (UserBlocksTable.blockerId eq actingUserId) and (UserBlocksTable.blockedId eq targetId)
                         }
@@ -1251,6 +1571,7 @@ fun Application.configureRouting() {
                                         // Only the authenticated connection owner may send as themselves.
                                         val requestedDto = dmDto.copy(senderId = userIdParam.toInt())
                                         val savedMessageDto = dbQuery {
+                                            lockUserPair(requestedDto.senderId, requestedDto.receiverId)
                                             val rejection = DmRules.sendRejection(
                                                 senderIsMember = isMember(requestedDto.senderId, requestedDto.workspaceId),
                                                 receiverIsMember = isMember(requestedDto.receiverId, requestedDto.workspaceId),

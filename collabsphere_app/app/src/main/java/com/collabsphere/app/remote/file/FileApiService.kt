@@ -28,7 +28,8 @@ class FileApiService(private val client: HttpClient) {
         workspaceId: Int,
         userName: String,
         localPath: String?,
-        fileToUpload: File
+        fileToUpload: File,
+        idempotencyKey: String? = null
     ): FileResponse {
         return client.submitFormWithBinaryData(
             url = baseUrl,
@@ -36,6 +37,7 @@ class FileApiService(private val client: HttpClient) {
                 append("userId", userId.toString())
                 append("workspaceId", workspaceId.toString())
                 append("userName", userName)
+                idempotencyKey?.let { append("idempotencyKey", it) }
                 if (localPath != null) {
                     append("localpath", localPath)
                 }

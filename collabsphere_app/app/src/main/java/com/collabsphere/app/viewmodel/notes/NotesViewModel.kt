@@ -35,6 +35,11 @@ class NotesViewModel(
     private val _notesStatus = MutableStateFlow<String?>(null)
     val notesStatus = _notesStatus.asStateFlow()
 
+    private val _isCreatingNote = MutableStateFlow(false)
+    val isCreatingNote = _isCreatingNote.asStateFlow()
+    private val _pendingNoteActionIds = MutableStateFlow<Set<Int>>(emptySet())
+    val pendingNoteActionIds = _pendingNoteActionIds.asStateFlow()
+
     init {
         viewModelScope.launch {
             repo.startDeltaSyncLoop(loggedWorkspaceId)
@@ -59,6 +64,7 @@ class NotesViewModel(
     }
 
     fun createNote() {
+        if (_isCreatingNote.value) return
         val name = _notesName.value.trim()
         val description = _description.value.trim()
 
@@ -67,50 +73,68 @@ class NotesViewModel(
             return
         }
 
+        _isCreatingNote.value = true
         viewModelScope.launch {
-            val newNote = NotesEntity(
-                id = 0,
-                userId = loggedUserId,
-                workspaceId = loggedWorkspaceId,
-                notesName = name,
-                description = description
-            )
+            try {
+                val newNote = NotesEntity(
+                    id = 0,
+                    userId = loggedUserId,
+                    workspaceId = loggedWorkspaceId,
+                    notesName = name,
+                    description = description
+                )
 
-            val result = repo.addnotestoscreen(newNote)
+                val result = repo.addnotestoscreen(newNote)
 
-            result.onSuccess { localId ->
-                if (localId > 0) {
-                    _notesStatus.value = "Notes $name created successfully"
-                    clearInputs()
-                } else {
-                    _notesStatus.value = "Failed to save notes locally"
-                }
-            }
-                .onFailure { exception ->
+                result.onSuccess { localId ->
+                    if (localId != 0L) {
+                        _notesStatus.value = "Notes $name created successfully"
+                        clearInputs()
+                    } else {
+                        _notesStatus.value = "Failed to save notes locally"
+                    }
+                }.onFailure { exception ->
                     _notesStatus.value = "Failed to create notes: ${exception.localizedMessage}"
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notesStatus.value = "Failed to create notes: ${e.localizedMessage}"
+            } finally {
+                _isCreatingNote.value = false
+            }
         }
     }
 
     fun updateNote(oldNote: NotesEntity) {
+        if (!beginNoteAction(oldNote.id)) return
         val updatedName = _notesName.value.trim()
         val updatedDescription = _description.value.trim()
 
         if (updatedName.isEmpty()) {
+            finishNoteAction(oldNote.id)
             _notesStatus.value = "Notes name cannot be empty"
             return
         }
 
         viewModelScope.launch {
-            val updatedNote = oldNote.copy(
-                notesName = updatedName,
-                description = updatedDescription
-            )
-            if (repo.updatetheNote(updatedNote)) {
-                _notesStatus.value = "Notes updated successfully"
-                clearInputs()
-            } else {
-                _notesStatus.value = SyncPolicy.REFUSED_MESSAGE
+            try {
+                val updatedNote = oldNote.copy(
+                    notesName = updatedName,
+                    description = updatedDescription
+                )
+                if (repo.updatetheNote(updatedNote)) {
+                    _notesStatus.value = "Notes updated successfully"
+                    clearInputs()
+                } else {
+                    _notesStatus.value = SyncPolicy.REFUSED_MESSAGE
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notesStatus.value = e.localizedMessage ?: SyncPolicy.REFUSED_MESSAGE
+            } finally {
+                finishNoteAction(oldNote.id)
             }
         }
     }
@@ -128,12 +152,31 @@ class NotesViewModel(
     }
 
     fun deleteNote(noteId: Int, name: String) {
+        if (!beginNoteAction(noteId)) return
         viewModelScope.launch {
-            _notesStatus.value = if (repo.deletenotestoscreen(noteId, name, loggedUserId, loggedWorkspaceId)) {
-                "Notes $name deleted"
-            } else {
-                SyncPolicy.REFUSED_MESSAGE
+            try {
+                _notesStatus.value = if (repo.deletenotestoscreen(noteId, name, loggedUserId, loggedWorkspaceId)) {
+                    "Notes $name deleted"
+                } else {
+                    SyncPolicy.REFUSED_MESSAGE
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notesStatus.value = e.localizedMessage ?: SyncPolicy.REFUSED_MESSAGE
+            } finally {
+                finishNoteAction(noteId)
             }
         }
+    }
+
+    private fun beginNoteAction(noteId: Int): Boolean {
+        if (noteId in _pendingNoteActionIds.value) return false
+        _pendingNoteActionIds.value = _pendingNoteActionIds.value + noteId
+        return true
+    }
+
+    private fun finishNoteAction(noteId: Int) {
+        _pendingNoteActionIds.value = _pendingNoteActionIds.value - noteId
     }
 }

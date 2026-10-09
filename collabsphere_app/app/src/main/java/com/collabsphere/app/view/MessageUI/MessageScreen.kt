@@ -109,6 +109,7 @@ fun MessageScreen(
     var reactionPickerFor by remember { mutableStateOf<MessageEntity?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val readStates by viewModel.readStates.collectAsStateWithLifecycle()
     var showPinnedDialog by remember { mutableStateOf(false) }
@@ -496,7 +497,7 @@ fun MessageScreen(
                         label = "sendScale"
                     )
 
-                    val canSend = messageContent.trim().isNotEmpty()
+                    val canSend = messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia
                     val sendAlpha = if (canSend) 1f else 0.70f
 
                     Box(

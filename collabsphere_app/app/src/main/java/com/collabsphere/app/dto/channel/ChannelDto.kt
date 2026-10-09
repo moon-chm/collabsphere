@@ -8,7 +8,8 @@ data class ChannelRequest(
     val userId: Int?,
     val channelName: String,
     val workspaceId: Int,
-    val description: String
+    val description: String,
+    val idempotencyKey: String? = null
 )
 @Serializable
 data class ChannelResponse(

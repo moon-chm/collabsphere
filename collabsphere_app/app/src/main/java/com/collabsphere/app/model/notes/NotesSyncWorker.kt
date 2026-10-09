@@ -29,7 +29,7 @@ class NotesSyncWorker(
         val userId = inputData.getInt("USER_ID", -1)
         val workspaceIdParam = inputData.getInt("WORKSPACE_ID", -1)
         val noteName = inputData.getString("NOTE_NAME") ?: ""
-        val rawNoteId = inputData.getInt("NOTE_ID", -1)
+        val rawNoteId = inputData.getInt("NOTE_ID", 0)
 
         if (userId == -1 || workspaceIdParam == -1) return@withContext Result.failure()
 
@@ -53,7 +53,7 @@ class NotesSyncWorker(
 
         try {
             if (actionType == "DELETE") {
-                if (noteId == -1) return@withContext Result.failure()
+                if (noteId == 0) return@withContext Result.failure()
                 val status = apiService.deleteNote(noteId)
                 return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
@@ -68,12 +68,12 @@ class NotesSyncWorker(
             )
 
             if (actionType == "UPDATE") {
-                if (noteId == -1) return@withContext Result.failure()
+                if (noteId == 0) return@withContext Result.failure()
                 apiService.updateNote(noteId, request)
             } else {
                 val remoteResponse = apiService.createNotes(request)
-                val tempNoteId = inputData.getInt("TEMPORARY_NOTE_ID", -1)
-                if (tempNoteId != -1 && tempNoteId != remoteResponse.id) {
+                val tempNoteId = inputData.getInt("TEMPORARY_NOTE_ID", 0)
+                if (tempNoteId != 0 && tempNoteId != remoteResponse.id) {
                     notesDao.updateNotesId(tempNoteId, remoteResponse.id)
                     dataStore.edit { it[intPreferencesKey("temp_note_$tempNoteId")] = remoteResponse.id }
                 }
@@ -81,6 +81,7 @@ class NotesSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("NotesSyncWorker", "Operation failed", e)
             return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
         }

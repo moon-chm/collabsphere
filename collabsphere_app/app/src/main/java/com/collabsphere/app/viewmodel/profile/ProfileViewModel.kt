@@ -151,13 +151,17 @@ class ProfileViewModel(
 
     fun onUpdateProfile() {
         val inputUsername = updatedUserName.value.trim()
-        val inputCurrentPassword = currentPassword.value.trim()
-        val inputNewPassword = newPassword.value.trim()
+        val inputCurrentPassword = currentPassword.value
+        val inputNewPassword = newPassword.value
         val inputBio = bio.value.trim()
         val inputStatus = statusMessage.value.trim()
 
-        if (inputUsername.isEmpty()) {
-            _profileStatus.value = "Username cannot be empty"
+        if (inputUsername.length !in 3..50) {
+            _profileStatus.value = "Username must be between 3 and 50 characters"
+            return
+        }
+        if (inputBio.length > 1000 || inputStatus.length > 255) {
+            _profileStatus.value = "Bio or status message is too long"
             return
         }
 
@@ -169,6 +173,14 @@ class ProfileViewModel(
                 if (changingPassword && (inputCurrentPassword.isEmpty() || inputNewPassword.isEmpty())) {
                     _profileStatus.value =
                         "Both current and new password fields are required to change password"
+                    return@launch
+                }
+                if (changingPassword && inputNewPassword.length < 6) {
+                    _profileStatus.value = "Password must be at least 6 characters"
+                    return@launch
+                }
+                if (changingPassword && inputNewPassword.toByteArray(Charsets.UTF_8).size > 72) {
+                    _profileStatus.value = "Password is too long"
                     return@launch
                 }
 
@@ -203,32 +215,48 @@ class ProfileViewModel(
     // ── Avatar ───────────────────────────────────────────────────────────────────
 
     fun onAvatarPicked(file: File) {
+        if (_isUploadingAvatar.value) return
+        _isUploadingAvatar.value = true
         viewModelScope.launch {
-            _isUploadingAvatar.value = true
-            repo.uploadAvatar(loggedInUserId, file)
-                .onSuccess { url ->
-                    _avatarUrl.value = url
-                    _profileStatus.value = "Profile picture updated"
+            try {
+                repo.uploadAvatar(loggedInUserId, file)
+                    .onSuccess { url ->
+                        _avatarUrl.value = url
+                        _profileStatus.value = "Profile picture updated"
+                    }
+                    .onFailure {
+                        _profileStatus.value = "Failed to upload photo: ${it.message}"
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _profileStatus.value = "Failed to upload photo: ${e.message}"
+            } finally {
+                _isUploadingAvatar.value = false
                 }
-                .onFailure {
-                    _profileStatus.value = "Failed to upload photo: ${it.message}"
-                }
-            _isUploadingAvatar.value = false
         }
     }
 
     fun onRemoveAvatar() {
+        if (_isUploadingAvatar.value) return
+        _isUploadingAvatar.value = true
         viewModelScope.launch {
-            _isUploadingAvatar.value = true
-            repo.removeAvatar(loggedInUserId)
-                .onSuccess { url ->
-                    _avatarUrl.value = url
-                    _profileStatus.value = "Profile picture removed"
+            try {
+                repo.removeAvatar(loggedInUserId)
+                    .onSuccess { url ->
+                        _avatarUrl.value = url
+                        _profileStatus.value = "Profile picture removed"
+                    }
+                    .onFailure {
+                        _profileStatus.value = "Failed to remove photo: ${it.message}"
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _profileStatus.value = "Failed to remove photo: ${e.message}"
+            } finally {
+                _isUploadingAvatar.value = false
                 }
-                .onFailure {
-                    _profileStatus.value = "Failed to remove photo: ${it.message}"
-                }
-            _isUploadingAvatar.value = false
         }
     }
 
@@ -254,9 +282,13 @@ class ProfileViewModel(
 
     fun onSubmitEmailChange() {
         val newEmailValue = _newEmail.value.trim()
-        val passwordValue = _emailChangePassword.value.trim()
+        val passwordValue = _emailChangePassword.value
         if (newEmailValue.isEmpty() || passwordValue.isEmpty()) {
             _profileStatus.value = "Enter your new email and current password"
+            return
+        }
+        if (newEmailValue.length > 255 || !EMAIL_REGEX.matches(newEmailValue)) {
+            _profileStatus.value = "Enter a valid email address"
             return
         }
         viewModelScope.launch {
@@ -328,23 +360,31 @@ class ProfileViewModel(
     }
 
     fun onConfirmDeleteAccount(onDeleted: () -> Unit) {
-        val password = _deleteAccountPassword.value.trim()
-        if (password.isEmpty()) {
+        if (_isDeletingAccount.value) return
+        val password = _deleteAccountPassword.value
+        if (password.isBlank()) {
             _profileStatus.value = "Enter your password to confirm"
             return
         }
+        _isDeletingAccount.value = true
         viewModelScope.launch {
-            _isDeletingAccount.value = true
-            repo.deleteAccountRemote(password)
-                .onSuccess {
-                    _showDeleteDialog.value = false
-                    sessionManager.logout()
-                    onDeleted()
-                }
-                .onFailure {
-                    _profileStatus.value = it.message ?: "Failed to delete account"
-                }
-            _isDeletingAccount.value = false
+            try {
+                repo.deleteAccountRemote(password)
+                    .onSuccess {
+                        _showDeleteDialog.value = false
+                        sessionManager.logout()
+                        onDeleted()
+                    }
+                    .onFailure {
+                        _profileStatus.value = it.message ?: "Failed to delete account"
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _profileStatus.value = e.localizedMessage ?: "Failed to delete account"
+            } finally {
+                _isDeletingAccount.value = false
+            }
         }
     }
 
@@ -384,5 +424,9 @@ class ProfileViewModel(
             sessionManager.logout()
             onLogoutComplete()
         }
+    }
+
+    private companion object {
+        val EMAIL_REGEX = Regex("^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$")
     }
 }

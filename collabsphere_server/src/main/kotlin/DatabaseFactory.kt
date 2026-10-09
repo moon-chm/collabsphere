@@ -126,6 +126,25 @@ object DatabaseFactory {
                 e
             )
         }
+        // A requested-but-unverified address must also be unique; otherwise two accounts can both
+        // pass the application-level availability check and one will fail only at verification.
+        try {
+            transaction(writeDatabase) {
+                exec(
+                    "UPDATE users AS u SET pending_email = NULL " +
+                        "WHERE u.pending_email IS NOT NULL AND EXISTS (" +
+                        "SELECT 1 FROM users AS prior WHERE lower(prior.pending_email) = lower(u.pending_email) " +
+                        "AND prior.id < u.id)"
+                )
+                exec(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS users_pending_email_lower_unique " +
+                        "ON users (lower(pending_email)) WHERE pending_email IS NOT NULL"
+                )
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            logger.error("[DatabaseFactory] Could not create unique index on lower(users.pending_email)", e)
+        }
         initialized = true
     }
 

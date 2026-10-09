@@ -3,7 +3,6 @@ package com.collabsphere.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.collabsphere.app.model.UserRepo
-import android.util.Patterns
 import com.collabsphere.app.SessionManager
 import com.collabsphere.app.UserPreferences
 import io.ktor.client.plugins.HttpRequestTimeoutException
@@ -11,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -20,6 +20,9 @@ class LoginViewModel(
     private val userPreferences: UserPreferences,
     private val sessionManager: SessionManager
 ) : ViewModel() {
+
+    private val emailRegex = Regex("^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$")
+    private fun isValidEmail(email: String) = email.length <= 255 && emailRegex.matches(email)
 
     private val _loginStatus = MutableStateFlow<String?>(null)
     val loginStatus: StateFlow<String?> = _loginStatus.asStateFlow()
@@ -63,6 +66,12 @@ class LoginViewModel(
     private val _isLoadingEmail = MutableStateFlow(false)
     val isLoadingEmail: StateFlow<Boolean> = _isLoadingEmail.asStateFlow()
 
+    private val _isLoadingLogin = MutableStateFlow(false)
+    val isLoadingLogin: StateFlow<Boolean> = _isLoadingLogin.asStateFlow()
+
+    private val _isVerifyingRegistration = MutableStateFlow(false)
+    val isVerifyingRegistration: StateFlow<Boolean> = _isVerifyingRegistration.asStateFlow()
+
     init {
         viewModelScope.launch {
             val savedId = userPreferences.userIdFlow.first()
@@ -86,21 +95,25 @@ class LoginViewModel(
 
     fun onLoginClick(inputEmail: String, inputPassword: String) {
         val trimmedEmail = inputEmail.trim()
-        val trimmedPassword = inputPassword.trim()
+        val password = inputPassword
 
-        if (trimmedEmail.isEmpty() || trimmedPassword.isEmpty()) {
+        if (trimmedEmail.isEmpty() || password.isBlank()) {
             _loginStatus.value = "Please fill all fields"
             return
         }
 
-        if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+        if (!isValidEmail(trimmedEmail)) {
             _loginStatus.value = "Please enter a valid email address"
             return
         }
 
+        if (_isLoadingLogin.value) return
+        _isLoadingLogin.value = true
         viewModelScope.launch {
-            repo.loginRemote(trimmedEmail, trimmedPassword)
+            try {
+                repo.loginRemote(trimmedEmail, password)
                 .onSuccess { user ->
+                    sessionManager.prepareForAuthenticatedUser(user.id)
                     userPreferences.saveUserSession(user.id, user.userName, user.email)
                     _loggedInUserId.value = user.id.toLong()
                     _loggedInUserName.value = user.userName
@@ -125,40 +138,53 @@ class LoginViewModel(
                         _loginStatus.value = errorMessage
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _loginStatus.value = error.message ?: "Login failed. Please try again."
+            } finally {
+                _isLoadingLogin.value = false
+            }
         }
     }
 
     fun onRegisterClick(inputEmail: String, inputUserName: String, inputPassword: String) {
         val trimmedEmail = inputEmail.trim()
         val trimmedUserName = inputUserName.trim()
-        val trimmedPassword = inputPassword.trim()
+        val password = inputPassword
 
-        if (trimmedEmail.isEmpty() || trimmedUserName.isEmpty() || trimmedPassword.isEmpty()) {
+        if (trimmedEmail.isEmpty() || trimmedUserName.isEmpty() || password.isBlank()) {
             _loginStatus.value = "Fields cannot be empty"
             return
         }
 
-        if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+        if (!isValidEmail(trimmedEmail)) {
             _loginStatus.value = "Please enter a valid email address"
             return
         }
 
-        if (trimmedUserName.length < 3) {
-            _loginStatus.value = "Username must be at least 3 characters"
+        if (trimmedUserName.length !in 3..50) {
+            _loginStatus.value = "Username must be between 3 and 50 characters"
             return
         }
 
-        if (trimmedPassword.length < 6) {
+        if (password.length < 6) {
             _loginStatus.value = "Password must be at least 6 characters"
             return
         }
+        if (password.toByteArray(Charsets.UTF_8).size > 72) {
+            _loginStatus.value = "Password is too long"
+            return
+        }
+        if (_isLoadingEmail.value) return
+        _isLoadingEmail.value = true
 
         viewModelScope.launch {
-            _isLoadingEmail.value = true
-            repo.registerRemote(trimmedEmail, trimmedUserName, trimmedPassword)
+            try {
+            repo.registerRemote(trimmedEmail, trimmedUserName, password)
                 .onSuccess { registerResponse ->
                     _registrationSuccessEmail.value = registerResponse.email
-                    _loginStatus.value = "Account created! Please enter the 6-digit code sent to your email."
+                    _loginStatus.value = registerResponse.message
                 }
                 .onFailure { err ->
                     val errorMessage = when (err) {
@@ -169,19 +195,28 @@ class LoginViewModel(
                     }
                     _loginStatus.value = errorMessage
                 }
-            _isLoadingEmail.value = false
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _loginStatus.value = error.message ?: "Registration failed"
+            } finally {
+                _isLoadingEmail.value = false
+            }
         }
     }
 
     fun onVerifyRegistration(email: String, otp: String) {
         val trimmedEmail = email.trim()
         val trimmedOtp = otp.trim()
-        if (trimmedOtp.length != 6) {
+        if (!isValidEmail(trimmedEmail) || !trimmedOtp.matches(Regex("^\\d{6}$"))) {
             _verificationStatus.value = "Please enter the complete 6-digit code"
             return
         }
+        if (_isVerifyingRegistration.value) return
+        _isVerifyingRegistration.value = true
 
         viewModelScope.launch {
+            try {
             repo.verifyRegistration(trimmedEmail, trimmedOtp)
                 .onSuccess { msg ->
                     _verificationStatus.value = msg
@@ -191,15 +226,23 @@ class LoginViewModel(
                 .onFailure { err ->
                     _verificationStatus.value = err.message ?: "Verification failed"
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _verificationStatus.value = error.message ?: "Verification failed"
+            } finally {
+                _isVerifyingRegistration.value = false
+            }
         }
     }
 
     fun onResendVerification(email: String) {
         val trimmedEmail = email.trim()
-        if (trimmedEmail.isEmpty()) return
+        if (!isValidEmail(trimmedEmail) || _isLoadingEmail.value) return
+        _isLoadingEmail.value = true
 
         viewModelScope.launch {
-            _isLoadingEmail.value = true
+            try {
             repo.resendVerification(trimmedEmail)
                 .onSuccess { msg ->
                     _verificationStatus.value = msg
@@ -207,19 +250,27 @@ class LoginViewModel(
                 .onFailure { err ->
                     _verificationStatus.value = err.message ?: "Failed to resend code"
                 }
-            _isLoadingEmail.value = false
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _verificationStatus.value = error.message ?: "Failed to resend code"
+            } finally {
+                _isLoadingEmail.value = false
+            }
         }
     }
 
     fun onForgotPasswordRequest(email: String) {
         val trimmedEmail = email.trim()
-        if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+        if (!isValidEmail(trimmedEmail)) {
             _forgotPasswordStatus.value = "Please enter a valid email address"
             return
         }
+        if (_isLoadingEmail.value) return
+        _isLoadingEmail.value = true
 
         viewModelScope.launch {
-            _isLoadingEmail.value = true
+            try {
             repo.forgotPassword(trimmedEmail)
                 .onSuccess { msg ->
                     _forgotPasswordStatus.value = msg
@@ -228,30 +279,43 @@ class LoginViewModel(
                 .onFailure { err ->
                     _forgotPasswordStatus.value = err.message ?: "Failed to request password reset"
                 }
-            _isLoadingEmail.value = false
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _forgotPasswordStatus.value = error.message ?: "Failed to request password reset"
+            } finally {
+                _isLoadingEmail.value = false
+            }
         }
     }
 
     fun onResetPasswordSubmit(email: String, otp: String, newPass: String, confirmPass: String) {
         val trimmedEmail = email.trim()
         val trimmedOtp = otp.trim()
-        val trimmedPass = newPass.trim()
+        val password = newPass
 
-        if (trimmedOtp.length != 6) {
+        if (!isValidEmail(trimmedEmail) || !trimmedOtp.matches(Regex("^\\d{6}$"))) {
             _forgotPasswordStatus.value = "Please enter the 6-digit code"
             return
         }
-        if (trimmedPass.length < 6) {
+        if (password.length < 6) {
             _forgotPasswordStatus.value = "Password must be at least 6 characters"
             return
         }
-        if (trimmedPass != confirmPass.trim()) {
+        if (password.toByteArray(Charsets.UTF_8).size > 72) {
+            _forgotPasswordStatus.value = "Password is too long"
+            return
+        }
+        if (password != confirmPass) {
             _forgotPasswordStatus.value = "Passwords do not match"
             return
         }
 
+        if (_isLoadingEmail.value) return
+        _isLoadingEmail.value = true
         viewModelScope.launch {
-            repo.resetPassword(trimmedEmail, trimmedOtp, trimmedPass)
+            try {
+            repo.resetPassword(trimmedEmail, trimmedOtp, password)
                 .onSuccess { msg ->
                     _forgotPasswordStatus.value = msg
                     _isResetPasswordSuccess.value = true
@@ -259,6 +323,13 @@ class LoginViewModel(
                 .onFailure { err ->
                     _forgotPasswordStatus.value = err.message ?: "Password reset failed"
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _forgotPasswordStatus.value = error.message ?: "Password reset failed"
+            } finally {
+                _isLoadingEmail.value = false
+            }
         }
     }
 

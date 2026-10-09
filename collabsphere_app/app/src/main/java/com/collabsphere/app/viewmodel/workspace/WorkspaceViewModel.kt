@@ -76,8 +76,10 @@ class WorkspaceViewModel(
             return
         }
 
+        // Claim the in-flight slot before launching. Otherwise two taps in the same main-loop
+        // turn can both observe false and dispatch duplicate create requests.
+        _isCreatingWorkspace.value = true
         viewModelScope.launch {
-            _isCreatingWorkspace.value = true
             try {
                 val result = repo.addWorkspaceToScreen(
                     WorkspaceEntity(
@@ -110,6 +112,12 @@ class WorkspaceViewModel(
     private val _joinByCodeStatus = MutableStateFlow<String?>(null)
     val joinByCodeStatus: StateFlow<String?> = _joinByCodeStatus.asStateFlow()
 
+    private val _isJoiningByCode = MutableStateFlow(false)
+    val isJoiningByCode: StateFlow<Boolean> = _isJoiningByCode.asStateFlow()
+
+    private val _pendingInvitationIds = MutableStateFlow<Set<Int>>(emptySet())
+    val pendingInvitationIds: StateFlow<Set<Int>> = _pendingInvitationIds.asStateFlow()
+
     private val _isSendingInvitation = MutableStateFlow(false)
     val isSendingInvitation: StateFlow<Boolean> = _isSendingInvitation.asStateFlow()
 
@@ -124,21 +132,30 @@ class WorkspaceViewModel(
             _invitationStatus.value = "Email address cannot be empty"
             return
         }
+        if (_isSendingInvitation.value) return
 
+        _isSendingInvitation.value = true
         viewModelScope.launch {
-            _isSendingInvitation.value = true
-            val result = repo.sendInvitation(workspaceId, trimmedEmail)
-            result.onSuccess {
-                _invitationStatus.value = "Invitation sent to $trimmedEmail with invite code: ${it.inviteCode}"
-                _workspaceStatus.value = "Invitation sent to $trimmedEmail"
-                clearInputs()
-                loadWorkspaceMembers(workspaceId)
+            try {
+                val result = repo.sendInvitation(workspaceId, trimmedEmail)
+                result.onSuccess {
+                    _invitationStatus.value = "Invitation sent to $trimmedEmail with invite code: ${it.inviteCode}"
+                    _workspaceStatus.value = "Invitation sent to $trimmedEmail"
+                    clearInputs()
+                    loadWorkspaceMembers(workspaceId)
+                }
+                result.onFailure {
+                    _invitationStatus.value = it.localizedMessage ?: "Failed to send invitation"
+                    _workspaceStatus.value = it.localizedMessage ?: "Failed to send invitation"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _invitationStatus.value = e.localizedMessage ?: "Failed to send invitation"
+                _workspaceStatus.value = e.localizedMessage ?: "Failed to send invitation"
+            } finally {
+                _isSendingInvitation.value = false
             }
-            result.onFailure {
-                _invitationStatus.value = it.localizedMessage ?: "Failed to send invitation"
-                _workspaceStatus.value = it.localizedMessage ?: "Failed to send invitation"
-            }
-            _isSendingInvitation.value = false
         }
     }
 
@@ -148,44 +165,82 @@ class WorkspaceViewModel(
             _joinByCodeStatus.value = "Please enter a valid 6-character invite code"
             return
         }
+        if (_isJoiningByCode.value) return
 
+        _isJoiningByCode.value = true
         viewModelScope.launch {
-            val result = repo.joinWorkspaceByCode(trimmedCode, loggedInUserId)
-            result.onSuccess { member ->
-                _joinByCodeStatus.value = "Successfully joined workspace!"
-                _workspaceStatus.value = "Successfully joined workspace!"
-                onJoined?.invoke(member.workspaceId)
-            }
-            result.onFailure {
-                _joinByCodeStatus.value = it.localizedMessage ?: "Invalid or expired invite code"
+            try {
+                val result = repo.joinWorkspaceByCode(trimmedCode, loggedInUserId)
+                result.onSuccess { member ->
+                    _joinByCodeStatus.value = "Successfully joined workspace!"
+                    _workspaceStatus.value = "Successfully joined workspace!"
+                    onJoined?.invoke(member.workspaceId)
+                }
+                result.onFailure {
+                    _joinByCodeStatus.value = it.localizedMessage ?: "Invalid or expired invite code"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _joinByCodeStatus.value = e.localizedMessage ?: "Invalid or expired invite code"
+            } finally {
+                _isJoiningByCode.value = false
             }
         }
     }
 
     fun acceptInvitation(invitationId: Int, onComplete: (() -> Unit)? = null) {
+        if (!beginInvitationAction(invitationId)) return
         viewModelScope.launch {
-            val result = repo.acceptInvitation(invitationId)
-            result.onSuccess {
-                _workspaceStatus.value = "Joined workspace!"
-                onComplete?.invoke()
-            }
-            result.onFailure {
-                _workspaceStatus.value = it.localizedMessage ?: "Failed to accept invitation"
+            try {
+                val result = repo.acceptInvitation(invitationId)
+                result.onSuccess {
+                    _workspaceStatus.value = "Joined workspace!"
+                    onComplete?.invoke()
+                }
+                result.onFailure {
+                    _workspaceStatus.value = it.localizedMessage ?: "Failed to accept invitation"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _workspaceStatus.value = e.localizedMessage ?: "Failed to accept invitation"
+            } finally {
+                finishInvitationAction(invitationId)
             }
         }
     }
 
     fun declineInvitation(invitationId: Int, onComplete: (() -> Unit)? = null) {
+        if (!beginInvitationAction(invitationId)) return
         viewModelScope.launch {
-            val result = repo.declineInvitation(invitationId)
-            result.onSuccess {
-                _workspaceStatus.value = "Invitation declined"
-                onComplete?.invoke()
-            }
-            result.onFailure {
-                _workspaceStatus.value = it.localizedMessage ?: "Failed to decline invitation"
+            try {
+                val result = repo.declineInvitation(invitationId)
+                result.onSuccess {
+                    _workspaceStatus.value = "Invitation declined"
+                    onComplete?.invoke()
+                }
+                result.onFailure {
+                    _workspaceStatus.value = it.localizedMessage ?: "Failed to decline invitation"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _workspaceStatus.value = e.localizedMessage ?: "Failed to decline invitation"
+            } finally {
+                finishInvitationAction(invitationId)
             }
         }
+    }
+
+    private fun beginInvitationAction(invitationId: Int): Boolean {
+        if (invitationId <= 0 || invitationId in _pendingInvitationIds.value) return false
+        _pendingInvitationIds.value = _pendingInvitationIds.value + invitationId
+        return true
+    }
+
+    private fun finishInvitationAction(invitationId: Int) {
+        _pendingInvitationIds.value = _pendingInvitationIds.value - invitationId
     }
 
     fun clearInvitationStatus() {
@@ -210,8 +265,10 @@ class WorkspaceViewModel(
         }
         if (_isDeletingWorkspace.value) return
 
+        // Claim before launch for the same reason as create: a fast repeated confirmation must
+        // not pass the guard twice before the coroutine scheduler starts the first request.
+        _isDeletingWorkspace.value = true
         viewModelScope.launch {
-            _isDeletingWorkspace.value = true
             try {
                 val rowsDeleted = repo.deleteWorkspaceFromScreen(
                     workspaceId,

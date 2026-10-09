@@ -11,6 +11,8 @@ object UsersTable : Table("users") {
 
     // Profile enrichment fields
     val avatarUrl = varchar("avatar_url", 500).nullable()
+    // Distinct IDs let failed profile writes clean up only the newly uploaded object while preserving the old avatar.
+    val avatarPublicId = varchar("avatar_public_id", 255).nullable()
     val bio = text("bio").nullable()
     val statusMessage = varchar("status_message", 255).nullable()
     val isEmailVerified = bool("is_email_verified").default(false)
@@ -112,6 +114,8 @@ object ChannelsTable : Table("channels") {
     val channelName = varchar("channel_name", 255)
     val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
     val description = text("description")
+    // Nullable so old Android clients remain compatible; retries from current clients reuse a UUID.
+    val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
@@ -139,6 +143,10 @@ object LocalFilesTable : Table("local_files") {
     // The "<uuid>_<name>" segment that /api/file/download/{name} is addressed by — looked up by
     // equality instead of a `url LIKE '%/name'` scan. Backfilled from `url` for older rows.
     val storageKey = varchar("storage_key", 300).nullable().index()
+    // Stable retry identity plus a content fingerprint prevents a lost upload response from
+    // creating another row/object when the same multipart operation is replayed.
+    val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
+    val contentHash = varchar("content_hash", 64).nullable()
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
@@ -164,6 +172,9 @@ object MessageTable : Table("message") {
     val pinnedAt = long("pinned_at").nullable()
     val pinnedByUserId = integer("pinned_by_user_id").nullable()
     val status = varchar("status", 50)
+    // Stable client operation identity lets an offline retry recover a create whose first response
+    // was lost without creating another message. Nullable keeps older clients compatible.
+    val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
@@ -297,8 +308,10 @@ object UserBlocksTable : Table("user_blocks") {
 object UserVerificationTable : Table("user_verification") {
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).uniqueIndex()
     val token = varchar("token", 255)
+    val targetEmail = varchar("target_email", 255).nullable()
     val expiresAt = long("expires_at")
     val attempts = integer("attempts").default(0)
+    val consumed = bool("consumed").default(false)
 
     override val primaryKey = PrimaryKey(userId)
 }
@@ -355,6 +368,7 @@ object PasswordResetTable : Table("password_resets") {
     val otp = varchar("otp", 10)
     val expiresAt = long("expires_at")
     val attempts = integer("attempts").default(0)
+    val consumed = bool("consumed").default(false)
 
     override val primaryKey = PrimaryKey(email)
 }

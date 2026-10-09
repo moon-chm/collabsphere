@@ -13,7 +13,8 @@ data class MessageRequest(
     val status: String,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val idempotencyKey: String? = null
 )
 
 @Serializable

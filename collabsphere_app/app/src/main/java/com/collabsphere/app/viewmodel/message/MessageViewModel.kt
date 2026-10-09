@@ -286,12 +286,14 @@ class MessageViewModel(
 
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia = _isUploadingMedia.asStateFlow()
+    private val _isSendingMessage = MutableStateFlow(false)
+    val isSendingMessage = _isSendingMessage.asStateFlow()
 
     private val _uiMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val uiMessages = _uiMessages.asSharedFlow()
 
     fun onSendMedia(fileBytes: ByteArray, mimeType: String, fileName: String) {
-        if (_isUploadingMedia.value) return
+        if (_isUploadingMedia.value || _isSendingMessage.value) return
         if (fileBytes.size > MAX_MEDIA_BYTES) {
             _uiMessages.tryEmit("Images must be 10 MB or smaller.")
             return
@@ -300,29 +302,33 @@ class MessageViewModel(
         val caption = _messageContent.value.trim()
         val replyToId = _replyingTo.value?.id?.takeIf { it > 0 }
         viewModelScope.launch {
-            val message = MessageEntity(
-                userId = loggedUserId,
-                workspaceId = loggedWorkspaceId,
-                channelId = loggedChannelId,
-                userName = loggedUserName,
-                content = caption,
-                status = MessageStatus.Delivered,
-                replyToId = replyToId
-            )
-            repo.sendMediaMessage(message, fileBytes, mimeType, fileName)
-                .onSuccess {
-                    if (_messageContent.value.trim() == caption) {
-                        _messageContent.value = ""
-                        updateTypingState(false)
+            try {
+                val message = MessageEntity(
+                    userId = loggedUserId,
+                    workspaceId = loggedWorkspaceId,
+                    channelId = loggedChannelId,
+                    userName = loggedUserName,
+                    content = caption,
+                    status = MessageStatus.Delivered,
+                    replyToId = replyToId
+                )
+                repo.sendMediaMessage(message, fileBytes, mimeType, fileName)
+                    .onSuccess {
+                        if (_messageContent.value.trim() == caption) {
+                            _messageContent.value = ""
+                            updateTypingState(false)
+                        }
+                        if (_replyingTo.value?.id == replyToId) {
+                            _replyingTo.value = null
+                        }
                     }
-                    if (_replyingTo.value?.id == replyToId) {
-                        _replyingTo.value = null
+                    .onFailure { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        _uiMessages.tryEmit("Couldn't upload the image. Check your connection and try again.")
                     }
-                }
-                .onFailure {
-                    _uiMessages.tryEmit("Couldn't upload the image. Check your connection and try again.")
-                }
-            _isUploadingMedia.value = false
+            } finally {
+                _isUploadingMedia.value = false
+            }
         }
     }
 
@@ -338,24 +344,30 @@ class MessageViewModel(
     }
 
     fun onSendMessageUser() {
+        if (_isSendingMessage.value || _isUploadingMedia.value) return
         val content = _messageContent.value.trim()
 
         if (content.isEmpty()) return
+        _isSendingMessage.value = true
         updateTypingState(false)
 
         viewModelScope.launch {
-            val message = MessageEntity(
-                userId = loggedUserId,
-                workspaceId = loggedWorkspaceId,
-                channelId = loggedChannelId,
-                userName = loggedUserName,
-                content = content,
-                status = MessageStatus.Delivered,
-                replyToId = _replyingTo.value?.id?.takeIf { it > 0 }
-            )
-            _replyingTo.value = null
-            repo.sendMessageToUser(message)
-            _messageContent.value = ""
+            try {
+                val message = MessageEntity(
+                    userId = loggedUserId,
+                    workspaceId = loggedWorkspaceId,
+                    channelId = loggedChannelId,
+                    userName = loggedUserName,
+                    content = content,
+                    status = MessageStatus.Delivered,
+                    replyToId = _replyingTo.value?.id?.takeIf { it > 0 }
+                )
+                repo.sendMessageToUser(message)
+                if (_messageContent.value.trim() == content) _messageContent.value = ""
+                if (_replyingTo.value?.id == message.replyToId) _replyingTo.value = null
+            } finally {
+                _isSendingMessage.value = false
+            }
         }
     }
 

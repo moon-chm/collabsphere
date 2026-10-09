@@ -54,14 +54,15 @@ fun RegistrationScreen(
     val registrationSuccessEmail by viewModel.registrationSuccessEmail.collectAsStateWithLifecycle()
     val verificationStatus by viewModel.verificationStatus.collectAsStateWithLifecycle()
     val isVerificationSuccess by viewModel.isVerificationSuccess.collectAsStateWithLifecycle()
+    val isVerifyingRegistration by viewModel.isVerifyingRegistration.collectAsStateWithLifecycle()
 
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var otpCode by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
     val isLoadingEmail by viewModel.isLoadingEmail.collectAsStateWithLifecycle()
+    val isLoading = isLoadingEmail || isVerifyingRegistration
     var lastClickTime by remember { mutableStateOf(0L) }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
 
@@ -72,7 +73,6 @@ fun RegistrationScreen(
 
     LaunchedEffect(loginStatus) {
         loginStatus?.let {
-            isLoading = false
             AppToast.show(it)
             viewModel.clearLoginStatus()
         }
@@ -80,7 +80,6 @@ fun RegistrationScreen(
 
     LaunchedEffect(verificationStatus) {
         verificationStatus?.let {
-            isLoading = false
             AppToast.show(it)
             viewModel.clearVerificationStatus()
         }
@@ -88,7 +87,6 @@ fun RegistrationScreen(
 
     LaunchedEffect(isVerificationSuccess) {
         if (isVerificationSuccess) {
-            isLoading = false
             AppToast.show("Account verified! You can now log in.", long = true)
             viewModel.resetVerificationSuccess()
             viewModel.clearRegistrationEmail()
@@ -101,7 +99,6 @@ fun RegistrationScreen(
         val currentTime = System.currentTimeMillis()
         if (isFormValid && currentTime - lastClickTime > 500L) {
             lastClickTime = currentTime
-            isLoading = true
             focusManager.clearFocus()
             viewModel.onRegisterClick(email, username, password)
         }
@@ -112,7 +109,6 @@ fun RegistrationScreen(
         val targetEmail = registrationSuccessEmail ?: email
         if (otpCode.trim().length == 6 && currentTime - lastClickTime > 500L) {
             lastClickTime = currentTime
-            isLoading = true
             focusManager.clearFocus()
             viewModel.onVerifyRegistration(targetEmail, otpCode.trim())
         } else if (otpCode.trim().length != 6) {

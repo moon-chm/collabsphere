@@ -314,9 +314,11 @@ fun AppNavigation(
             composable("notifications") {
                 val workspaceViewModel: WorkspaceViewModel =
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
+                val pendingInvitationIds by workspaceViewModel.pendingInvitationIds.collectAsStateWithLifecycle()
 
                 NotificationsScreen(
                     viewModel = notificationsViewModel,
+                    pendingInvitationIds = pendingInvitationIds,
                     onBack = { navController.popBackStack() },
                     onNotificationClick = { notification ->
                         val workspaceId = notification.workspaceId

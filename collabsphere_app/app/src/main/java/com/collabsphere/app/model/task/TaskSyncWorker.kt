@@ -26,9 +26,9 @@ class TaskSyncWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val actionType = inputData.getString("ACTION_TYPE") ?: "CREATE"
-        val rawTaskId = inputData.getInt("TASK_ID", -1)
+        val rawTaskId = inputData.getInt("TASK_ID", 0)
 
-        if (rawTaskId == -1) return@withContext Result.failure()
+        if (rawTaskId == 0) return@withContext Result.failure()
 
         // An UPDATE/DELETE enqueued before this task's own CREATE resolved still carries the
         // frozen temp id in its inputData — resolve it via the same temp-id mapping the CREATE
@@ -36,7 +36,12 @@ class TaskSyncWorker(
         val taskId = if (rawTaskId < 0 && actionType != "CREATE") {
             val mappingKey = intPreferencesKey("temp_task_$rawTaskId")
             val resolved = dataStore.data.map { it[mappingKey] }.first()
-            resolved ?: return@withContext Result.retry()
+            when {
+                resolved == null -> return@withContext Result.retry()
+                resolved == 0 && actionType == "DELETE" -> return@withContext Result.success()
+                resolved == 0 -> return@withContext Result.failure()
+                else -> resolved
+            }
         } else {
             rawTaskId
         }
@@ -49,12 +54,12 @@ class TaskSyncWorker(
 
             val createdByUserId = inputData.getInt("CREATED_BY_USER_ID", -1)
             val assignedToUserId = inputData.getInt("ASSIGNED_TO_USER_ID", -1)
-            val workspaceIdParam = inputData.getInt("WORKSPACE_ID", -1)
+            val workspaceIdParam = inputData.getInt("WORKSPACE_ID", 0)
             val taskName = inputData.getString("TASK_NAME") ?: ""
             val taskDescription = inputData.getString("TASK_DESCRIPTION") ?: ""
             val status = inputData.getString("STATUS") ?: TaskStatus.TO_DO.name
 
-            if (workspaceIdParam == -1) return@withContext Result.failure()
+            if (workspaceIdParam == 0) return@withContext Result.failure()
 
             val workspaceId = if (workspaceIdParam < 0) {
                 val mappingKey = intPreferencesKey("temp_ws_$workspaceIdParam")
@@ -82,14 +87,27 @@ class TaskSyncWorker(
                 val remoteResponse = apiService.createTask(createdByUserId, request)
                 if (taskId != remoteResponse.id) {
                     taskDao.updateTaskId(taskId, remoteResponse.id)
-                    dataStore.edit { it[intPreferencesKey("temp_task_$taskId")] = remoteResponse.id }
+                    dataStore.edit {
+                        it[intPreferencesKey("temp_task_$taskId")] = remoteResponse.id
+                        it[intPreferencesKey("task_queue_key_${remoteResponse.id}")] = taskId
+                    }
                 }
             }
             return@withContext Result.success()
 
         } catch (e: Exception) {
             Log.e("TaskSyncWorker", "Operation failed", e)
-            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            val decision = SyncPolicy.forFailure(e, isDelete = actionType == "DELETE")
+            if (actionType == "CREATE" && rawTaskId < 0 && decision == com.collabsphere.app.model.SyncDecision.DROP) {
+                try {
+                    dataStore.edit { it[intPreferencesKey("temp_task_$rawTaskId")] = 0 }
+                } catch (mappingError: Exception) {
+                    Log.e("TaskSyncWorker", "Could not persist rejected task mapping", mappingError)
+                    return@withContext Result.retry()
+                }
+            }
+            return@withContext SyncPolicy.toWorkResult(decision)
         }
     }
 }

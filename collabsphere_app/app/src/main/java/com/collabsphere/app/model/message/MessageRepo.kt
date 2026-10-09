@@ -9,12 +9,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.*
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.MessageSyncDto
 import com.collabsphere.app.model.RetryOutcome
 import com.collabsphere.app.model.TempId
 import com.collabsphere.app.model.isWorkRunning
+import com.collabsphere.app.model.BackgroundSyncRegistry
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.message.ChannelReactionSummary
 import com.collabsphere.app.dto.message.ChannelReadState
@@ -30,6 +32,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
 import com.collabsphere.app.model.SyncPosition
@@ -56,7 +59,7 @@ class MessageRepo(
     // second independent 3s poller against the same endpoint.
     private val activeSyncLoops = java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, kotlinx.coroutines.Job>()
 
-    private fun MessageEntity.toCreateRequest() = MessageRequest(
+    private fun MessageEntity.toCreateRequest(idempotencyKey: String? = null) = MessageRequest(
         id = id,
         userId = userId,
         workspaceId = workspaceId,
@@ -65,10 +68,11 @@ class MessageRepo(
         content = content,
         status = status.name,
         replyToId = replyToId,
-        mediaUrl = mediaUrl
+        mediaUrl = mediaUrl,
+        idempotencyKey = idempotencyKey
     )
 
-    private fun MessageEntity.toCreateWorkData(localId: Int) = workDataOf(
+    private fun MessageEntity.toCreateWorkData(localId: Int, idempotencyKey: String) = workDataOf(
         "ACTION_TYPE" to "CREATE",
         "REPLY_TO_ID" to (replyToId ?: 0),
         "MEDIA_URL" to mediaUrl,
@@ -78,20 +82,24 @@ class MessageRepo(
         "CHANNEL_ID" to channelId,
         "USER_NAME" to userName,
         "CONTENT" to content,
-        "STATUS" to status.name
+        "STATUS" to status.name,
+        "IDEMPOTENCY_KEY" to idempotencyKey
     )
 
     suspend fun sendMessageToUser(message: MessageEntity): Long = withContext(Dispatchers.IO) {
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
-            val remoteMessage = apiService.createMessage(message.toCreateRequest())
+            val remoteMessage = apiService.createMessage(message.toCreateRequest(idempotencyKey))
             val updatedMessage = message.copy(id = remoteMessage.id)
             messageDao.sendMessage(updatedMessage)
         } catch (e: Exception) {
             Log.e("MessageRepo", "Operation failed", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
             // id == 0, so a positive fallback here could collide with a real id synced down later.
             val localId = messageDao.sendMessage(message.copy(id = TempId.next()))
-            enqueueSync(message.toCreateWorkData(localId.toInt()))
+            dataStore.edit { it[stringPreferencesKey("message_idempotency_$localId")] = idempotencyKey }
+            enqueueSync(message.toCreateWorkData(localId.toInt(), idempotencyKey))
             localId
         }
     }
@@ -101,13 +109,20 @@ class MessageRepo(
         val workName = "MESSAGE_SYNC_${message.id}"
         if (isWorkRunning(workManager, workName)) return@withContext RetryOutcome.ALREADY_SENDING
         workManager.cancelUniqueWork(workName)
+        val keyPreference = stringPreferencesKey("message_idempotency_${message.id}")
+        val idempotencyKey = dataStore.data.map { it[keyPreference] }.first()
+            ?: java.util.UUID.randomUUID().toString().also { generated ->
+                dataStore.edit { it[keyPreference] = generated }
+            }
         try {
-            val remote = apiService.createMessage(message.toCreateRequest())
+            val remote = apiService.createMessage(message.toCreateRequest(idempotencyKey))
             messageDao.replaceTempId(message.id, remote.id)
+            dataStore.edit { it.remove(keyPreference) }
             RetryOutcome.SENT
         } catch (e: Exception) {
             Log.e("MessageRepo", "Manual retry failed", e)
-            enqueueSync(message.toCreateWorkData(message.id))
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            enqueueSync(message.toCreateWorkData(message.id, idempotencyKey))
             RetryOutcome.STILL_OFFLINE
         }
     }
@@ -131,6 +146,7 @@ class MessageRepo(
                 }
             } catch (e: Exception) {
                 Log.e("MessageRepo", "Operation failed", e)
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
                 val syncData = workDataOf(
                     "ACTION_TYPE" to "DELETE",
@@ -161,6 +177,7 @@ class MessageRepo(
             true
         } catch (e: Exception) {
             Log.e("MessageRepo", "Operation failed", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext false
             messageDao.updateMessage(message)
             val syncData = workDataOf(
@@ -283,8 +300,11 @@ class MessageRepo(
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
         val loopKey = workspaceId to channelId
+        val syncJob = coroutineContext[kotlinx.coroutines.Job]!!
         activeSyncLoops[loopKey]?.cancel()
-        activeSyncLoops[loopKey] = coroutineContext[kotlinx.coroutines.Job]!!
+        activeSyncLoops[loopKey] = syncJob
+        val registryKey = "messages:$workspaceId:$channelId"
+        BackgroundSyncRegistry.replace(registryKey, syncJob)
         try {
         var lastPollAt = 0L
         var wasSocketConnected = false
@@ -337,7 +357,8 @@ class MessageRepo(
             }
         }
         } finally {
-            activeSyncLoops.remove(loopKey, coroutineContext[kotlinx.coroutines.Job])
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
+            activeSyncLoops.remove(loopKey, syncJob)
         }
     }
 

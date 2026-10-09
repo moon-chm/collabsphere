@@ -89,6 +89,7 @@ class DmSyncWorker(
             return@withContext Result.success()
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("DmSyncWorker", "Operation failed", e)
             return@withContext Result.retry()
         }

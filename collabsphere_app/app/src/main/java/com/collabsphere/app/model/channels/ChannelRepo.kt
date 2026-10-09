@@ -10,6 +10,7 @@ import androidx.work.*
 import com.collabsphere.app.dto.channel.ChannelRequest
 import com.collabsphere.app.dto.channel.ChannelSyncDto
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.BackgroundSyncRegistry
 import com.collabsphere.app.remote.channel.ChannelApiService
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 import com.collabsphere.app.model.readSyncPosition
 import com.collabsphere.app.model.commitSyncPosition
 
@@ -51,19 +53,25 @@ class ChannelRepo(
         description: String,
         fallbackEntity: ChannelEntity
     ): Result<Long> = withContext(Dispatchers.IO) {
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
             val request = ChannelRequest(
                 id = 0,
                 userId = userId,
                 channelName = channelName,
                 workspaceId = workspaceId,
-                description = description
+                description = description,
+                idempotencyKey = idempotencyKey
             )
             val remoteChannel = apiService.createChannel(request)
             val savedId = channelDao.createChannels(fallbackEntity.copy(id = remoteChannel.id))
             Result.success(savedId)
         } catch (e: Exception) {
             Log.e("ChannelRepo", "Operation failed", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (com.collabsphere.app.model.SyncPolicy.forFailure(e, isDelete = false) ==
+                com.collabsphere.app.model.SyncDecision.DROP
+            ) return@withContext Result.failure(e)
             // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
             // id == 0, so a positive fallback here could collide with a real id synced down later.
             val fallbackId = channelDao.createChannels(fallbackEntity.copy(id = TempId.next()))
@@ -72,7 +80,8 @@ class ChannelRepo(
                 "WORKSPACE_ID" to workspaceId,
                 "CHANNEL_NAME" to channelName,
                 "USER_ID" to (userId ?: -1),
-                "DESCRIPTION" to description
+                "DESCRIPTION" to description,
+                "IDEMPOTENCY_KEY" to idempotencyKey
             )
             enqueueSync(syncData)
             Result.success(fallbackId)
@@ -92,6 +101,10 @@ class ChannelRepo(
             }
         } catch (e: Exception) {
             Log.e("ChannelRepo", "Operation failed", e)
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (com.collabsphere.app.model.SyncPolicy.forFailure(e, isDelete = true) ==
+                com.collabsphere.app.model.SyncDecision.DROP
+            ) return@withContext ChannelDeleteResult.FAILED
             val deletedRows = channelDao.deletechannel(channelName, workspaceId, userId ?: 0)
             val syncData = workDataOf(
                 "ACTION_TYPE" to "DELETE",
@@ -111,6 +124,15 @@ class ChannelRepo(
 
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
+        val syncJob = coroutineContext[kotlinx.coroutines.Job] ?: run {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
+        val registryKey = "channels:$workspaceId"
+        if (!BackgroundSyncRegistry.register(registryKey, syncJob)) {
+            activeSyncLoops.remove(workspaceId)
+            return@withContext
+        }
         try {
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
@@ -151,11 +173,13 @@ class ChannelRepo(
                 dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("ChannelRepo", "Operation failed", e)
             }
             delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
+            BackgroundSyncRegistry.unregister(registryKey, syncJob)
             activeSyncLoops.remove(workspaceId)
         }
     }

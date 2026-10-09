@@ -226,6 +226,7 @@ fun DMScreen(
     val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
     val isLoadingMembers by viewModel.isLoadingMembers.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
@@ -2018,7 +2019,7 @@ fun DMScreen(
                                 // Send / Update Button
                                 val sendInteractionSource = remember { MutableInteractionSource() }
                                 val isSendPressed by sendInteractionSource.collectIsPressedAsState()
-                                val canSend = typedText.trim().isNotEmpty() && !isUploadingMedia
+                                val canSend = typedText.trim().isNotEmpty() && !isUploadingMedia && !isSendingMessage
                                 val sendScale by animateFloatAsState(
                                     targetValue = if (isSendPressed) 0.90f else if (canSend) 1f else 0.88f,
                                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
