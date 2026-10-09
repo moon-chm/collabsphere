@@ -12,7 +12,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.test.*
 
-/** Runs against the same dev DB as [ServerTest]; every row it creates is removed afterwards. */
+/** Runs only against the disposable database configured for integrationTest. */
 class SecurityRoutesTest {
 
     private val createdUserIds = mutableListOf<Int>()

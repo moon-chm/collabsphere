@@ -13,6 +13,8 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.statements.StatementType
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("WorkspaceRoutes")
@@ -217,13 +219,51 @@ internal fun Route.workspaceRoutes() {
             try {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<WorkspaceRequest>()
+                if (request.clientRequestId != null &&
+                    (request.clientRequestId.isBlank() || request.clientRequestId.length > 64)
+                ) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid clientRequestId")
+                }
 
                 val response = dbQuery {
+                    request.clientRequestId?.let { requestId ->
+                        TransactionManager.current().exec(
+                            "SELECT pg_advisory_xact_lock(?, ?)",
+                            listOf(
+                                IntegerColumnType() to actingUserId,
+                                IntegerColumnType() to requestId.hashCode()
+                            ),
+                            explicitStatementType = StatementType.SELECT
+                        ) { rows -> rows.next() }
+                    }
+                    val existing = request.clientRequestId?.let { requestId ->
+                        WorkspacesTable.selectAll()
+                            .where {
+                                (WorkspacesTable.userId eq actingUserId) and
+                                    (WorkspacesTable.clientRequestId eq requestId)
+                            }
+                            .singleOrNull()
+                    }
+                    if (existing != null) {
+                        require(
+                            existing[WorkspacesTable.workspaceName] == request.workspaceName &&
+                                existing[WorkspacesTable.workspaceOwner] == request.workspaceOwner &&
+                                PasswordHasher.matches(request.workspacePassword, existing[WorkspacesTable.workspacePassword])
+                        ) { "clientRequestId was already used for a different workspace" }
+                        return@dbQuery WorkspaceResponse(
+                            id = existing[WorkspacesTable.id],
+                            userId = actingUserId,
+                            workspaceName = existing[WorkspacesTable.workspaceName],
+                            workspaceOwner = existing[WorkspacesTable.workspaceOwner]
+                        )
+                    }
+
                     val insertedId = WorkspacesTable.insert {
                         it[userId] = actingUserId
                         it[workspaceName] = request.workspaceName
                         it[workspaceOwner] = request.workspaceOwner
                         it[workspacePassword] = PasswordHasher.hash(request.workspacePassword)
+                        it[clientRequestId] = request.clientRequestId
                         it[isDeleted] = false
                         it[updatedAt] = System.currentTimeMillis()
                     }[WorkspacesTable.id]

@@ -56,10 +56,12 @@ fun DeleteWorkspaceScreen(
     viewModel: WorkspaceViewModel,
     workspaceIdToDelete: Int,
     workspaceNameToDelete: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
     val workspaceStatus by viewModel.workspaceStatus.collectAsStateWithLifecycle()
+    val isDeletingWorkspace by viewModel.isDeletingWorkspace.collectAsStateWithLifecycle()
 
     val name by viewModel.workspaceName.collectAsStateWithLifecycle()
     val password by viewModel.workspacePassword.collectAsStateWithLifecycle()
@@ -80,7 +82,7 @@ fun DeleteWorkspaceScreen(
             viewModel.clearWorkspaceStatus()
 
             if (it.contains("successfully", ignoreCase = true)) {
-                onBack()
+                onDeleted()
             }
         }
     }
@@ -93,6 +95,7 @@ fun DeleteWorkspaceScreen(
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
+                        enabled = !isDeletingWorkspace,
                         modifier = Modifier
                             .padding(start = 12.dp)
                             .size(42.dp)
@@ -346,26 +349,49 @@ fun DeleteWorkspaceScreen(
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(
                                     interactionSource = deleteInteractionSource,
-                                    indication = null
+                                    indication = null,
+                                    enabled = !isDeletingWorkspace
                                 ) {
                                     val currentTime = System.currentTimeMillis()
-                                    if (isFormValid && currentTime - lastClickTime > 500L) {
+                                    if (!isDeletingWorkspace && isFormValid && currentTime - lastClickTime > 500L) {
                                         lastClickTime = currentTime
                                         viewModel.onDeleteWorkspace(workspaceIdToDelete, workspaceNameToDelete)
-                                    } else if (!isFormValid) {
+                                    } else if (!isDeletingWorkspace && !isFormValid) {
                                         AppToast.warning("Please confirm workspace deletion")
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Delete workspace",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                ),
-                                color = Color.White
-                            )
+                            if (isDeletingWorkspace) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = "Deleting workspace…",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        ),
+                                        color = Color.White
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Delete workspace",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }

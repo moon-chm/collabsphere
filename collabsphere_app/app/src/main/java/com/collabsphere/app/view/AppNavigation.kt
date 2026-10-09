@@ -787,7 +787,13 @@ fun AppNavigation(
                     viewModel = workspaceViewModel,
                     workspaceIdToDelete = workspaceId,
                     workspaceNameToDelete = workspaceName,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onDeleted = {
+                        navController.navigate("dashboard") {
+                            popUpTo("dashboard") { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
         }

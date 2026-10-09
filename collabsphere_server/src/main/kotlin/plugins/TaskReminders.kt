@@ -1,5 +1,6 @@
 package plugins
 
+import com.collabsphere.util.ExternalProviderPolicy
 import com.collabsphere.model.TaskReminderOutboxTable
 import com.collabsphere.model.TasksTable
 import com.collabsphere.dto.NotificationResponse
@@ -64,7 +65,7 @@ internal fun reminderRetryDelay(attempt: Int): Long =
     (30_000L * (1L shl (attempt - 1).coerceIn(0, 7))).coerceAtMost(60 * 60 * 1000L)
 
 fun Application.startTaskReminderScheduler() {
-    if (System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES") return
+    if (ExternalProviderPolicy.areDisabled()) return
     launch(Dispatchers.IO) {
         delay(REMINDER_STARTUP_DELAY_MS)
         while (isActive) {

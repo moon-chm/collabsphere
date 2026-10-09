@@ -4,6 +4,8 @@
 
 Fix the audit findings in dependency order while preserving current single-instance behavior, existing API contracts, and offline-first data. Roll out each change behind a compatibility path or feature flag where a rollback may be needed. This plan does not assume that horizontal scaling is required today; multi-instance work is gated on that deployment decision.
 
+For the focused edge-case test campaign across existing product features, see [EDGE_CASE_IMPLEMENTATION_PLAN.md](EDGE_CASE_IMPLEMENTATION_PLAN.md).
+
 ## Guardrails
 
 - Keep the current production behavior as the default until a phase passes its acceptance checks in staging.

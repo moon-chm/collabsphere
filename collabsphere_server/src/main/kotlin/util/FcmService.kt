@@ -29,7 +29,7 @@ object FcmService {
     private data class PushDispatchResult(val sentCount: Int, val retryableFailure: Boolean)
 
     fun init() {
-        if (System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES") {
+        if (ExternalProviderPolicy.areDisabled()) {
             logger.info("FCM initialization disabled by the isolated test profile")
             return
         }

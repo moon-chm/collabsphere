@@ -56,7 +56,7 @@ object EmailService {
     private var smtpFrom = ""
 
     init {
-        val externalProvidersDisabled = System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES"
+        val externalProvidersDisabled = ExternalProviderPolicy.areDisabled()
         // Force IPv4 for SMTP connections to prevent SocketTimeoutException on networks with broken IPv6 routing
         System.setProperty("java.net.preferIPv4Stack", "true")
 

@@ -1,5 +1,6 @@
 package plugins
 
+import com.collabsphere.util.ExternalProviderPolicy
 import com.collabsphere.model.GitHubWebhookEventsTable
 import com.collabsphere.util.GitHubWebhookService
 import io.ktor.server.application.*
@@ -40,7 +41,7 @@ internal data class ClaimedWebhook(
 )
 
 fun Application.startGitHubWebhookProcessor() {
-    if (System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES") return
+    if (ExternalProviderPolicy.areDisabled()) return
     launch(Dispatchers.IO) {
         while (isActive) {
             try {

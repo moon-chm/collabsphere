@@ -142,6 +142,37 @@ class RoutesEndToEndTest {
     }
 
     @Test
+    fun `workspace creation retry with same request id returns the original workspace`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val requestId = UUID.randomUUID().toString()
+        val workspaceName = "retry-${UUID.randomUUID()}"
+        val requestBody = """{"workspaceName":"$workspaceName","workspaceOwner":"e2e","workspacePassword":"workspace-password","clientRequestId":"$requestId"}"""
+
+        suspend fun create() = client.post("/api/workspace/create") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(requestBody)
+        }
+
+        val first = create()
+        val retry = create()
+        assertEquals(HttpStatusCode.Created, first.status)
+        assertEquals(HttpStatusCode.Created, retry.status)
+        val firstId = json.parseToJsonElement(first.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        val retryId = json.parseToJsonElement(retry.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        createdWorkspaceIds += firstId
+        assertEquals(firstId, retryId)
+
+        val matchingRows = transaction {
+            WorkspacesTable.selectAll()
+                .where { WorkspacesTable.clientRequestId eq requestId }
+                .count()
+        }
+        assertEquals(1L, matchingRows)
+    }
+
+    @Test
     fun `sync endpoints hand out cursors and accept them back`() = testApplication {
         application { module() }
         val (me, token) = client.signUp()

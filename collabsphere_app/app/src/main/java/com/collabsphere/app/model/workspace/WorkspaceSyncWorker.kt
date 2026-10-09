@@ -45,12 +45,14 @@ class WorkspaceSyncWorker(
                     val workspaceName = inputData.getString("WORKSPACE_NAME") ?: return@withContext Result.failure()
                     val workspaceOwner = inputData.getString("WORKSPACE_OWNER") ?: ""
                     val workspacePassword = inputData.getString("WORKSPACE_PASSWORD") ?: ""
+                    val clientRequestId = inputData.getString("CLIENT_REQUEST_ID")
                     if (userId == -1) return@withContext Result.failure()
 
                     val request = WorkspaceRequest(
                         workspaceName = workspaceName,
                         workspaceOwner = workspaceOwner,
-                        workspacePassword = workspacePassword
+                        workspacePassword = workspacePassword,
+                        clientRequestId = clientRequestId
                     )
 
                     val remoteResponse = apiService.createWorkspace(userId, request)

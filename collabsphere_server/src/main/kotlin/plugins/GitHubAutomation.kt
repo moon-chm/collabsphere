@@ -1,5 +1,6 @@
 package plugins
 
+import com.collabsphere.util.ExternalProviderPolicy
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.GitHubCommitsTable
 import com.collabsphere.model.GitHubIssuesTable
@@ -73,6 +74,7 @@ internal fun closingTaskReferences(text: String): Set<Int> =
     CLOSING_REFERENCE.findAll(text).mapNotNull { it.groupValues[1].toIntOrNull() }.toSet()
 
 fun Application.startGitHubDigestScheduler() {
+    if (ExternalProviderPolicy.areDisabled()) return
     launch {
         delay(DIGEST_STARTUP_DELAY_MS)
         while (isActive) {

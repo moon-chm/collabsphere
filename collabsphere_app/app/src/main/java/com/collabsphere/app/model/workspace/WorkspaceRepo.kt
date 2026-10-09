@@ -192,13 +192,14 @@ class WorkspaceRepo(
         }
     }
 
-    suspend fun addWorkspaceToScreen(workspace: WorkspaceEntity): Result<Unit> =
+    suspend fun addWorkspaceToScreen(workspace: WorkspaceEntity, clientRequestId: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
                 val request = WorkspaceRequest(
                     workspaceName = workspace.workspaceName,
                     workspaceOwner = workspace.workspaceOwner,
-                    workspacePassword = workspace.workspacePassword
+                    workspacePassword = workspace.workspacePassword,
+                    clientRequestId = clientRequestId
                 )
 
                 val remote = workspaceApiService.createWorkspace(workspace.userId, request)
@@ -210,6 +211,9 @@ class WorkspaceRepo(
                 )
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
+                    return@withContext Result.failure(e)
+                }
                 val tempId = TempId.next()
                 val temporaryEntity = workspace.copy(id = tempId)
 
@@ -225,7 +229,8 @@ class WorkspaceRepo(
                         "USER_ID" to workspace.userId,
                         "WORKSPACE_NAME" to workspace.workspaceName,
                         "WORKSPACE_OWNER" to workspace.workspaceOwner,
-                        "WORKSPACE_PASSWORD" to workspace.workspacePassword
+                        "WORKSPACE_PASSWORD" to workspace.workspacePassword,
+                        "CLIENT_REQUEST_ID" to clientRequestId
                     )
                 )
                 Result.success(Unit)

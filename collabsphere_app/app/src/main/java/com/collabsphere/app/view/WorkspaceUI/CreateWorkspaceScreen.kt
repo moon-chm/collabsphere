@@ -59,6 +59,7 @@ fun CreateWorkspaceScreen(
 ) {
     val context = LocalContext.current
     val workspaceStatus by viewModel.workspaceStatus.collectAsStateWithLifecycle()
+    val isCreatingWorkspace by viewModel.isCreatingWorkspace.collectAsStateWithLifecycle()
 
     val name by viewModel.workspaceName.collectAsStateWithLifecycle()
     val owner by viewModel.workspaceOwner.collectAsStateWithLifecycle()
@@ -88,6 +89,7 @@ fun CreateWorkspaceScreen(
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
+                        enabled = !isCreatingWorkspace,
                         modifier = Modifier
                             .padding(start = 12.dp)
                             .size(42.dp)
@@ -356,26 +358,49 @@ fun CreateWorkspaceScreen(
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(
                                     interactionSource = submitInteractionSource,
-                                    indication = null
+                                    indication = null,
+                                    enabled = !isCreatingWorkspace
                                 ) {
                                     val currentTime = System.currentTimeMillis()
-                                    if (isFormValid && currentTime - lastClickTime > 500L) {
+                                    if (!isCreatingWorkspace && isFormValid && currentTime - lastClickTime > 500L) {
                                         lastClickTime = currentTime
                                         viewModel.onCreateWorkspace()
-                                    } else if (!isFormValid) {
-                                        AppToast.warning("Please enter workspace name & email")
+                                    } else if (!isCreatingWorkspace && !isFormValid) {
+                                        AppToast.warning("Please enter the workspace name, owner, and password")
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Create workspace",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                ),
-                                color = Color.White
-                            )
+                            if (isCreatingWorkspace) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = "Creating workspace…",
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        ),
+                                        color = Color.White
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Create workspace",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }

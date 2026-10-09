@@ -29,8 +29,7 @@ class ServerTest {
             module()
         }
 
-        // A fixed email collides with itself on a second run against the same (real) dev DB this
-        // test relies on — unique per run so the test stays repeatable without needing a test DB.
+        // Keep fixtures unique within the explicit disposable integration database.
         val email = "test-${java.util.UUID.randomUUID()}@example.com"
         createdEmails += email
 

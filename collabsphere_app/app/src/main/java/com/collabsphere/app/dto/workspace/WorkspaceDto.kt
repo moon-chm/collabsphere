@@ -6,7 +6,8 @@ import kotlinx.serialization.Serializable
 data class WorkspaceRequest(
     val workspaceName: String,
     val workspaceOwner: String,
-    val workspacePassword: String
+    val workspacePassword: String,
+    val clientRequestId: String? = null
 )
 
 @Serializable

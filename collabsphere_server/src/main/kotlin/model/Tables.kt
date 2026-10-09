@@ -61,6 +61,7 @@ object WorkspacesTable : Table("workspace") {
     val workspaceName = varchar("workspace_name", 255)
     val workspaceOwner = varchar("workspace_owner", 255)
     val workspacePassword = varchar("workspace_password", 255)
+    val clientRequestId = varchar("client_request_id", 64).nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
@@ -71,6 +72,7 @@ object WorkspacesTable : Table("workspace") {
 
     init {
         index(false, syncXid, id)
+        index(true, clientRequestId)
     }
 }
 

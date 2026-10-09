@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class WorkspaceViewModel(
     private val repo: WorkspaceRepo,
@@ -27,6 +28,12 @@ class WorkspaceViewModel(
 
     private val _workspaceStatus = MutableStateFlow<String?>(null)
     val workspaceStatus: StateFlow<String?> = _workspaceStatus.asStateFlow()
+
+    private val _isDeletingWorkspace = MutableStateFlow(false)
+    val isDeletingWorkspace: StateFlow<Boolean> = _isDeletingWorkspace.asStateFlow()
+
+    private val _isCreatingWorkspace = MutableStateFlow(false)
+    val isCreatingWorkspace: StateFlow<Boolean> = _isCreatingWorkspace.asStateFlow()
 
     private val _workspaceMembers = MutableStateFlow<List<UserEntity>>(emptyList())
     val workspaceMembers: StateFlow<List<UserEntity>> = _workspaceMembers.asStateFlow()
@@ -59,6 +66,7 @@ class WorkspaceViewModel(
     }
 
     fun onCreateWorkspace() {
+        if (_isCreatingWorkspace.value) return
         val name = _workspaceName.value.trim()
         val owner = _workspaceOwner.value.trim()
         val password = _workspacePassword.value.trim()
@@ -69,23 +77,29 @@ class WorkspaceViewModel(
         }
 
         viewModelScope.launch {
-            val result = repo.addWorkspaceToScreen(
-                WorkspaceEntity(
-                    id = 0,
-                    userId = loggedInUserId,
-                    workspaceName = name,
-                    workspaceOwner = owner,
-                    workspacePassword = password
+            _isCreatingWorkspace.value = true
+            try {
+                val result = repo.addWorkspaceToScreen(
+                    WorkspaceEntity(
+                        id = 0,
+                        userId = loggedInUserId,
+                        workspaceName = name,
+                        workspaceOwner = owner,
+                        workspacePassword = password
+                    ),
+                    clientRequestId = UUID.randomUUID().toString()
                 )
-            )
 
-            result.onSuccess {
-                _workspaceStatus.value = "Workspace created successfully!"
-                clearInputs()
-            }
+                result.onSuccess {
+                    _workspaceStatus.value = "Workspace created successfully!"
+                    clearInputs()
+                }
 
-            result.onFailure {
-                _workspaceStatus.value = it.localizedMessage ?: "Failed to create workspace"
+                result.onFailure {
+                    _workspaceStatus.value = it.localizedMessage ?: "Failed to create workspace"
+                }
+            } finally {
+                _isCreatingWorkspace.value = false
             }
         }
     }
@@ -194,8 +208,10 @@ class WorkspaceViewModel(
             _workspaceStatus.value = "Workspace name does not match"
             return
         }
+        if (_isDeletingWorkspace.value) return
 
         viewModelScope.launch {
+            _isDeletingWorkspace.value = true
             try {
                 val rowsDeleted = repo.deleteWorkspaceFromScreen(
                     workspaceId,
@@ -214,6 +230,8 @@ class WorkspaceViewModel(
                 } else {
                     _workspaceStatus.value = "Network error. Please try again later."
                 }
+            } finally {
+                _isDeletingWorkspace.value = false
             }
         }
     }
