@@ -24,12 +24,11 @@ class WorkspaceSyncWorker(
         try {
             when (actionType) {
                 "DELETE" -> {
-                    val workspaceName = inputData.getString("WORKSPACE_NAME") ?: return@withContext Result.failure()
-                    val userId = inputData.getInt("USER_ID", -1)
+                    val workspaceId = inputData.getInt("WORKSPACE_ID", -1)
                     val workspacePassword = inputData.getString("WORKSPACE_PASSWORD") ?: ""
-                    if (userId == -1) return@withContext Result.failure()
+                    if (workspaceId == -1) return@withContext Result.failure()
 
-                    apiService.deleteWorkspaceFromServer(workspaceName, userId, workspacePassword)
+                    apiService.deleteWorkspaceFromServer(workspaceId, workspacePassword)
                 }
 
                 "ADD_MEMBER" -> {

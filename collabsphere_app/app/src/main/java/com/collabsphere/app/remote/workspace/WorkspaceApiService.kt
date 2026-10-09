@@ -55,13 +55,11 @@ class WorkspaceApiService(
     }
 
     suspend fun deleteWorkspaceFromServer(
-        workspaceName: String,
-        userId: Int,
+        workspaceId: Int,
         workspacePassword: String
     ): List<Int> {
         return client.delete("$baseUrl/delete") {
-            parameter("workspaceName", workspaceName)
-            parameter("userId", userId)
+            parameter("workspaceId", workspaceId)
             header("X-Workspace-Password", workspacePassword)
         }.requireSuccess().body<DeleteWorkspaceResponse>().deletedIds
     }

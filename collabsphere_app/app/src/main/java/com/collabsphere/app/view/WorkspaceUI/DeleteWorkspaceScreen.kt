@@ -54,6 +54,7 @@ import com.collabsphere.app.viewmodel.workspace.WorkspaceViewModel
 @Composable
 fun DeleteWorkspaceScreen(
     viewModel: WorkspaceViewModel,
+    workspaceIdToDelete: Int,
     workspaceNameToDelete: String,
     onBack: () -> Unit
 ) {
@@ -350,7 +351,7 @@ fun DeleteWorkspaceScreen(
                                     val currentTime = System.currentTimeMillis()
                                     if (isFormValid && currentTime - lastClickTime > 500L) {
                                         lastClickTime = currentTime
-                                        viewModel.onDeleteWorkspace()
+                                        viewModel.onDeleteWorkspace(workspaceIdToDelete, workspaceNameToDelete)
                                     } else if (!isFormValid) {
                                         AppToast.warning("Please confirm workspace deletion")
                                     }

@@ -2,6 +2,9 @@ package plugins
 
 import com.collabsphere.RedisFactory
 import com.collabsphere.model.WorkspaceMembersTable
+import com.collabsphere.model.WorkspacesTable
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.innerJoin
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -96,9 +99,12 @@ internal object WorkspaceMemberCache {
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun queryFromDb(workspaceId: Int): List<Int> =
-        WorkspaceMembersTable
+        (WorkspaceMembersTable innerJoin WorkspacesTable)
             .select(WorkspaceMembersTable.userId)
-            .where { WorkspaceMembersTable.workspaceId eq workspaceId }
+            .where {
+                (WorkspaceMembersTable.workspaceId eq workspaceId) and
+                    (WorkspacesTable.isDeleted eq false)
+            }
             .map { it[WorkspaceMembersTable.userId] }
 
     private fun populateCaches(workspaceId: Int, ids: List<Int>) {

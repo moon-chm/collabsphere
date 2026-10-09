@@ -2,7 +2,9 @@
 
 import com.collabsphere.RedisFactory
 import com.collabsphere.model.WorkspaceMembersTable
+import com.collabsphere.model.WorkspacesTable
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.innerJoin
 import org.jetbrains.exposed.sql.selectAll
 import org.slf4j.LoggerFactory
 
@@ -96,10 +98,11 @@ internal fun isMemberCached(userId: Int, workspaceId: Int): Boolean {
     MembershipCache.getCached(userId, workspaceId)?.let { return it }
 
     // L2: Database
-    val result = WorkspaceMembersTable.selectAll()
+    val result = (WorkspaceMembersTable innerJoin WorkspacesTable).selectAll()
         .where {
             (WorkspaceMembersTable.workspaceId eq workspaceId) and
-            (WorkspaceMembersTable.userId eq userId)
+            (WorkspaceMembersTable.userId eq userId) and
+            (WorkspacesTable.isDeleted eq false)
         }
         .count() > 0
 

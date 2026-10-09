@@ -1,6 +1,7 @@
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.WorkspacesTable
+import com.collabsphere.util.PasswordHasher
 import com.collabsphere.module
 import dto.LoginResponse
 import io.ktor.client.HttpClient
@@ -14,7 +15,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.io.File
@@ -50,6 +53,58 @@ class RoutesEndToEndTest {
         }[WorkspacesTable.id]
         members.forEach { m -> WorkspaceMembersTable.insert { it[workspaceId] = ws; it[userId] = m } }
         ws
+    }
+
+    private fun ownedWorkspace(ownerId: Int, name: String, password: String): Int = transaction {
+        val workspaceId = WorkspacesTable.insert {
+            it[userId] = ownerId
+            it[workspaceName] = name
+            it[workspaceOwner] = "e2e"
+            it[workspacePassword] = PasswordHasher.hash(password)
+        }[WorkspacesTable.id]
+        WorkspaceMembersTable.insert {
+            it[WorkspaceMembersTable.workspaceId] = workspaceId
+            it[WorkspaceMembersTable.userId] = ownerId
+        }
+        workspaceId
+    }
+
+    @Test
+    fun `workspace delete targets only the requested workspace id`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val sharedName = "duplicate-${UUID.randomUUID()}"
+        val password = "workspace-password"
+        val requestedId = ownedWorkspace(me, sharedName, password)
+        val otherId = ownedWorkspace(me, sharedName, password)
+
+        try {
+            val nameOnly = client.delete("/api/workspace/delete?workspaceName=$sharedName") {
+                bearerAuth(token)
+                header("X-Workspace-Password", password)
+            }
+            assertEquals(HttpStatusCode.BadRequest, nameOnly.status)
+
+            val response = client.delete("/api/workspace/delete?workspaceId=$requestedId") {
+                bearerAuth(token)
+                header("X-Workspace-Password", password)
+            }
+            assertEquals(HttpStatusCode.OK, response.status)
+            val deletedIds = json.parseToJsonElement(response.bodyAsText()).jsonObject["deletedIds"]!!
+                .jsonArray.map { it.jsonPrimitive.content.toInt() }
+            assertEquals(listOf(requestedId), deletedIds)
+
+            val deletedStates = transaction {
+                listOf(requestedId, otherId).associateWith { id ->
+                    WorkspacesTable.selectAll().where { WorkspacesTable.id eq id }
+                        .single()[WorkspacesTable.isDeleted]
+                }
+            }
+            assertEquals(true, deletedStates[requestedId])
+            assertEquals(false, deletedStates[otherId])
+        } finally {
+            transaction { UsersTable.deleteWhere { UsersTable.id eq me } }
+        }
     }
 
     @Test

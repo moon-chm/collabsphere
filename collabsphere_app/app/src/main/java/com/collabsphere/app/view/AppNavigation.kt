@@ -280,7 +280,7 @@ fun AppNavigation(
                     onDeleteWorkspaceClick = { workspace ->
                         if (navController.currentDestination?.route == "dashboard") {
                             val encodedName = URLEncoder.encode(workspace.workspaceName, StandardCharsets.UTF_8.toString())
-                            navController.navigate("workspace_delete/$encodedName")
+                            navController.navigate("workspace_delete/${workspace.id}/$encodedName")
                         }
                     },
                     onProfileClick = {
@@ -738,11 +738,13 @@ fun AppNavigation(
             }
 
             composable(
-                route = "workspace_delete/{workspaceName}",
+                route = "workspace_delete/{workspaceId}/{workspaceName}",
                 arguments = listOf(
+                    navArgument("workspaceId") { type = NavType.IntType },
                     navArgument("workspaceName") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
+                val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: -1
                 val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
                 val workspaceName = try {
                     URLDecoder.decode(rawWorkspaceName, StandardCharsets.UTF_8.toString())
@@ -754,6 +756,7 @@ fun AppNavigation(
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 DeleteWorkspaceScreen(
                     viewModel = workspaceViewModel,
+                    workspaceIdToDelete = workspaceId,
                     workspaceNameToDelete = workspaceName,
                     onBack = { navController.popBackStack() }
                 )

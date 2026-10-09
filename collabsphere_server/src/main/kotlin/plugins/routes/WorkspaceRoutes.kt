@@ -41,9 +41,11 @@ internal fun Route.workspaceRoutes() {
                     NotificationMutesTable.deleteWhere {
                         (NotificationMutesTable.workspaceId eq workspaceIdParam) and (NotificationMutesTable.userId eq targetUserId)
                     }
+                    HttpStatusCode.OK
+                }
+                if (outcome == HttpStatusCode.OK) {
                     WorkspaceMemberCache.invalidate(workspaceIdParam)
                     MembershipCache.invalidate(targetUserId, workspaceIdParam)
-                    HttpStatusCode.OK
                 }
                 call.respond(outcome, outcome == HttpStatusCode.OK)
             } catch (e: Exception) {
@@ -284,8 +286,6 @@ internal fun Route.workspaceRoutes() {
                             WorkspacesTable.update({ WorkspacesTable.id eq workspaceIdParam }) {
                                 it[updatedAt] = System.currentTimeMillis()
                             }
-                            WorkspaceMemberCache.invalidate(workspaceIdParam)
-                            MembershipCache.invalidate(targetUserId, workspaceIdParam)
                         }
 
                         MemberResponse(
@@ -302,6 +302,11 @@ internal fun Route.workspaceRoutes() {
                             }
                         )
                     }
+                }
+
+                if (response is MemberResponse) {
+                    WorkspaceMemberCache.invalidate(workspaceIdParam)
+                    MembershipCache.invalidate(response.userId, workspaceIdParam)
                 }
 
                 when (response) {
@@ -462,6 +467,10 @@ internal fun Route.workspaceRoutes() {
                     }
 
                     val wsId = invRow[WorkspaceInvitationsTable.workspaceId]
+                    val workspaceIsActive = WorkspacesTable.select(WorkspacesTable.id)
+                        .where { (WorkspacesTable.id eq wsId) and (WorkspacesTable.isDeleted eq false) }
+                        .singleOrNull() != null
+                    if (!workspaceIsActive) return@dbQuery "NOT_FOUND"
 
                     val alreadyMember = WorkspaceMembersTable.selectAll().where {
                         (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
@@ -490,6 +499,13 @@ internal fun Route.workspaceRoutes() {
                         avatarUrl = userRow[UsersTable.avatarUrl],
                         role = WorkspaceRoles.MEMBER
                     )
+                }
+
+                if (acceptResult is MemberResponse) {
+                    // Invalidate after the membership transaction commits so concurrent cache fills
+                    // cannot repopulate the pre-join state while that transaction is still open.
+                    WorkspaceMemberCache.invalidate(acceptResult.workspaceId)
+                    MembershipCache.invalidate(actingUserId, acceptResult.workspaceId)
                 }
 
                 when (acceptResult) {
@@ -561,7 +577,9 @@ internal fun Route.workspaceRoutes() {
 
                     if (wsId == null) return@dbQuery null
 
-                    val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq wsId }.singleOrNull()
+                    val ws = WorkspacesTable.selectAll().where {
+                        (WorkspacesTable.id eq wsId) and (WorkspacesTable.isDeleted eq false)
+                    }.singleOrNull()
                         ?: return@dbQuery null
 
                     val alreadyMember = WorkspaceMembersTable.selectAll().where {
@@ -576,8 +594,6 @@ internal fun Route.workspaceRoutes() {
                         WorkspacesTable.update({ WorkspacesTable.id eq wsId }) {
                             it[updatedAt] = System.currentTimeMillis()
                         }
-                        WorkspaceMemberCache.invalidate(wsId)
-                        MembershipCache.invalidate(actingUserId, wsId)
                     }
 
                     if (invRow != null) {
@@ -598,6 +614,8 @@ internal fun Route.workspaceRoutes() {
                 }
 
                 if (joinedWorkspace != null) {
+                    WorkspaceMemberCache.invalidate(joinedWorkspace.workspaceId)
+                    MembershipCache.invalidate(actingUserId, joinedWorkspace.workspaceId)
                     call.respond(HttpStatusCode.OK, joinedWorkspace)
                 } else {
                     call.respond(HttpStatusCode.NotFound, "Invalid or expired invite code")
@@ -693,12 +711,11 @@ internal fun Route.workspaceRoutes() {
         delete("/delete") {
             try {
                 val workspaceId = call.request.queryParameters["workspaceId"]?.toIntOrNull()
-                val workspaceName = call.request.queryParameters["workspaceName"]
 
-                if (workspaceId == null && workspaceName.isNullOrBlank()) {
+                if (workspaceId == null) {
                     return@delete call.respond(
                         HttpStatusCode.BadRequest,
-                        "Missing workspaceId or workspaceName"
+                        "Missing or invalid workspaceId"
                     )
                 }
 
@@ -711,11 +728,9 @@ internal fun Route.workspaceRoutes() {
                     )
 
                 val deletedIds = dbQuery {
-                    val condition = if (workspaceId != null) {
-                        (WorkspacesTable.id eq workspaceId) and (WorkspacesTable.userId eq actingUserId)
-                    } else {
-                        (WorkspacesTable.workspaceName eq workspaceName!!) and (WorkspacesTable.userId eq actingUserId)
-                    }
+                    val condition = (WorkspacesTable.id eq workspaceId) and
+                        (WorkspacesTable.userId eq actingUserId) and
+                        (WorkspacesTable.isDeleted eq false)
 
                     val matchingIds = WorkspacesTable.selectAll()
                         .where { condition }
@@ -729,6 +744,11 @@ internal fun Route.workspaceRoutes() {
                         }
                     }
                     matchingIds
+                }
+
+                deletedIds.forEach { deletedWorkspaceId ->
+                    WorkspaceMemberCache.invalidate(deletedWorkspaceId)
+                    MembershipCache.invalidateWorkspace(deletedWorkspaceId)
                 }
 
                 if (deletedIds.isNotEmpty()) {

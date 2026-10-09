@@ -170,6 +170,11 @@ internal fun workspaceOwnerId(workspaceId: Int): Int? =
         ?.get(WorkspacesTable.userId)
 
 internal fun workspaceRole(userId: Int, workspaceId: Int): String? {
+    val workspaceExists = WorkspacesTable.select(WorkspacesTable.id)
+        .where { (WorkspacesTable.id eq workspaceId) and (WorkspacesTable.isDeleted eq false) }
+        .singleOrNull() != null
+    if (!workspaceExists) return null
+
     val memberRole = WorkspaceMembersTable.select(WorkspaceMembersTable.role)
         .where { (WorkspaceMembersTable.workspaceId eq workspaceId) and (WorkspaceMembersTable.userId eq userId) }
         .singleOrNull()
@@ -818,6 +823,10 @@ fun Application.configureRouting() {
                         UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                     } ?: return@post call.respond(HttpStatusCode.NotFound, "User not found")
 
+                    if (userRow[UsersTable.isEmailVerified] && userRow[UsersTable.pendingEmail] == null) {
+                        return@post call.respond(HttpStatusCode.Conflict, "Email is already verified")
+                    }
+
                     val emailTarget = userRow[UsersTable.pendingEmail] ?: userRow[UsersTable.email]
                     val otp = String.format("%06d", (100000..999999).random())
                     val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
@@ -831,8 +840,11 @@ fun Application.configureRouting() {
                         }
                     }
 
-                    EmailService.sendVerificationOtp(emailTarget, otp)
-                    call.respond(HttpStatusCode.OK, "Verification email sent")
+                    if (EmailService.sendVerificationOtp(emailTarget, otp)) {
+                        call.respond(HttpStatusCode.OK, "Verification email sent")
+                    } else {
+                        call.respond(HttpStatusCode.BadGateway, "Couldn't send the verification email. Please try again.")
+                    }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                     call.respond(HttpStatusCode.InternalServerError, "Failed to send email")
@@ -945,37 +957,6 @@ fun Application.configureRouting() {
             }
 
             // â”€â”€ CHANGE email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            put("/api/user/email") {
-                try {
-                    val actingUserId = call.authenticatedUserId()
-                    val request = call.receive<ChangeEmailRequest>()
-
-                    val result = dbQuery {
-                        val row = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                            ?: return@dbQuery "NOT_FOUND"
-                        if (!PasswordHasher.matches(request.currentPassword, row[UsersTable.password]))
-                            return@dbQuery "WRONG_PASSWORD"
-                        val emailTaken = UsersTable.selectAll().where { UsersTable.email eq request.newEmail }.count() > 0
-                        if (emailTaken) return@dbQuery "EMAIL_TAKEN"
-                        UsersTable.update({ UsersTable.id eq actingUserId }) {
-                            it[email] = request.newEmail
-                            it[isEmailVerified] = false // must re-verify new email
-                        }
-                        "OK"
-                    }
-                    when (result) {
-                        "OK"           -> call.respond(HttpStatusCode.OK, "Email updated")
-                        "WRONG_PASSWORD" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
-                        "EMAIL_TAKEN"  -> call.respond(HttpStatusCode.Conflict, "Email already in use")
-                        else           -> call.respond(HttpStatusCode.NotFound, "User not found")
-                    }
-                } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.InternalServerError, "Failed to update email")
-                }
-            }
-
-            // â”€â”€ GET another user's public profile (privacy-aware) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             get("/api/user/{userId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1049,30 +1030,6 @@ fun Application.configureRouting() {
             }
 
             // â”€â”€ DELETE own account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            delete("/api/user/account") {
-                try {
-                    val actingUserId = call.authenticatedUserId()
-                    val request = call.receive<DeleteAccountRequest>()
-                    val result = dbQuery {
-                        val row = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                            ?: return@dbQuery "NOT_FOUND"
-                        if (!PasswordHasher.matches(request.password, row[UsersTable.password]))
-                            return@dbQuery "WRONG_PASSWORD"
-                        UsersTable.deleteWhere { UsersTable.id eq actingUserId }
-                        "OK"
-                    }
-                    when (result) {
-                        "OK"             -> call.respond(HttpStatusCode.OK, "Account deleted")
-                        "WRONG_PASSWORD" -> call.respond(HttpStatusCode.Unauthorized, "Incorrect password")
-                        else             -> call.respond(HttpStatusCode.NotFound, "User not found")
-                    }
-                } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.InternalServerError, "Failed to delete account")
-                }
-            }
-
-            // â”€â”€ BLOCK a user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             post("/api/user/block/{targetUserId}") {
                 try {
                     val actingUserId = call.authenticatedUserId()
@@ -1168,78 +1125,6 @@ fun Application.configureRouting() {
             }
 
             // â”€â”€ SEND email verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            post("/api/user/verify-email/send") {
-                try {
-                    val actingUserId = call.authenticatedUserId()
-                    val userRow = dbQuery {
-                        UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                    }
-                    if (userRow == null) {
-                        call.respond(HttpStatusCode.NotFound, "Account not found")
-                        return@post
-                    }
-                    if (userRow[UsersTable.isEmailVerified]) {
-                        call.respond(HttpStatusCode.Conflict, "Email is already verified")
-                        return@post
-                    }
-
-                    val otp = String.format("%06d", (100000..999999).random())
-                    val expiresAt = System.currentTimeMillis() + 15 * 60 * 1000L
-
-                    dbQuery {
-                        UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
-                        UserVerificationTable.insert {
-                            it[userId] = actingUserId
-                            it[UserVerificationTable.token] = otp
-                            it[UserVerificationTable.expiresAt] = expiresAt
-                        }
-                    }
-
-                    if (EmailService.sendVerificationOtp(userRow[UsersTable.email], otp)) {
-                        call.respond(HttpStatusCode.OK, "A 6-digit verification code has been sent to your email")
-                    } else {
-                        call.respond(HttpStatusCode.BadGateway, "Couldn't send the verification email. Please try again.")
-                    }
-                } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.InternalServerError, "Failed to send verification")
-                }
-            }
-
-            // â”€â”€ CONFIRM email verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            post("/api/user/verify-email/confirm") {
-                try {
-                    val actingUserId = call.authenticatedUserId()
-                    val request = call.receive<EmailVerifyConfirmRequest>()
-                    val result = dbQuery {
-                        val row = UserVerificationTable.selectAll().where {
-                            UserVerificationTable.userId eq actingUserId
-                        }.singleOrNull() ?: return@dbQuery "NOT_FOUND"
-
-                        if (row[UserVerificationTable.token] != request.token)
-                            return@dbQuery "WRONG_TOKEN"
-                        if (System.currentTimeMillis() > row[UserVerificationTable.expiresAt])
-                            return@dbQuery "EXPIRED"
-
-                        UsersTable.update({ UsersTable.id eq actingUserId }) {
-                            it[isEmailVerified] = true
-                        }
-                        UserVerificationTable.deleteWhere { UserVerificationTable.userId eq actingUserId }
-                        "OK"
-                    }
-                    when (result) {
-                        "OK"          -> call.respond(HttpStatusCode.OK, "Email verified")
-                        "WRONG_TOKEN" -> call.respond(HttpStatusCode.BadRequest, "Invalid token")
-                        "EXPIRED"     -> call.respond(HttpStatusCode.Gone, "Token expired â€” request a new one")
-                        else          -> call.respond(HttpStatusCode.NotFound, "No pending verification")
-                    }
-                } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.InternalServerError, "Failed to confirm verification")
-                }
-            }
-
-            // â”€â”€ Notifications â”€â”€ extracted to plugins/routes/NotificationsRoutes.kt â”€â”€
             notificationsRoutes()
 
             // â”€â”€ Workspace â”€â”€ extracted to plugins/routes/WorkspaceRoutes.kt â”€â”€

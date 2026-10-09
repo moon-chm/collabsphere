@@ -74,6 +74,14 @@ class WorkspaceRepo(
                         }
                     }
                 }
+                // Workspace deltas only describe current memberships. Reconcile against the
+                // authoritative list so a removed member's device drops a workspace whose
+                // membership row has disappeared and therefore cannot produce a delta tombstone.
+                val remoteWorkspaceIds = workspaceApiService.getWorkspacesByUserId(userId)
+                    .mapTo(HashSet()) { it.id }
+                workspaceDao.getAllWorkspacesForUser(userId).first()
+                    .filter { it.id > 0 && it.id !in remoteWorkspaceIds }
+                    .forEach { workspaceDao.deleteWorkspaceById(it.id) }
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(LAST_SYNC_KEY, position, page, updates.maxOfOrNull { it.updatedAt })
             } catch (e: Exception) {
@@ -249,13 +257,11 @@ class WorkspaceRepo(
     }
 
     suspend fun deleteWorkspaceFromScreen(
-        workspaceName: String,
-        userId: Int,
+        workspaceId: Int,
         workspacePassword: String
     ): Int = withContext(Dispatchers.IO) {
-        // Delete locally by the exact workspace id(s) the server confirmed as deleted, never by name
-        // alone — two distinct workspaces (the user's own and someone else's) can share a name.
-        val deletedIds = workspaceApiService.deleteWorkspaceFromServer(workspaceName, userId, workspacePassword)
+        // Delete locally only after the server confirms deletion of this exact workspace ID.
+        val deletedIds = workspaceApiService.deleteWorkspaceFromServer(workspaceId, workspacePassword)
         deletedIds.forEach { workspaceDao.deleteWorkspaceById(it) }
         deletedIds.size
     }

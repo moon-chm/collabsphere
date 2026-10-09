@@ -182,20 +182,23 @@ class WorkspaceViewModel(
         _joinByCodeStatus.value = null
     }
 
-    fun onDeleteWorkspace() {
+    fun onDeleteWorkspace(workspaceId: Int, expectedWorkspaceName: String) {
         val name = _workspaceName.value.trim()
         val password = _workspacePassword.value.trim()
 
-        if (name.isEmpty() || password.isEmpty()) {
-            _workspaceStatus.value = "Fields cannot be empty"
+        if (name.isEmpty() || password.isEmpty() || workspaceId <= 0) {
+            _workspaceStatus.value = "Workspace name and password are required"
+            return
+        }
+        if (!name.equals(expectedWorkspaceName.trim(), ignoreCase = true)) {
+            _workspaceStatus.value = "Workspace name does not match"
             return
         }
 
         viewModelScope.launch {
             try {
                 val rowsDeleted = repo.deleteWorkspaceFromScreen(
-                    name,
-                    loggedInUserId,
+                    workspaceId,
                     password
                 )
 
