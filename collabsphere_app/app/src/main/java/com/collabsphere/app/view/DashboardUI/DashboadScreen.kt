@@ -61,6 +61,9 @@ import com.collabsphere.app.viewmodel.DashboardViewModel
 // Color palette for workspace initials (cycles through accent colors)
 private val workspaceAccents = listOf(CoralStart, IndigoStart, MintGreen, AmberWarn, Color(0xFF9B59B6))
 
+internal fun workspaceAccentIndex(workspaceId: Int): Int =
+    Math.floorMod(workspaceId, workspaceAccents.size)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -500,7 +503,7 @@ fun DashboardScreen(
                                 items = state,
                                 key   = { ws -> "${ws.id}_${ws.workspaceName}" }
                             ) { workspace ->
-                                val accentColor = workspaceAccents[workspace.id % workspaceAccents.size]
+                                val accentColor = workspaceAccents[workspaceAccentIndex(workspace.id)]
                                 WorkspaceItem(
                                     workspace     = workspace,
                                     modifier      = Modifier.animateItem(),
