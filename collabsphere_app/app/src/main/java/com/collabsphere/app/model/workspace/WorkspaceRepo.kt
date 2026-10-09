@@ -9,6 +9,8 @@ import androidx.work.*
 import com.collabsphere.app.dto.workspace.AddMemberRequest
 import com.collabsphere.app.dto.workspace.WorkspaceRequest
 import com.collabsphere.app.model.TempId
+import com.collabsphere.app.model.SyncDecision
+import com.collabsphere.app.model.SyncPolicy
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
@@ -48,10 +50,12 @@ class WorkspaceRepo(
     suspend fun startDeltaSyncLoop(userId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(userId)) return@withContext
         try {
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(30_000)
         while (isActive) {
             // Suspends here entirely (no polling/wakeups) while backgrounded, resumes instantly
             // the moment the app returns to foreground — then goes straight to a fetch below.
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            var syncSucceeded = false
             try {
                 val position = dataStore.readSyncPosition(LAST_SYNC_KEY)
                 val page = workspaceApiService.getWorkspaceUpdates(userId, position.since, position.cursor)
@@ -84,10 +88,11 @@ class WorkspaceRepo(
                     .forEach { workspaceDao.deleteWorkspaceById(it.id) }
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(LAST_SYNC_KEY, position, page, updates.maxOfOrNull { it.updatedAt })
+                syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
-            delay(30_000)
+            delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
             activeSyncLoops.remove(userId)
@@ -137,6 +142,7 @@ class WorkspaceRepo(
         try {
             if (workspaceId < 0) return@withContext
             val members = workspaceApiService.getWorkspaceMembers(workspaceId)
+            val localMembers = mutableListOf<WorkspaceMemberEntity>()
             members.forEach { member ->
                 val name = if (member.userName.isNullOrBlank() || member.userName == "null") {
                     "User ${member.userId}"
@@ -157,10 +163,11 @@ class WorkspaceRepo(
                     )
                 )
 
-                workspaceDao.upsertMember(
-                    WorkspaceMemberEntity(workspaceId = workspaceId, userId = member.userId)
-                )
+                localMembers += WorkspaceMemberEntity(workspaceId = workspaceId, userId = member.userId)
             }
+            // The endpoint is an authoritative snapshot. Prune removed users as well as adding
+            // current ones so task assignee/member pickers cannot retain departed members.
+            workspaceDao.reconcileWorkspaceMembers(workspaceId, localMembers)
         } catch (e: Exception) {
             Log.e("WorkspaceRepo", "Workspace member sync failed", e)
         }
@@ -238,6 +245,9 @@ class WorkspaceRepo(
             )
             Result.success(Unit)
         } catch (e: Exception) {
+            if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
+                return@withContext Result.failure(e)
+            }
             val userId = workspaceDao.getUserIdByEmail(email.trim().lowercase())
                 ?: return@withContext Result.failure(Exception("User not found"))
 

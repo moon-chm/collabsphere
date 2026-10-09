@@ -288,6 +288,7 @@ class MessageRepo(
         try {
         var lastPollAt = 0L
         var wasSocketConnected = false
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(2_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             val socketConnected = DmWebSocketService.isWebSocketConnected
@@ -297,12 +298,13 @@ class MessageRepo(
                 System.currentTimeMillis() - lastPollAt >= SOCKET_FALLBACK_POLL_MS
             if (pollDue) {
                 lastPollAt = System.currentTimeMillis()
+                var syncSucceeded = false
                 try {
                     val syncKey = getSyncKey(workspaceId, channelId)
                     val position = dataStore.readSyncPosition(syncKey)
                     if (position.since == 0L) {
                         loadInitialPage(workspaceId, channelId)
-                        delay(2000)
+                        delay(pollingBackoff.delayAfter(successful = true))
                         continue
                     }
                     val page = apiService.getMessageUpdates(workspaceId, channelId, position.since, position.cursor)
@@ -319,11 +321,16 @@ class MessageRepo(
                     // After the rows are stored: committing first and dying in between would skip them.
                     // A reset clears `since` too, which sends the next pass back through loadInitialPage.
                     dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                    syncSucceeded = true
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e("MessageRepo", "Operation failed", e)
                 }
+                delay(pollingBackoff.delayAfter(syncSucceeded))
+            } else {
+                delay(2_000)
             }
-            delay(2000)
         }
         } finally {
             activeSyncLoops.remove(loopKey, coroutineContext[kotlinx.coroutines.Job])

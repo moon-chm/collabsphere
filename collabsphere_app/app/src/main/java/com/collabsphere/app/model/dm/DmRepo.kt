@@ -401,7 +401,7 @@ class DmRepo(
      * Pulls DM edits, read-state changes and deletions this device missed while it was disconnected.
      * New messages already arrive over the socket; this is for changes to messages it already holds.
      */
-    suspend fun syncDmChanges(baseUrl: String) {
+    suspend fun syncDmChanges(baseUrl: String): Boolean {
         try {
             val position = dataStore.readSyncPosition(DM_SYNC_KEY)
             val knownUpToId = dmDao.newestSyncedDmId() ?: 0
@@ -418,10 +418,12 @@ class DmRepo(
                 }
             }
             dataStore.commitSyncPosition(DM_SYNC_KEY, position, page, newestUpdatedAt = null)
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w("DmRepo", "DM sync failed", e)
+            return false
         }
     }
 
@@ -433,17 +435,19 @@ class DmRepo(
     suspend fun runDmSyncLoop(baseUrl: String, isConnected: () -> Boolean) {
         var wasConnected = false
         var lastSyncAt = 0L
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(2_000)
         while (currentCoroutineContext().isActive) {
             val connected = isConnected()
             val justConnected = connected && !wasConnected
             wasConnected = connected
             val periodicDue = MyApplication.isAppForeground &&
                 System.currentTimeMillis() - lastSyncAt >= DM_SYNC_INTERVAL_MS
+            var syncDelay = 2_000L
             if (connected && (justConnected || periodicDue)) {
                 lastSyncAt = System.currentTimeMillis()
-                syncDmChanges(baseUrl)
+                syncDelay = pollingBackoff.delayAfter(syncDmChanges(baseUrl))
             }
-            delay(2_000)
+            delay(syncDelay)
         }
     }
 

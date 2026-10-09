@@ -23,6 +23,22 @@ interface WorkspaceDao {
     @Upsert
     suspend fun upsertMember(member: WorkspaceMemberEntity)
 
+    @Query("DELETE FROM workspace_members WHERE workspaceId = :workspaceId")
+    suspend fun deleteWorkspaceMembers(workspaceId: Int)
+
+    @Query("DELETE FROM workspace_members WHERE workspaceId = :workspaceId AND userId NOT IN (:userIds)")
+    suspend fun deleteWorkspaceMembersExcept(workspaceId: Int, userIds: List<Int>)
+
+    @Transaction
+    suspend fun reconcileWorkspaceMembers(workspaceId: Int, members: List<WorkspaceMemberEntity>) {
+        if (members.isEmpty()) {
+            deleteWorkspaceMembers(workspaceId)
+        } else {
+            deleteWorkspaceMembersExcept(workspaceId, members.map { it.userId })
+            members.forEach { upsertMember(it) }
+        }
+    }
+
     @Upsert
     suspend fun upsertUser(user: UserEntity)
 

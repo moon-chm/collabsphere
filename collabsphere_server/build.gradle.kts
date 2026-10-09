@@ -68,3 +68,77 @@ dependencies {
 tasks.withType<Test> {
     environment("JWT_SECRET", "test-secret")
 }
+
+// DB-backed route/locking tests mutate shared state and must never inherit a developer's
+// DATABASE_URL or provider credentials. Keep them out of the default test task.
+val databaseBackedTestPatterns = listOf(
+    "**/*IntegrationTest.class",
+    "**/RoutesEndToEndTest.class",
+    "**/SecurityRoutesTest.class",
+    "**/ServerTest.class"
+)
+
+tasks.named<Test>("test") {
+    exclude(databaseBackedTestPatterns)
+}
+
+val testDatabaseUrl = providers.environmentVariable("TEST_DATABASE_URL")
+val integrationTestTask = tasks.register<Test>("integrationTest") {
+    description = "Runs database-backed integration tests against an explicitly configured test database."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    shouldRunAfter(tasks.named("test"))
+
+    filter {
+        includeTestsMatching("RoutesEndToEndTest")
+        includeTestsMatching("SecurityRoutesTest")
+        includeTestsMatching("ServerTest")
+        includeTestsMatching("plugins.DeltaSyncIntegrationTest")
+        includeTestsMatching("plugins.DmHistoryIntegrationTest")
+        includeTestsMatching("plugins.WebhookQueueIntegrationTest")
+    }
+
+    doFirst {
+        require(testDatabaseUrl.isPresent && testDatabaseUrl.get().isNotBlank()) {
+            "Set TEST_DATABASE_URL to a disposable PostgreSQL test database before running integrationTest."
+        }
+        val selectedUrl = testDatabaseUrl.get()
+        val runtimeDatabaseUrl = System.getenv("DATABASE_URL")
+        val runtimeJdbcUrl = System.getenv("JDBC_DATABASE_URL")
+        require(selectedUrl != runtimeDatabaseUrl && selectedUrl != runtimeJdbcUrl) {
+            "Integration tests refuse to use the configured runtime database URL."
+        }
+        require(System.getenv("COLLABSPHERE_ALLOW_TEST_DB") == "YES") {
+            "Set COLLABSPHERE_ALLOW_TEST_DB=YES only after confirming TEST_DATABASE_URL is disposable."
+        }
+    }
+
+    // The test process sees only the explicit test database. Provider configuration is blanked
+    // so application tests can exercise their fallback behavior without sending real messages.
+    environment("DATABASE_URL", testDatabaseUrl.orElse(""))
+    environment("JDBC_DATABASE_URL", "")
+    environment("DATABASE_READ_URL", "")
+    environment("JDBC_DATABASE_READ_URL", "")
+    environment("GMAIL_CLIENT_ID", "")
+    environment("GMAIL_CLIENT_SECRET", "")
+    environment("GMAIL_REFRESH_TOKEN", "")
+    environment("SMTP_HOST", "")
+    environment("SMTP_USER", "")
+    environment("SMTP_PASSWORD", "")
+    environment("SMTP_PASS", "")
+    environment("CLOUDINARY_CLOUD_NAME", "")
+    environment("CLOUDINARY_API_KEY", "")
+    environment("CLOUDINARY_API_SECRET", "")
+    environment("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+    environment("FIREBASE_CONFIG_PATH", "")
+    environment("UPLOAD_DIR", layout.buildDirectory.dir("integration-test-uploads").get().asFile.absolutePath)
+}
+
+// Opt into DB-backed verification explicitly; ordinary `check` remains usable on a fresh
+// checkout without requiring or risking access to any database.
+tasks.register("checkWithIntegration") {
+    description = "Runs the normal checks plus explicitly isolated PostgreSQL integration tests."
+    group = "verification"
+    dependsOn(tasks.named("check"), integrationTestTask)
+}

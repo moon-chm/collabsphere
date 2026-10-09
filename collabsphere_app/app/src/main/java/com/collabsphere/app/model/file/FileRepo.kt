@@ -131,8 +131,10 @@ class FileRepo(
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
         try {
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
@@ -160,11 +162,12 @@ class FileRepo(
                 }
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                syncSucceeded = true
             } catch (e: Exception) {
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)
             }
-            delay(5000)
+            delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

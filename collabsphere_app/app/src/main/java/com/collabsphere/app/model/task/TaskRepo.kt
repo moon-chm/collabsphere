@@ -122,8 +122,10 @@ class TaskRepo(
         if (!activeSyncLoops.add(workspaceId)) return@withContext
         try {
         syncWorkspaceMembers(workspaceId)
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(1_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
@@ -154,10 +156,11 @@ class TaskRepo(
                 }
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("TaskRepo", "Delta sync iteration error", e)
             }
-            delay(1000)
+            delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
             activeSyncLoops.remove(workspaceId)

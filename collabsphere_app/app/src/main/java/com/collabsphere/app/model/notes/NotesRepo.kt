@@ -50,8 +50,10 @@ class NotesRepo(
     suspend fun startDeltaSyncLoop(workspaceId: Int) = withContext(Dispatchers.IO) {
         if (!activeSyncLoops.add(workspaceId)) return@withContext
         try {
+        val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
@@ -75,12 +77,13 @@ class NotesRepo(
                 }
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                syncSucceeded = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e("NotesRepo", "Delta sync iteration error", e)
             }
-            delay(5000)
+            delay(pollingBackoff.delayAfter(syncSucceeded))
         }
         } finally {
             activeSyncLoops.remove(workspaceId)
