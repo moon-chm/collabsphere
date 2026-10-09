@@ -64,11 +64,12 @@ class WorkspaceRepo(
             var syncSucceeded = false
             try {
                 val position = dataStore.readSyncPosition(syncKey)
-                val page = workspaceApiService.getWorkspaceUpdates(userId, position.since, position.cursor)
-                val updates = page.items
-
-                if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
+                var newestUpdatedAt: Long? = null
+                val page = com.collabsphere.app.remote.applySyncPages(
+                    fetch = { token -> workspaceApiService.getWorkspaceUpdates(userId, position.since, position.cursor, token) },
+                    apply = { updates ->
+                        newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
+                        updates.forEach { remote ->
                         if (remote.isDeleted) {
                             workspaceDao.deleteWorkspaceById(remote.id)
                         } else {
@@ -83,7 +84,8 @@ class WorkspaceRepo(
                             syncWorkspaceMembers(remote.id)
                         }
                     }
-                }
+                    }
+                )
                 // Durable membership tombstones handle new removals. Keep an infrequent full
                 // reconciliation for removals that predate the tombstone migration and as repair.
                 val now = System.currentTimeMillis()
@@ -97,7 +99,7 @@ class WorkspaceRepo(
                     dataStore.edit { preferences -> preferences[fullRefreshKey] = now }
                 }
                 // After the rows are stored: committing first and dying in between would skip them.
-                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)

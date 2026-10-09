@@ -129,11 +129,12 @@ class TaskRepo(
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
-                val page = apiService.getTaskUpdates(workspaceId, position.since, position.cursor)
-                val updates = page.items
-
-                if (updates.isNotEmpty()) {
-                    updates.forEach { remote ->
+                var newestUpdatedAt: Long? = null
+                val page = com.collabsphere.app.remote.applySyncPages(
+                    fetch = { token -> apiService.getTaskUpdates(workspaceId, position.since, position.cursor, token) },
+                    apply = { updates ->
+                        newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
+                        updates.forEach { remote ->
                         if (remote.isDeleted) {
                             taskDao.deleteTask(remote.id)
                         } else {
@@ -153,9 +154,10 @@ class TaskRepo(
                             taskDao.insertTask(entity)
                         }
                     }
-                }
+                    }
+                )
                 // After the rows are stored: committing first and dying in between would skip them.
-                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("TaskRepo", "Delta sync iteration error", e)

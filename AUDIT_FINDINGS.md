@@ -2,22 +2,24 @@
 
 Tracking doc for the Android client and Ktor backend. Findings below are based on source inspection; each should be verified against the current deployment and reproduced before rollout.
 
-## Deliberately deferred (need a decision, not a bug)
+## External rollout work and remaining risks
 
-- **Persistent file storage** — Render's free tier has no attached disk; uploads are wiped on every redeploy. Needs either a paid Render plan with a disk, or moving to an object store (S3/R2/Backblaze).
-- **Pagination** — messages, DM history, tasks, notes, files are all unbounded fetches. Fine at current scale; revisit if usage grows.
-- **Git history leak** — 9 real user files were committed to `collabpshere_server/local_files_upload/` before `.gitignore` caught it. Removed from the working tree and current HEAD, but still recoverable from old commits. A full scrub (`git filter-repo` + force-push) was declined because it rewrites shared history.
+- **Persistent file storage** — production upload now fails closed unless Cloudinary is configured and available. Configure the provider secrets, migrate/inventory old local files, and verify restart durability in staging before enabling production uploads.
+- **Database credential exposure** — the hardcoded probe was removed from the current source, but provider-side credential rotation and any Git history cleanup are still required. History rewriting needs coordination because it affects shared clones.
+- **Historical uploaded files** — prior commits may contain real user files under `collabpshere_server/local_files_upload/`. Confirm the current repository history and coordinate a history rewrite if required by the data owner/security policy.
+- **Delta scan telemetry** — opt-in page-capable sync now uses keyset continuation on `(sync_xid,id)` for entities and workspace ID for workspace changes, with supporting composite indexes declared in the schema. Rows returned are bounded per request. Verify generated indexes/query plans against disposable PostgreSQL; current metrics count returned rows, not rows examined, and production workload tuning remains.
+- **Multi-instance Redis** — required-mode health and cross-instance fan-out are implemented, but do not enable multi-instance deployment until two-broker Redis integration tests pass.
+- **Phase 6 UI/staging acceptance** — broad Compose online/offline, second-account, process-recreation, release build, schema migration, upload, and notification checks remain.
 
 ## Confirmed open work
 
 - **Temporary workspace ID remapping:** addressed in the current fix pass. Open workspace routes observe the stored ID mapping and replace their route after returning from nested channel/search screens, preserving the selected workspace tab and DM partner so old route ViewModels are cleared. Full offline-to-online UI acceptance coverage remains.
 - **Membership removal sync:** current clients receive per-user removal tombstones through workspace delta sync; remaining members receive a workspace update and refresh their authoritative roster. A five-minute full-list reconciliation remains for pre-migration removals and repair.
-- **Task reminder crash window:** a task is claimed by setting `reminderSentAt` before inserting/pushing the notification. A process crash after the claim can lose the reminder; reliable retries need an outbox and idempotent notification creation.
-- **File durability:** Render is configured on the free plan with a local upload directory. Local fallback files can disappear on redeploy, and a configured Cloudinary outage silently falls back to that disk. Choose durable object storage and migrate existing files before changing this behavior.
-- **Multi-instance readiness (conditional):** Redis is optional. The member cache has per-JVM entries that another instance cannot invalidate, and WebSocket delivery currently publishes to Redis only when no local session received the event. Do not scale to multiple instances until shared invalidation and fan-out are corrected and tested.
+- **Task reminders:** transactional outbox, idempotent notification creation, and bounded retry/lease behavior are implemented. DB-backed crash/retry and FCM integration cases still need a disposable test environment.
+- **File durability:** production no longer silently falls back to local disk; provider provisioning and old-file migration remain external work.
+- **Multi-instance readiness (conditional):** Redis-required mode, shared fan-out, origin deduplication, reconnect attempts, and local-cache bypass are implemented. Integration validation across two instances remains.
 - **Link preview SSRF hardening:** the service checks DNS results before `HttpURLConnection` connects by hostname; a DNS answer can change between validation and connection. Pin the validated address while preserving TLS hostname verification, or use a vetted client with equivalent controls.
-- **Unbounded result sets:** task, note, file, message, and DM history endpoints can return unbounded data. Add cursor pagination with client cursor commits only after applying the complete page.
-- **Exposed database credential:** the literal was removed from the current test source, but the credential must be rotated at its provider. It remains in existing Git history; history cleanup would require a coordinated rewrite and force push.
+- **Delta response size:** opt-in continuation paging now covers synced entities; Android applies each page before committing the final snapshot cursor. The snapshot/page-boundary cases still require PostgreSQL integration tests.
 
 ## Already addressed in this fix pass
 
@@ -27,6 +29,14 @@ Tracking doc for the Android client and Ktor backend. Findings below are based o
 - Removing a workspace member now stamps the workspace in the same transaction so remaining members receive a workspace delta and refresh their roster.
 - Delta polling keeps its success cadence and backs off after repeated errors across the client repositories.
 - Open workspace routes now resolve temporary IDs and replace the stale route when it is safe to do so.
+- Delta endpoints support optional bounded pages; Android commits the cursor only after all pages are applied. Sync response and row counters are exposed through the existing metrics endpoint.
+- Production uploads fail closed when durable storage is unavailable; local storage remains available for development.
+- Reminder claims and outbox records are transactional, with idempotent notification creation and worker retry leases.
+- Redis-required readiness and cross-instance WebSocket fan-out are available behind multi-instance configuration; single-instance mode stays Redis-optional.
+- CI workflows and pure tests for paging helpers/policies were added. Server unit tests and Android unit tests passed in the local workspace.
+- Server CI now provisions an isolated PostgreSQL service and runs the guarded integration suite; the workflow itself still needs a hosted Actions run to provide execution evidence.
+- Delta continuation no longer uses unbounded offsets. A fresh page-capable sync starts with the transaction-ID cursor; old clients without `pageSize` retain the timestamp path.
+- A Compose onboarding test covers moving through all onboarding pages and invoking the finish action; it is compiled and wired to emulator CI but still needs an emulator run.
 
 ## Broader maintainability work
 

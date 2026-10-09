@@ -80,6 +80,39 @@ val databaseBackedTestPatterns = listOf(
 
 tasks.named<Test>("test") {
     exclude(databaseBackedTestPatterns)
+    // Unit tests must not inherit a developer's database or provider credentials. If a unit test
+    // accidentally initializes the application database, DatabaseFactory fails instead of using
+    // its local-development fallback.
+    environment("COLLABSPHERE_SAFE_TEST_MODE", "YES")
+    environment("APP_ENV", "")
+    environment("DATABASE_URL", "")
+    environment("JDBC_DATABASE_URL", "")
+    environment("DATABASE_READ_URL", "")
+    environment("JDBC_DATABASE_READ_URL", "")
+    environment("GMAIL_CLIENT_ID", "")
+    environment("GMAIL_CLIENT_SECRET", "")
+    environment("GMAIL_REFRESH_TOKEN", "")
+    environment("SMTP_HOST", "")
+    environment("SMTP_USER", "")
+    environment("SMTP_PASSWORD", "")
+    environment("SMTP_PASS", "")
+    environment("CLOUDINARY_CLOUD_NAME", "")
+    environment("CLOUDINARY_API_KEY", "")
+    environment("CLOUDINARY_API_SECRET", "")
+    environment("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+    environment("FIREBASE_CONFIG_PATH", "")
+    environment("GOOGLE_APPLICATION_CREDENTIALS", "")
+    environment("REDIS_URL", "")
+    environment("REDIS_TLS_URL", "")
+    environment("REDIS_REQUIRED", "")
+    environment("INSTANCE_COUNT", "")
+    environment("GITHUB_TOKEN", "")
+    environment("GITHUB_APP_ID", "")
+    environment("GITHUB_CLIENT_ID", "")
+    environment("GITHUB_CLIENT_SECRET", "")
+    environment("GITHUB_PRIVATE_KEY_BASE64", "")
+    environment("GITHUB_WEBHOOK_SECRET", "")
+    environment("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS", "YES")
 }
 
 val testDatabaseUrl = providers.environmentVariable("TEST_DATABASE_URL")
@@ -104,6 +137,10 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
             "Set TEST_DATABASE_URL to a disposable PostgreSQL test database before running integrationTest."
         }
         val selectedUrl = testDatabaseUrl.get()
+        val selectedDatabaseName = selectedUrl.substringAfterLast('/').substringBefore('?')
+        require(selectedDatabaseName.contains("test", ignoreCase = true)) {
+            "Integration tests require a TEST_DATABASE_URL whose database name clearly identifies it as a test database."
+        }
         val runtimeDatabaseUrl = System.getenv("DATABASE_URL")
         val runtimeJdbcUrl = System.getenv("JDBC_DATABASE_URL")
         require(selectedUrl != runtimeDatabaseUrl && selectedUrl != runtimeJdbcUrl) {
@@ -132,7 +169,21 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
     environment("CLOUDINARY_API_SECRET", "")
     environment("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     environment("FIREBASE_CONFIG_PATH", "")
+    environment("GOOGLE_APPLICATION_CREDENTIALS", "")
+    environment("REDIS_URL", "")
+    environment("REDIS_TLS_URL", "")
+    environment("REDIS_REQUIRED", "")
+    environment("INSTANCE_COUNT", "")
+    environment("GITHUB_TOKEN", "")
+    environment("GITHUB_APP_ID", "")
+    environment("GITHUB_CLIENT_ID", "")
+    environment("GITHUB_CLIENT_SECRET", "")
+    environment("GITHUB_PRIVATE_KEY_BASE64", "")
+    environment("GITHUB_WEBHOOK_SECRET", "")
+    environment("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS", "YES")
     environment("UPLOAD_DIR", layout.buildDirectory.dir("integration-test-uploads").get().asFile.absolutePath)
+    environment("COLLABSPHERE_SAFE_TEST_MODE", "")
+    environment("APP_ENV", "")
 }
 
 // Opt into DB-backed verification explicitly; ordinary `check` remains usable on a fresh

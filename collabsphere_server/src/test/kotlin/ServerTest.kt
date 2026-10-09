@@ -7,11 +7,22 @@ import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.deleteWhere
 import kotlin.test.*
 
 class ServerTest {
+    private val createdEmails = mutableSetOf<String>()
+
+    @AfterTest
+    fun cleanUpGeneratedUsers() {
+        if (createdEmails.isNotEmpty()) {
+            transaction { UsersTable.deleteWhere { UsersTable.email inList createdEmails } }
+        }
+    }
+
     @Test
     fun testLoginEndpointSuccess() = testApplication {
         application {
@@ -21,6 +32,7 @@ class ServerTest {
         // A fixed email collides with itself on a second run against the same (real) dev DB this
         // test relies on — unique per run so the test stays repeatable without needing a test DB.
         val email = "test-${java.util.UUID.randomUUID()}@example.com"
+        createdEmails += email
 
         client.post("/api/register") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
@@ -46,6 +58,7 @@ class ServerTest {
         }
 
         val email = "test-${java.util.UUID.randomUUID()}@example.com"
+        createdEmails += email
 
         client.post("/api/register") {
             header(HttpHeaders.ContentType, ContentType.Application.Json.toString())

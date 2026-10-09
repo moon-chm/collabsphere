@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -25,7 +26,13 @@ object FcmService {
      *  outlives individual calls without leaking a new scope per send. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private data class PushDispatchResult(val sentCount: Int, val retryableFailure: Boolean)
+
     fun init() {
+        if (System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES") {
+            logger.info("FCM initialization disabled by the isolated test profile")
+            return
+        }
         if (isInitialized || FirebaseApp.getApps().isNotEmpty()) {
             isInitialized = true
             return
@@ -143,8 +150,9 @@ object FcmService {
      * Returns the count of successfully delivered messages.
      * UNREGISTERED tokens are skipped silently (stale devices); other errors are logged.
      */
-    private fun sendAll(tokens: List<String>, data: Map<String, String>, androidPriority: AndroidConfig.Priority): Int {
+    private fun sendAll(tokens: List<String>, data: Map<String, String>, androidPriority: AndroidConfig.Priority): PushDispatchResult {
         var sent = 0
+        var retryableFailure = false
         val androidConfig = AndroidConfig.builder().setPriority(androidPriority).build()
         for (token in tokens) {
             try {
@@ -161,15 +169,17 @@ object FcmService {
                 if (e.messagingErrorCode?.name == "UNREGISTERED") {
                     logger.info("[FCM] Stale token (UNREGISTERED) skipped: ${token.take(20)}...")
                 } else {
+                    retryableFailure = true
                     logger.error("[FCM] Failed to send to token ${token.take(20)}...: ${e.message}")
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                retryableFailure = true
                 fcmFailureCounter.increment()
                 logger.error("[FCM] Unexpected error for token ${token.take(20)}...: ${e.message}")
             }
         }
-        return sent
+        return PushDispatchResult(sent, retryableFailure)
     }
 
     /**
@@ -202,8 +212,8 @@ object FcmService {
                 "content" to content,
                 "timestamp" to timestamp.toString()
             )
-            val sent = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
-            if (sent > 0) logger.info("[FCM] DM push to userId=$recipientUserId: $sent/${tokens.size} devices")
+            val result = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
+            if (result.sentCount > 0) logger.info("[FCM] DM push to userId=$recipientUserId: ${result.sentCount}/${tokens.size} devices")
         }
     }
 
@@ -239,8 +249,35 @@ object FcmService {
                 actorUsername?.let { put("actor_username", it) }
                 actorAvatarUrl?.let { put("actor_avatar_url", it) }
             }
-            val sent = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
-            if (sent > 0) logger.info("[FCM] Generic push '$title' to userId=$recipientUserId: $sent/${tokens.size} devices")
+            val result = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
+            if (result.sentCount > 0) logger.info("[FCM] Generic push '$title' to userId=$recipientUserId: ${result.sentCount}/${tokens.size} devices")
+        }
+    }
+
+    /** Synchronous result for durable outbox workers; retryable token failures return false. */
+    suspend fun sendGenericPushAwait(
+        recipientUserId: Int,
+        notificationId: Int,
+        type: String,
+        title: String,
+        body: String,
+        workspaceId: Int?
+    ): Boolean {
+        if (!isInitialized) return true
+        return withContext(Dispatchers.IO) {
+            val tokens = getAllFcmTokens(recipientUserId)
+            if (tokens.isEmpty()) return@withContext true
+            val data = buildMap {
+                put("type", type)
+                put("notification_id", notificationId.toString())
+                put("recipient_id", recipientUserId.toString())
+                put("title", title)
+                put("body", body)
+                put("created_at", System.currentTimeMillis().toString())
+                workspaceId?.let { put("workspace_id", it.toString()) }
+            }
+            val result = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
+            !result.retryableFailure
         }
     }
 }

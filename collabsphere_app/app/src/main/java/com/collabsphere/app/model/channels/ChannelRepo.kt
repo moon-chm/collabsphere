@@ -119,10 +119,12 @@ class ChannelRepo(
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
-                val page = apiService.getChannelUpdates(workspaceId, position.since, position.cursor)
-                val updates = page.items
-
-                if (updates.isNotEmpty()) {
+                var newestUpdatedAt: Long? = null
+                val page = com.collabsphere.app.remote.applySyncPages(
+                    fetch = { token -> apiService.getChannelUpdates(workspaceId, position.since, position.cursor, token) },
+                    apply = { updates ->
+                        newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
+                        if (updates.isNotEmpty()) {
                     val upserts = updates.filter { !it.isDeleted }.map { remote ->
                         ChannelEntity(
                             id = remote.id,
@@ -142,10 +144,11 @@ class ChannelRepo(
                         )
                     }
                     if (upserts.isNotEmpty()) channelDao.insertAllChannels(upserts)
-
                 }
+                    }
+                )
                 // After the rows are stored: committing first and dying in between would skip them.
-                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("ChannelRepo", "Operation failed", e)

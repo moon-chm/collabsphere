@@ -90,6 +90,7 @@ object DatabaseFactory {
                 UserBlocksTable,
                 UserVerificationTable,
                 NotificationsTable,
+                TaskReminderOutboxTable,
                 PasswordResetTable,
                 WorkspaceInvitationsTable,
                 GitHubConnectionsTable,
@@ -173,6 +174,9 @@ object DatabaseFactory {
                 }
             } else {
                 if (envUrlKey == "DATABASE_URL") {
+                    check(System.getenv("COLLABSPHERE_SAFE_TEST_MODE") != "YES") {
+                        "Database access is disabled in the default unit-test task; use integrationTest with a disposable TEST_DATABASE_URL."
+                    }
                     // Local development fallback only for primary
                     jdbcUrl = "jdbc:postgresql://localhost:5432/Collabsphere"
                     username = System.getenv("DB_USER") ?: "postgres"

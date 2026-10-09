@@ -405,18 +405,22 @@ class DmRepo(
         try {
             val position = dataStore.readSyncPosition(DM_SYNC_KEY)
             val knownUpToId = dmDao.newestSyncedDmId() ?: 0
-            val page = apiService.getDmUpdates(baseUrl, position.cursor, knownUpToId)
-            for (dto in page.items) {
-                val id = dto.id ?: continue
-                if (dto.isDeleted) {
-                    dmDao.deleteDmById(id)
-                    reactionDao.deleteAllReactionsForMessage(id)
-                } else if (dmDao.exists(id) || id > knownUpToId) {
-                    // Older rows the device never loaded are skipped: inserting them would leave a hole in
-                    // the conversation between them and the loaded window. History paging fetches them.
-                    dmDao.sendDm(dto.toEntity(isRead = dto.isRead))
+            val page = com.collabsphere.app.remote.applySyncPages(
+                fetch = { token -> apiService.getDmUpdates(baseUrl, position.cursor, knownUpToId, token) },
+                apply = { updates ->
+                    for (dto in updates) {
+                        val id = dto.id ?: continue
+                        if (dto.isDeleted) {
+                            dmDao.deleteDmById(id)
+                            reactionDao.deleteAllReactionsForMessage(id)
+                        } else if (dmDao.exists(id) || id > knownUpToId) {
+                            // Older rows the device never loaded are skipped: inserting them would leave a hole in
+                            // the conversation between them and the loaded window. History paging fetches them.
+                            dmDao.sendDm(dto.toEntity(isRead = dto.isRead))
+                        }
+                    }
                 }
-            }
+            )
             dataStore.commitSyncPosition(DM_SYNC_KEY, position, page, newestUpdatedAt = null)
             return true
         } catch (e: CancellationException) {

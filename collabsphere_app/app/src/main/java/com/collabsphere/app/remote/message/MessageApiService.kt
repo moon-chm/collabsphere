@@ -101,9 +101,9 @@ class MessageApiService(private val client: HttpClient) {
         }.toSyncPage()
     }
 
-    suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long, cursor: Long?): SyncPage<MessageSyncDto> {
+    suspend fun getMessageUpdates(workspaceId: Int, channelId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<MessageSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId/$channelId") {
-            syncParameters(since, cursor)
+            syncParameters(since, cursor, pageToken = pageToken)
         }.toSyncPage()
     }
 }

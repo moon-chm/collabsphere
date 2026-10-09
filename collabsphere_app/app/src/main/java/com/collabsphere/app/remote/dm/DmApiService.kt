@@ -195,11 +195,13 @@ class DmApiService(
      * DM edits, read-state changes and deletions (as tombstones) since [cursor]. Without a cursor the
      * server uses [knownUpToId] — the newest DM id held locally — to decide what this device could have.
      */
-    suspend fun getDmUpdates(baseUrl: String, cursor: Long?, knownUpToId: Int): SyncPage<DmDto> {
+    suspend fun getDmUpdates(baseUrl: String, cursor: Long?, knownUpToId: Int, pageToken: String? = null): SyncPage<DmDto> {
         val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
         return client.get("$cleanBaseUrl/api/dm/sync") {
             cursor?.let { parameter("cursor", it) }
             parameter("sinceId", knownUpToId)
+            parameter("pageSize", com.collabsphere.app.remote.SYNC_PAGE_SIZE)
+            pageToken?.let { parameter("pageToken", it) }
         }.toSyncPage()
     }
 

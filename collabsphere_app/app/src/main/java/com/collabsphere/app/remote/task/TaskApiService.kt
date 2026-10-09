@@ -41,9 +41,9 @@ class TaskApiService(private val client: HttpClient) {
     suspend fun deleteTask(taskId: Int): HttpStatusCode =
         client.delete("$baseUrl/$taskId").status
 
-    suspend fun getTaskUpdates(workspaceId: Int, since: Long, cursor: Long?): SyncPage<TaskSyncDto> {
+    suspend fun getTaskUpdates(workspaceId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<TaskSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {
-            syncParameters(since, cursor)
+            syncParameters(since, cursor, pageToken = pageToken)
             contentType(ContentType.Application.Json)
         }.toSyncPage()
     }

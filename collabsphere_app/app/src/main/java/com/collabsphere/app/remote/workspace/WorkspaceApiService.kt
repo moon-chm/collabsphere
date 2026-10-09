@@ -70,9 +70,9 @@ class WorkspaceApiService(
         }.body()
     }
 
-    suspend fun getWorkspaceUpdates(userId: Int, since: Long, cursor: Long?): SyncPage<WorkspaceSyncDto> {
+    suspend fun getWorkspaceUpdates(userId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<WorkspaceSyncDto> {
         return client.get("$baseUrl/sync/$userId") {
-            syncParameters(since, cursor)
+            syncParameters(since, cursor, pageToken = pageToken)
         }.toSyncPage()
     }
 

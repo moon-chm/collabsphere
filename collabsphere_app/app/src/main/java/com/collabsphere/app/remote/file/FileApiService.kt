@@ -69,10 +69,10 @@ class FileApiService(private val client: HttpClient) {
     suspend fun deleteFile(fileId: Long): HttpStatusCode =
         client.delete("$baseUrl/$fileId").status
 
-    suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long, cursor: Long?): SyncPage<FileSyncDto> {
+    suspend fun getFileUpdates(workspaceId: Int, lastSyncTime: Long, cursor: Long?, pageToken: String? = null): SyncPage<FileSyncDto> {
         return client.get("$baseUrl/updates") {
             parameter("workspaceId", workspaceId)
-            syncParameters(lastSyncTime, cursor, sinceParam = "lastSyncTime")
+            syncParameters(lastSyncTime, cursor, sinceParam = "lastSyncTime", pageToken = pageToken)
         }.toSyncPage()
     }
 }

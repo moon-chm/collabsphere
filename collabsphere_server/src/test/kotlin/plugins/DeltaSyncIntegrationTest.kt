@@ -6,13 +6,15 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
+import kotlinx.coroutines.runBlocking
 import java.sql.Connection
 import java.util.UUID
 import kotlin.test.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 
 /**
- * Runs against the real Postgres the other server tests use (JDBC_DATABASE_URL / DATABASE_URL, or the
- * local dev fallback) — the bug being guarded against only exists with real concurrent transactions.
+ * Runs only against the disposable PostgreSQL database explicitly configured for integrationTest.
+ * The bug being guarded against only exists with real concurrent transactions.
  */
 class DeltaSyncIntegrationTest {
 
@@ -24,28 +26,61 @@ class DeltaSyncIntegrationTest {
 
     private data class Fixture(val userA: Int, val userB: Int, val workspaceId: Int)
 
-    private fun fixture(): Fixture = transaction {
-        val tag = UUID.randomUUID().toString().take(8)
-        fun user(name: String) = UsersTable.insert {
-            it[email] = "$name-$tag@sync.test"
-            it[password] = "x"
-            it[username] = "$name-$tag"
-        }[UsersTable.id]
-        val a = user("a")
-        val b = user("b")
-        val ws = WorkspacesTable.insert {
-            it[userId] = a
-            it[workspaceName] = "ws-$tag"
-            it[workspaceOwner] = "a-$tag"
-            it[workspacePassword] = ""
-        }[WorkspacesTable.id]
-        for (u in listOf(a, b)) {
-            WorkspaceMembersTable.insert {
-                it[workspaceId] = ws
-                it[userId] = u
+    private val createdUserIds = mutableSetOf<Int>()
+    private val createdWorkspaceIds = mutableSetOf<Int>()
+    private val createdReminderKeys = mutableSetOf<String>()
+
+    private fun fixture(): Fixture {
+        val fixture = transaction {
+            val tag = UUID.randomUUID().toString().take(8)
+            fun user(name: String) = UsersTable.insert {
+                it[email] = "$name-$tag@sync.test"
+                it[password] = "x"
+                it[username] = "$name-$tag"
+            }[UsersTable.id]
+            val a = user("a")
+            val b = user("b")
+            val ws = WorkspacesTable.insert {
+                it[userId] = a
+                it[workspaceName] = "ws-$tag"
+                it[workspaceOwner] = "a-$tag"
+                it[workspacePassword] = ""
+            }[WorkspacesTable.id]
+            for (u in listOf(a, b)) {
+                WorkspaceMembersTable.insert {
+                    it[workspaceId] = ws
+                    it[userId] = u
+                }
+            }
+            Fixture(a, b, ws)
+        }
+        createdUserIds += listOf(fixture.userA, fixture.userB)
+        createdWorkspaceIds += fixture.workspaceId
+        return fixture
+    }
+
+    @AfterTest
+    fun cleanUpFixtureRows() {
+        if (createdUserIds.isEmpty() && createdWorkspaceIds.isEmpty()) return
+        transaction {
+            if (createdUserIds.isNotEmpty()) {
+                NotificationsTable.deleteWhere { NotificationsTable.recipientId inList createdUserIds }
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.userId inList createdUserIds }
+            }
+            if (createdWorkspaceIds.isNotEmpty()) {
+                NotificationsTable.deleteWhere { NotificationsTable.workspaceId inList createdWorkspaceIds }
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.workspaceId inList createdWorkspaceIds }
+                WorkspacesTable.deleteWhere { WorkspacesTable.id inList createdWorkspaceIds }
+            }
+            if (createdReminderKeys.isNotEmpty()) {
+                TaskReminderOutboxTable.deleteWhere { TaskReminderOutboxTable.reminderKey inList createdReminderKeys }
+            }
+            if (createdUserIds.isNotEmpty()) {
+                UsersTable.deleteWhere { UsersTable.id inList createdUserIds }
             }
         }
-        Fixture(a, b, ws)
+        createdWorkspaceIds.clear()
+        createdUserIds.clear()
     }
 
     private fun insertTask(workspaceId: Int, userId: Int, name: String, updatedAt: Long = System.currentTimeMillis()) =
@@ -123,6 +158,175 @@ class DeltaSyncIntegrationTest {
     }
 
     @Test
+    fun `bounded task delta pages keep the cursor until the final page`() {
+        val f = fixture()
+        transaction { repeat(5) { index -> insertTask(f.workspaceId, f.userA, "paged-$index") } }
+
+        val first = syncTasks(f.workspaceId, SyncRequest(cursor = 0, since = 0, pageSize = 2))
+        assertEquals(2, first.rows.size)
+        assertNotNull(first.nextPageToken)
+        val firstSnapshotCursor = first.nextCursor
+
+        val second = syncTasks(f.workspaceId, SyncRequest(cursor = 0, since = 0, pageSize = 2, pageToken = first.nextPageToken))
+        assertEquals(2, second.rows.size)
+        assertNotNull(second.nextPageToken)
+        assertEquals(firstSnapshotCursor, second.nextCursor)
+
+        val third = syncTasks(f.workspaceId, SyncRequest(cursor = 0, since = 0, pageSize = 2, pageToken = second.nextPageToken))
+        assertEquals(1, third.rows.size)
+        assertNull(third.nextPageToken)
+        assertEquals(firstSnapshotCursor, third.nextCursor)
+        assertEquals(5, (first.rows + second.rows + third.rows).map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun `first paged sync uses transaction keys even when legacy timestamp is zero`() {
+        val f = fixture()
+        transaction { insertTask(f.workspaceId, f.userA, "legacy timestamp", updatedAt = 0L) }
+
+        val legacy = syncTasks(f.workspaceId, SyncRequest(cursor = null, since = 0L))
+        assertTrue(legacy.rows.isEmpty(), "legacy updated_at > 0 does not include a zero timestamp")
+
+        val paged = syncTasks(f.workspaceId, SyncRequest(cursor = null, since = 0L, pageSize = 20))
+        assertEquals(listOf("legacy timestamp"), paged.rows.map { it.taskName })
+        assertFalse(paged.reset)
+    }
+
+    @Test
+    fun `workspace delta pages merge active workspaces in bounded order`() {
+        val f = fixture()
+        val extraIds = transaction {
+            (1..4).map { index ->
+                val id = WorkspacesTable.insert {
+                    it[userId] = f.userA
+                    it[workspaceName] = "extra-$index"
+                    it[workspaceOwner] = "a"
+                    it[workspacePassword] = ""
+                }[WorkspacesTable.id]
+                WorkspaceMembersTable.insert {
+                    it[workspaceId] = id
+                    it[userId] = f.userB
+                }
+                id
+            }
+        }
+        createdWorkspaceIds += extraIds
+        val first = transaction {
+            workspaceDeltaSync(f.userB, SyncRequest(cursor = 0, since = 0, pageSize = 2))
+        }
+        assertEquals(2, first.rows.size)
+        assertNotNull(first.nextPageToken)
+
+        val second = transaction {
+            workspaceDeltaSync(
+                f.userB,
+                SyncRequest(cursor = 0, since = 0, pageSize = 2, pageToken = first.nextPageToken)
+            )
+        }
+        assertEquals(2, second.rows.size)
+        assertNotNull(second.nextPageToken)
+
+        val third = transaction {
+            workspaceDeltaSync(
+                f.userB,
+                SyncRequest(cursor = 0, since = 0, pageSize = 2, pageToken = second.nextPageToken)
+            )
+        }
+        assertEquals(1, third.rows.size)
+        assertNull(third.nextPageToken)
+        val allIds = (first.rows + second.rows + third.rows).map { it.id }
+        assertEquals((listOf(f.workspaceId) + extraIds).sorted(), allIds)
+        assertEquals(5, allIds.distinct().size)
+        assertEquals(first.nextCursor, second.nextCursor)
+        assertEquals(first.nextCursor, third.nextCursor)
+    }
+
+    @Test
+    fun `reminder outbox job is claimed by only one worker`() {
+        val now = System.currentTimeMillis()
+        val key = "test-reminder:${UUID.randomUUID()}"
+        createdReminderKeys += key
+        transaction {
+            TaskReminderOutboxTable.insert {
+                it[reminderKey] = key
+                it[taskId] = 1
+                it[workspaceId] = 1
+                it[recipientId] = 1
+                it[dueDate] = now
+                it[title] = "Task due soon"
+                it[body] = "Test reminder"
+                it[status] = "PENDING"
+                it[attempts] = 0
+                it[nextAttemptAt] = now
+                it[createdAt] = now
+            }
+        }
+
+        val firstWorker = transaction { claimReminderBatch(now, limit = 1) }
+        val secondWorker = transaction { claimReminderBatch(now, limit = 1) }
+        assertEquals(listOf(key), firstWorker.map { it.reminderKey })
+        assertTrue(secondWorker.none { it.reminderKey == key })
+    }
+
+    @Test
+    fun `reminder delivery retries transient push failure without duplicating notification`() = runBlocking {
+        val f = fixture()
+        val now = System.currentTimeMillis()
+        val taskId = transaction {
+            val id = insertTask(f.workspaceId, f.userA, "retry reminder")
+            TasksTable.update({ TasksTable.id eq id }) {
+                it[assignedToUserId] = f.userB
+                it[dueDate] = now
+            }
+            id
+        }
+        val key = reminderKey(taskId, now)
+        createdReminderKeys += key
+        transaction {
+            TaskReminderOutboxTable.insert {
+                it[reminderKey] = key
+                it[TaskReminderOutboxTable.taskId] = taskId
+                it[workspaceId] = f.workspaceId
+                it[recipientId] = f.userB
+                it[dueDate] = now
+                it[title] = "Task due soon"
+                it[body] = "Retry reminder body"
+                it[status] = "PENDING"
+                it[attempts] = 0
+                it[nextAttemptAt] = now
+                it[createdAt] = now
+            }
+        }
+
+        deliverReminderBatch(now) { false }
+        val failedDelivery = transaction {
+            TaskReminderOutboxTable.selectAll()
+                .where { TaskReminderOutboxTable.reminderKey eq key }
+                .single()
+        }
+        assertEquals("PENDING", failedDelivery[TaskReminderOutboxTable.status])
+        assertEquals(1, failedDelivery[TaskReminderOutboxTable.attempts])
+        assertEquals(now + reminderRetryDelay(1), failedDelivery[TaskReminderOutboxTable.nextAttemptAt])
+        assertEquals(1L, transaction {
+            NotificationsTable.selectAll().where { NotificationsTable.dedupeKey eq key }.count()
+        })
+
+        val retryAt = now + reminderRetryDelay(1)
+        deliverReminderBatch(retryAt) { true }
+        val delivered = transaction {
+            TaskReminderOutboxTable.selectAll()
+                .where { TaskReminderOutboxTable.reminderKey eq key }
+                .single()
+        }
+        assertEquals("DONE", delivered[TaskReminderOutboxTable.status])
+        assertNotNull(delivered[TaskReminderOutboxTable.deliveredAt])
+        assertEquals(2, delivered[TaskReminderOutboxTable.attempts])
+        assertEquals(1L, transaction {
+            NotificationsTable.selectAll().where { NotificationsTable.dedupeKey eq key }.count()
+        })
+    }
+
+    @Test
     fun `cursor from another database asks the client to reset`() {
         val f = fixture()
         val page = syncTasks(f.workspaceId, SyncRequest(cursor = Long.MAX_VALUE / 2, since = 0))
@@ -142,6 +346,7 @@ class DeltaSyncIntegrationTest {
                 it[username] = "c-$tag"
             }[UsersTable.id]
         }
+        createdUserIds += newcomer
         val cursor = transaction { workspaceDeltaSync(newcomer, SyncRequest(cursor = 0, since = 0)) }.nextCursor
         transaction {
             WorkspaceMembersTable.insert {

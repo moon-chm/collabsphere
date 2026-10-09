@@ -1,6 +1,8 @@
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspaceMembersTable
 import com.collabsphere.model.WorkspacesTable
+import com.collabsphere.model.NotificationsTable
+import com.collabsphere.model.WorkspaceMembershipStateTable
 import com.collabsphere.util.PasswordHasher
 import com.collabsphere.module
 import dto.LoginResponse
@@ -15,6 +17,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -28,9 +32,13 @@ import kotlin.test.*
 class RoutesEndToEndTest {
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val createdUserIds = mutableSetOf<Int>()
+    private val createdWorkspaceIds = mutableSetOf<Int>()
+    private val createdEmails = mutableSetOf<String>()
 
     private suspend fun HttpClient.signUp(): Pair<Int, String> {
         val email = "e2e-${UUID.randomUUID()}@example.com"
+        createdEmails += email
         post("/api/register") {
             contentType(ContentType.Application.Json)
             setBody("""{"email":"$email","password":"password123","userName":"e2e"}""")
@@ -41,32 +49,58 @@ class RoutesEndToEndTest {
             setBody("""{"email":"$email","password":"password123"}""")
         }
         val response = json.decodeFromString<LoginResponse>(login.bodyAsText())
+        createdUserIds += response.id
         return response.id to response.token!!
     }
 
-    private fun workspaceWith(vararg members: Int): Int = transaction {
-        val ws = WorkspacesTable.insert {
-            it[userId] = members.first()
-            it[workspaceName] = "e2e"
-            it[workspaceOwner] = "e2e"
-            it[workspacePassword] = ""
-        }[WorkspacesTable.id]
-        members.forEach { m -> WorkspaceMembersTable.insert { it[workspaceId] = ws; it[userId] = m } }
-        ws
+    private fun workspaceWith(vararg members: Int): Int {
+        val workspaceId = transaction {
+            val ws = WorkspacesTable.insert {
+                it[userId] = members.first()
+                it[workspaceName] = "e2e"
+                it[workspaceOwner] = "e2e"
+                it[workspacePassword] = ""
+            }[WorkspacesTable.id]
+            members.forEach { m -> WorkspaceMembersTable.insert { it[workspaceId] = ws; it[userId] = m } }
+            ws
+        }
+        createdWorkspaceIds += workspaceId
+        return workspaceId
     }
 
-    private fun ownedWorkspace(ownerId: Int, name: String, password: String): Int = transaction {
-        val workspaceId = WorkspacesTable.insert {
-            it[userId] = ownerId
-            it[workspaceName] = name
-            it[workspaceOwner] = "e2e"
-            it[workspacePassword] = PasswordHasher.hash(password)
-        }[WorkspacesTable.id]
-        WorkspaceMembersTable.insert {
-            it[WorkspaceMembersTable.workspaceId] = workspaceId
-            it[WorkspaceMembersTable.userId] = ownerId
+    private fun ownedWorkspace(ownerId: Int, name: String, password: String): Int {
+        val workspaceId = transaction {
+            val id = WorkspacesTable.insert {
+                it[userId] = ownerId
+                it[workspaceName] = name
+                it[workspaceOwner] = "e2e"
+                it[workspacePassword] = PasswordHasher.hash(password)
+            }[WorkspacesTable.id]
+            WorkspaceMembersTable.insert {
+                it[WorkspaceMembersTable.workspaceId] = id
+                it[WorkspaceMembersTable.userId] = ownerId
+            }
+            id
         }
-        workspaceId
+        createdWorkspaceIds += workspaceId
+        return workspaceId
+    }
+
+    @AfterTest
+    fun cleanUpFixtureRows() {
+        transaction {
+            if (createdUserIds.isNotEmpty()) {
+                NotificationsTable.deleteWhere { NotificationsTable.recipientId inList createdUserIds }
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.userId inList createdUserIds }
+            }
+            if (createdWorkspaceIds.isNotEmpty()) {
+                NotificationsTable.deleteWhere { NotificationsTable.workspaceId inList createdWorkspaceIds }
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.workspaceId inList createdWorkspaceIds }
+                WorkspacesTable.deleteWhere { WorkspacesTable.id inList createdWorkspaceIds }
+            }
+            if (createdEmails.isNotEmpty()) UsersTable.deleteWhere { UsersTable.email inList createdEmails }
+            if (createdUserIds.isNotEmpty()) UsersTable.deleteWhere { UsersTable.id inList createdUserIds }
+        }
     }
 
     @Test

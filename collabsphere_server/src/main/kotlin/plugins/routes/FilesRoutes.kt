@@ -4,6 +4,7 @@ import com.collabsphere.dto.*
 import dto.*
 import com.collabsphere.model.*
 import com.collabsphere.util.CloudinaryService
+import com.collabsphere.util.StoragePolicy
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.server.application.*
@@ -25,6 +26,11 @@ internal fun Route.filesRoutes() {
             var staged: File? = null
             try {
                 val actingUserId = call.authenticatedUserId()
+                val durableStorageRequired = StoragePolicy.requiresDurableStorage()
+                if (durableStorageRequired && !CloudinaryService.isConfigured) {
+                    call.respond(HttpStatusCode.ServiceUnavailable, "Durable file storage is not configured")
+                    return@post
+                }
                 if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
                 val multipart = call.receiveMultipart()
                 var workspaceId: Int? = null
@@ -115,7 +121,11 @@ internal fun Route.filesRoutes() {
                         )
                     } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                        logger.warn("[FileUpload] Cloudinary upload failed, storing on local disk", e)
+                        logger.warn("[FileUpload] Cloudinary upload failed", e)
+                        if (durableStorageRequired) {
+                            call.respond(HttpStatusCode.ServiceUnavailable, "Durable file storage is temporarily unavailable")
+                            return@post
+                        }
                         null
                     }
                 } else {
@@ -123,6 +133,7 @@ internal fun Route.filesRoutes() {
                 }
 
                 val generatedFileLocation = cloudLocation ?: run {
+                    check(!durableStorageRequired) { "Production uploads cannot fall back to local disk" }
                     val uploadDir = File(System.getenv("UPLOAD_DIR") ?: "local_files_upload")
                     if (!uploadDir.exists()) {
                         uploadDir.mkdirs()
@@ -257,7 +268,8 @@ internal fun Route.filesRoutes() {
                 if (page == null) {
                     call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 } else {
-                    call.appendSyncHeaders(page.nextCursor, page.reset)
+                    recordSyncPage("files", page.rows.size)
+                    call.appendSyncHeaders(page.nextCursor, page.reset, page.nextPageToken)
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {

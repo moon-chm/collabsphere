@@ -601,7 +601,8 @@ internal fun Route.messagesRoutes() {
                 if (page == null) {
                     call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 } else {
-                    call.appendSyncHeaders(page.nextCursor, page.reset)
+                    recordSyncPage("messages", page.rows.size)
+                    call.appendSyncHeaders(page.nextCursor, page.reset, page.nextPageToken)
                     call.respond(HttpStatusCode.OK, page.rows)
                 }
             } catch (e: Exception) {

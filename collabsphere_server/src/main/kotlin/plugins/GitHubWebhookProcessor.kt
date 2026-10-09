@@ -40,6 +40,7 @@ internal data class ClaimedWebhook(
 )
 
 fun Application.startGitHubWebhookProcessor() {
+    if (System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES") return
     launch(Dispatchers.IO) {
         while (isActive) {
             try {

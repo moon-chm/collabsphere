@@ -50,10 +50,13 @@ internal object WorkspaceMemberCache {
      * MUST be called from inside an Exposed transaction / `dbQuery` block.
      */
     fun getMembers(workspaceId: Int): List<Int> {
-        // L1 — JVM cache
-        jvmCache[workspaceId]?.let { entry ->
-            if (System.currentTimeMillis() < entry.expiresAt) return entry.memberIds
-            jvmCache.remove(workspaceId)   // expired — evict
+        // A JVM cache is safe only without shared invalidation. In multi-instance mode every
+        // instance reads the shared Redis entry (or PostgreSQL during Redis failure).
+        if (!RedisFactory.isRequired) {
+            jvmCache[workspaceId]?.let { entry ->
+                if (System.currentTimeMillis() < entry.expiresAt) return entry.memberIds
+                jvmCache.remove(workspaceId)
+            }
         }
 
         // L2 — Redis (optional)
@@ -67,7 +70,6 @@ internal object WorkspaceMemberCache {
             }
             if (!cached.isNullOrBlank()) {
                 val ids = cached.split(",").mapNotNull { it.trim().toIntOrNull() }
-                jvmCache[workspaceId] = CacheEntry(ids, System.currentTimeMillis() + JVM_TTL_MS)
                 return ids
             }
         }
@@ -108,7 +110,6 @@ internal object WorkspaceMemberCache {
             .map { it[WorkspaceMembersTable.userId] }
 
     private fun populateCaches(workspaceId: Int, ids: List<Int>) {
-        jvmCache[workspaceId] = CacheEntry(ids, System.currentTimeMillis() + JVM_TTL_MS)
         if (RedisFactory.isAvailable && ids.isNotEmpty()) {
             try {
                 RedisFactory.async?.setex(
@@ -120,6 +121,8 @@ internal object WorkspaceMemberCache {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 logger.warn("[WMCache] Redis set failed for workspaceId=$workspaceId: ${e.message}")
             }
+        } else if (!RedisFactory.isRequired) {
+            jvmCache[workspaceId] = CacheEntry(ids, System.currentTimeMillis() + JVM_TTL_MS)
         }
     }
 }

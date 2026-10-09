@@ -7,6 +7,9 @@ import io.lettuce.core.api.async.RedisAsyncCommands
 import org.slf4j.LoggerFactory
 import java.time.Duration
 
+internal fun redisRequiredByConfiguration(requiredFlag: String?, instanceCount: String?): Boolean =
+    requiredFlag.equals("true", ignoreCase = true) || (instanceCount?.toIntOrNull() ?: 1) > 1
+
 /**
  * Optional Redis integration.
  *
@@ -23,10 +26,16 @@ object RedisFactory {
     private var client: RedisClient? = null
     private var _connection: StatefulRedisConnection<String, String>? = null
 
-    /** True only when a REDIS_URL is configured AND the connection succeeded. */
+    private val redisRequired: Boolean by lazy {
+        redisRequiredByConfiguration(System.getenv("REDIS_REQUIRED"), System.getenv("INSTANCE_COUNT"))
+    }
+
+    val isRequired: Boolean get() = redisRequired
+
+    /** True only when Redis was configured, connected, and its primary connection remains open. */
     @Volatile
-    var isAvailable: Boolean = false
-        private set
+    private var connected = false
+    val isAvailable: Boolean get() = connected && _connection?.isOpen == true
 
     val async: RedisAsyncCommands<String, String>?
         get() = _connection?.async()
@@ -39,6 +48,7 @@ object RedisFactory {
         val redisUrl = System.getenv("REDIS_URL")
             ?: System.getenv("REDIS_TLS_URL") // Render exposes both
         if (redisUrl.isNullOrBlank()) {
+            if (isRequired) error("Redis is required for multi-instance mode but REDIS_URL is not configured")
             logger.info("[Redis] REDIS_URL not set — running without Redis (single-instance mode). " +
                 "Set REDIS_URL to enable cross-instance WebSocket fan-out and caching.")
             return
@@ -55,7 +65,7 @@ object RedisFactory {
             // Quick connectivity check — if this throws, Redis is misconfigured
             _connection!!.sync().ping()
 
-            isAvailable = true
+            connected = true
             logger.info("[Redis] Connected to Redis at ${uri.host}:${uri.port}")
         } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -66,7 +76,8 @@ object RedisFactory {
             try { client?.shutdown() } catch (_: Exception) {}
             _connection = null
             client = null
-            isAvailable = false
+            connected = false
+            if (isRequired) throw IllegalStateException("Redis is required for multi-instance mode but is unavailable", e)
         }
     }
 
@@ -85,6 +96,18 @@ object RedisFactory {
     fun close() {
         try { _connection?.close() } catch (_: Exception) {}
         try { client?.shutdown() } catch (_: Exception) {}
-        isAvailable = false
+        connected = false
+    }
+
+    /** Synchronous readiness probe used only when shared coordination is required. */
+    fun checkHealth(): Boolean {
+        if (!isRequired) return true
+        return try {
+            _connection?.sync()?.ping() == "PONG"
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            logger.warn("[Redis] Readiness ping failed: ${e.message}")
+            false
+        }
     }
 }

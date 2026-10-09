@@ -307,20 +307,24 @@ class MessageRepo(
                         delay(pollingBackoff.delayAfter(successful = true))
                         continue
                     }
-                    val page = apiService.getMessageUpdates(workspaceId, channelId, position.since, position.cursor)
-                    val updates = page.items
-
-                    if (updates.isNotEmpty()) {
-                        val oldestLoaded = messageDao.oldestSyncedMessageId(workspaceId, channelId)
-                        val upserts = updates
-                            .filter { !it.isDeleted && (oldestLoaded == null || it.id >= oldestLoaded) }
-                            .map { it.toEntity() }
-                        val deletes = updates.filter { it.isDeleted }.map { it.id }
-                        messageDao.applyDelta(upserts, deletes)
-                    }
+                    var newestUpdatedAt: Long? = null
+                    val page = com.collabsphere.app.remote.applySyncPages(
+                        fetch = { token -> apiService.getMessageUpdates(workspaceId, channelId, position.since, position.cursor, token) },
+                        apply = { updates ->
+                            newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
+                            if (updates.isNotEmpty()) {
+                                val oldestLoaded = messageDao.oldestSyncedMessageId(workspaceId, channelId)
+                                val upserts = updates
+                                    .filter { !it.isDeleted && (oldestLoaded == null || it.id >= oldestLoaded) }
+                                    .map { it.toEntity() }
+                                val deletes = updates.filter { it.isDeleted }.map { it.id }
+                                messageDao.applyDelta(upserts, deletes)
+                            }
+                        }
+                    )
                     // After the rows are stored: committing first and dying in between would skip them.
                     // A reset clears `since` too, which sends the next pass back through loadInitialPage.
-                    dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                    dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                     syncSucceeded = true
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e

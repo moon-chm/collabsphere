@@ -68,6 +68,10 @@ object WorkspacesTable : Table("workspace") {
     val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, syncXid, id)
+    }
 }
 
 object WorkspaceMembersTable : Table("workspace_members") {
@@ -79,6 +83,10 @@ object WorkspaceMembersTable : Table("workspace_members") {
     val syncXid = long("sync_xid").default(0L)
 
     override val primaryKey = PrimaryKey(workspaceId, userId)
+
+    init {
+        index(false, userId, syncXid, workspaceId)
+    }
 }
 
 /** Current per-user workspace access state; inactive rows act as durable sync tombstones. */
@@ -92,7 +100,7 @@ object WorkspaceMembershipStateTable : Table("workspace_membership_state") {
     override val primaryKey = PrimaryKey(workspaceId, userId)
 
     init {
-        index(false, userId, syncXid)
+        index(false, userId, isMember, syncXid, workspaceId)
     }
 }
 
@@ -111,7 +119,7 @@ object ChannelsTable : Table("channels") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, workspaceId, syncXid)
+        index(false, workspaceId, syncXid, id)
     }
 }
 
@@ -138,7 +146,7 @@ object LocalFilesTable : Table("local_files") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, workspaceId, syncXid)
+        index(false, workspaceId, syncXid, id)
     }
 }
 
@@ -163,7 +171,7 @@ object MessageTable : Table("message") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, channelId, syncXid)
+        index(false, workspaceId, channelId, syncXid, id)
     }
 }
 
@@ -186,7 +194,7 @@ object NotesTable : Table("notes") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, workspaceId, syncXid)
+        index(false, workspaceId, syncXid, id)
     }
 }
 
@@ -215,7 +223,7 @@ object TasksTable : Table("task") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, workspaceId, syncXid)
+        index(false, workspaceId, syncXid, id)
     }
 }
 
@@ -239,8 +247,8 @@ object DirectMessagesTable : Table("direct_messages") {
     override val primaryKey = PrimaryKey(id)
 
     init {
-        index(false, senderId, syncXid)
-        index(false, receiverId, syncXid)
+        index(false, senderId, syncXid, id)
+        index(false, receiverId, syncXid, id)
     }
 }
 
@@ -304,12 +312,39 @@ object NotificationsTable : Table("notifications") {
     val referenceId = integer("reference_id").nullable()  // message id, task id, invitation id, etc.
     val isRead = bool("is_read").default(false)
     val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    /** Optional idempotency key used by recoverable background notification jobs. */
+    val dedupeKey = varchar("dedupe_key", 160).nullable().uniqueIndex()
 
     override val primaryKey = PrimaryKey(id)
 
     init {
         // Unread badge count and "mark all read" both filter on exactly this pair.
         index(false, recipientId, isRead)
+    }
+}
+
+/** Durable, retryable work for task reminder delivery. */
+object TaskReminderOutboxTable : Table("task_reminder_outbox") {
+    val id = integer("id").autoIncrement()
+    val reminderKey = varchar("reminder_key", 160).uniqueIndex()
+    val taskId = integer("task_id")
+    val workspaceId = integer("workspace_id")
+    val recipientId = integer("recipient_id")
+    val dueDate = long("due_date")
+    val title = varchar("title", 255)
+    val body = text("body")
+    val status = varchar("status", 20).default("PENDING") // PENDING | PROCESSING | DONE | FAILED | CANCELLED
+    val attempts = integer("attempts").default(0)
+    val nextAttemptAt = long("next_attempt_at").clientDefault { System.currentTimeMillis() }
+    val lockedAt = long("locked_at").nullable()
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val deliveredAt = long("delivered_at").nullable()
+    val lastError = text("last_error").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, status, nextAttemptAt)
     }
 }
 

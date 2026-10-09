@@ -56,22 +56,23 @@ object EmailService {
     private var smtpFrom = ""
 
     init {
+        val externalProvidersDisabled = System.getenv("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS") == "YES"
         // Force IPv4 for SMTP connections to prevent SocketTimeoutException on networks with broken IPv6 routing
         System.setProperty("java.net.preferIPv4Stack", "true")
 
         // 1. Try reading from local.properties if present
         val localPropsFile = File("local.properties")
         val fileProps = Properties()
-        if (localPropsFile.exists()) {
+        if (!externalProvidersDisabled && localPropsFile.exists()) {
             try {
                 localPropsFile.inputStream().use { fileProps.load(it) }
             } catch (_: Exception) {}
         }
 
         // 2. Load Gmail API credentials
-        gmailClientId = System.getenv("GMAIL_CLIENT_ID") ?: fileProps.getProperty("GMAIL_CLIENT_ID") ?: ""
-        gmailClientSecret = System.getenv("GMAIL_CLIENT_SECRET") ?: fileProps.getProperty("GMAIL_CLIENT_SECRET") ?: ""
-        gmailRefreshToken = System.getenv("GMAIL_REFRESH_TOKEN") ?: fileProps.getProperty("GMAIL_REFRESH_TOKEN") ?: ""
+        gmailClientId = if (externalProvidersDisabled) "" else System.getenv("GMAIL_CLIENT_ID") ?: fileProps.getProperty("GMAIL_CLIENT_ID") ?: ""
+        gmailClientSecret = if (externalProvidersDisabled) "" else System.getenv("GMAIL_CLIENT_SECRET") ?: fileProps.getProperty("GMAIL_CLIENT_SECRET") ?: ""
+        gmailRefreshToken = if (externalProvidersDisabled) "" else System.getenv("GMAIL_REFRESH_TOKEN") ?: fileProps.getProperty("GMAIL_REFRESH_TOKEN") ?: ""
         gmailSender = System.getenv("GMAIL_SENDER")
             ?: fileProps.getProperty("GMAIL_SENDER")
             ?: System.getenv("SMTP_USER")
@@ -84,10 +85,10 @@ object EmailService {
         }
 
         // 3. Load SMTP credentials (as secondary fallback)
-        smtpHost = System.getenv("SMTP_HOST") ?: fileProps.getProperty("SMTP_HOST") ?: ""
-        smtpPort = (System.getenv("SMTP_PORT") ?: fileProps.getProperty("SMTP_PORT") ?: "587").toIntOrNull() ?: 587
-        smtpUser = System.getenv("SMTP_USER") ?: fileProps.getProperty("SMTP_USER") ?: ""
-        smtpPass = System.getenv("SMTP_PASSWORD") ?: System.getenv("SMTP_PASS") ?: fileProps.getProperty("SMTP_PASSWORD") ?: fileProps.getProperty("SMTP_PASS") ?: ""
+        smtpHost = if (externalProvidersDisabled) "" else System.getenv("SMTP_HOST") ?: fileProps.getProperty("SMTP_HOST") ?: ""
+        smtpPort = if (externalProvidersDisabled) 587 else (System.getenv("SMTP_PORT") ?: fileProps.getProperty("SMTP_PORT") ?: "587").toIntOrNull() ?: 587
+        smtpUser = if (externalProvidersDisabled) "" else System.getenv("SMTP_USER") ?: fileProps.getProperty("SMTP_USER") ?: ""
+        smtpPass = if (externalProvidersDisabled) "" else System.getenv("SMTP_PASSWORD") ?: System.getenv("SMTP_PASS") ?: fileProps.getProperty("SMTP_PASSWORD") ?: fileProps.getProperty("SMTP_PASS") ?: ""
         smtpFrom = System.getenv("SMTP_FROM") ?: fileProps.getProperty("SMTP_FROM") ?: (if (smtpUser.isNotBlank()) "CollabSphere <$smtpUser>" else "CollabSphere <$gmailSender>")
 
         if (smtpHost.isNotBlank() && smtpUser.isNotBlank() && smtpPass.isNotBlank()) {

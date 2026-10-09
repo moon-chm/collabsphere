@@ -28,7 +28,12 @@ internal const val SYNC_CURSOR_HEADER = "X-Sync-Cursor"
 internal const val SYNC_RESET_HEADER = "X-Sync-Reset"
 
 /** A sync request: [cursor] when the client has one, otherwise the legacy `updated_at` watermark. */
-internal data class SyncRequest(val cursor: Long?, val since: Long)
+internal data class SyncRequest(
+    val cursor: Long?,
+    val since: Long,
+    val pageSize: Int? = null,
+    val pageToken: String? = null
+)
 
 internal data class SyncPage<T>(
     val rows: List<T>,
@@ -38,14 +43,57 @@ internal data class SyncPage<T>(
      * The client's cursor came from a different database (e.g. after a restore onto a new cluster)
      * and can't be compared — the client must drop its sync state and resync from scratch.
      */
-    val reset: Boolean = false
+    val reset: Boolean = false,
+    val nextPageToken: String? = null
 )
 
 internal data class SyncSnapshot(val xmin: Long, val xmax: Long)
 
+internal const val MAX_DELTA_PAGE_SIZE = 250
+// Continuations carry a stable ordered key so requests fetch the next bounded page without OFFSET.
+internal data class SyncPosition(val syncXid: Long, val id: Long) : Comparable<SyncPosition> {
+    override fun compareTo(other: SyncPosition): Int =
+        compareValuesBy(this, other, SyncPosition::syncXid, SyncPosition::id)
+}
+
+internal data class DeltaPageToken(val snapshotCursor: Long, val position: SyncPosition)
+
+internal data class DeltaSyncRow<T>(val value: T, val position: SyncPosition)
+
+internal fun encodePageToken(token: DeltaPageToken): String =
+    java.util.Base64.getUrlEncoder().withoutPadding()
+        .encodeToString("${token.snapshotCursor}:${token.position.syncXid}:${token.position.id}".toByteArray(Charsets.UTF_8))
+
+internal fun decodePageToken(value: String): DeltaPageToken? = runCatching {
+    val decoded = String(java.util.Base64.getUrlDecoder().decode(value), Charsets.UTF_8).split(':')
+    require(decoded.size == 3)
+    val cursor = decoded[0].toLong().also { require(it >= 0) }
+    val syncXid = decoded[1].toLong().also { require(it >= 0) }
+    val id = decoded[2].toLong().also { require(it >= 0) }
+    DeltaPageToken(cursor, SyncPosition(syncXid, id))
+}.getOrNull()
+
+internal fun <T> createDeltaSyncPage(
+    fetched: List<DeltaSyncRow<T>>,
+    pageSize: Int?,
+    snapshotCursor: Long
+): SyncPage<T> {
+    val hasMore = pageSize != null && fetched.size > pageSize
+    val returnedRows = if (hasMore) fetched.take(pageSize!!) else fetched
+    return SyncPage(
+        rows = returnedRows.map { it.value },
+        nextCursor = snapshotCursor,
+        nextPageToken = if (hasMore) {
+            encodePageToken(DeltaPageToken(snapshotCursor, fetched[pageSize!! - 1].position))
+        } else null
+    )
+}
+
 internal fun ApplicationCall.syncRequest(sinceParam: String = "since"): SyncRequest = SyncRequest(
     cursor = request.queryParameters["cursor"]?.toLongOrNull()?.takeIf { it >= 0 },
-    since = request.queryParameters[sinceParam]?.toLongOrNull() ?: 0L
+    since = request.queryParameters[sinceParam]?.toLongOrNull() ?: 0L,
+    pageSize = request.queryParameters["pageSize"]?.toIntOrNull()?.coerceIn(1, MAX_DELTA_PAGE_SIZE),
+    pageToken = request.queryParameters["pageToken"]
 )
 
 /**
@@ -71,19 +119,46 @@ internal fun <T> deltaSync(
     request: SyncRequest,
     changedSince: (cursor: Long) -> Op<Boolean>,
     legacyChangedSince: (since: Long) -> Op<Boolean>,
-    fetch: (filter: Op<Boolean>) -> List<T>
+    useCursorForFirstPage: Boolean = true,
+    fetch: (filter: Op<Boolean>, limit: Int?, after: SyncPosition?) -> List<DeltaSyncRow<T>>
 ): SyncPage<T> {
     val snapshot = currentSyncSnapshot()
     val cursor = request.cursor
+    val pageToken = request.pageToken?.let(::decodePageToken)
+    if (request.pageToken != null && (pageToken == null || request.pageSize == null)) return SyncPage(emptyList(), snapshot.xmin, reset = true)
     // A cursor ahead of every transaction id this database has handed out can't have come from it.
-    if (cursor != null && cursor > snapshot.xmax) {
+    if ((cursor != null && cursor > snapshot.xmax) ||
+        (pageToken != null && (pageToken.snapshotCursor > snapshot.xmax || pageToken.position.syncXid > snapshot.xmax))
+    ) {
         return SyncPage(emptyList(), snapshot.xmin, reset = true)
     }
-    val filter = if (cursor != null) changedSince(cursor) else legacyChangedSince(request.since)
-    return SyncPage(fetch(filter), snapshot.xmin)
+    // Page-capable clients start their initial bounded scan from the durable sync key. Legacy clients
+    // without pageSize retain the timestamp contract; DM sync opts out because it has a separate
+    // knownUpToId bootstrap rule.
+    val queryCursor = cursor ?: if (request.pageSize != null && useCursorForFirstPage) 0L else null
+    val filter = if (queryCursor != null) changedSince(queryCursor) else legacyChangedSince(request.since)
+    val snapshotCursor = pageToken?.snapshotCursor ?: snapshot.xmin
+    val after = pageToken?.position
+    val pageSize = request.pageSize
+    val fetched = fetch(filter, pageSize?.plus(1), after)
+    return createDeltaSyncPage(fetched, pageSize, snapshotCursor)
 }
 
-internal fun ApplicationCall.appendSyncHeaders(nextCursor: Long, reset: Boolean = false) {
-    response.headers.append(SYNC_CURSOR_HEADER, nextCursor.toString())
+internal fun ApplicationCall.appendSyncHeaders(nextCursor: Long, reset: Boolean = false, nextPageToken: String? = null) {
+    if (nextPageToken == null) response.headers.append(SYNC_CURSOR_HEADER, nextCursor.toString())
+    else response.headers.append("X-Sync-Page-Token", nextPageToken)
     if (reset) response.headers.append(SYNC_RESET_HEADER, "true")
+}
+
+/** Low-cardinality sync metrics for response volume, grouped by entity type. */
+internal fun recordSyncPage(entity: String, rowCount: Int) {
+    val registry = io.micrometer.core.instrument.Metrics.globalRegistry
+    io.micrometer.core.instrument.Counter.builder("collabsphere.sync.responses")
+        .tag("entity", entity)
+        .register(registry)
+        .increment()
+    io.micrometer.core.instrument.Counter.builder("collabsphere.sync.rows")
+        .tag("entity", entity)
+        .register(registry)
+        .increment(rowCount.toDouble())
 }

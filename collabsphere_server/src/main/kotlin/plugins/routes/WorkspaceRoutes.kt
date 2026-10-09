@@ -707,7 +707,8 @@ internal fun Route.workspaceRoutes() {
             try {
                 val actingUserId = call.authenticatedUserId()
                 val page = dbReadQuery { workspaceDeltaSync(actingUserId, call.syncRequest()) }
-                call.appendSyncHeaders(page.nextCursor, page.reset)
+                recordSyncPage("workspaces", page.rows.size)
+                call.appendSyncHeaders(page.nextCursor, page.reset, page.nextPageToken)
                 call.respond(HttpStatusCode.OK, page.rows)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

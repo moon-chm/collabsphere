@@ -39,6 +39,21 @@ class TaskRemindersTest {
     }
 
     @Test
+    fun `outbox key is stable for one task due-date cycle`() {
+        assertEquals("task-reminder:12:$due", reminderKey(12, due))
+        assertEquals(reminderKey(12, due), reminderKey(12, due))
+        assertTrue(reminderKey(12, due) != reminderKey(12, due + 1))
+    }
+
+    @Test
+    fun `outbox retry delay grows exponentially and stays bounded`() {
+        assertEquals(30_000L, reminderRetryDelay(1))
+        assertEquals(60_000L, reminderRetryDelay(2))
+        assertEquals(60 * 60 * 1000L, reminderRetryDelay(8))
+        assertEquals(60 * 60 * 1000L, reminderRetryDelay(20))
+    }
+
+    @Test
     fun `priority normalization accepts known values only`() {
         assertEquals("HIGH", dto.TaskPriorities.normalize(" high "))
         assertEquals(null, dto.TaskPriorities.normalize("urgent"))

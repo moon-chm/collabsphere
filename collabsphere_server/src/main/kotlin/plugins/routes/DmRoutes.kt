@@ -75,10 +75,13 @@ internal fun Route.dmRoutes() {
     get("/api/dm/sync") {
         try {
             val actingUserId = call.authenticatedUserId()
-            val cursor = call.request.queryParameters["cursor"]?.toLongOrNull()?.takeIf { it >= 0 }
+            val request = call.syncRequest()
             val knownUpToId = call.request.queryParameters["sinceId"]?.toIntOrNull() ?: 0
-            val page = dbReadQuery { dmDeltaSync(actingUserId, cursor, knownUpToId) }
-            call.appendSyncHeaders(page.nextCursor, page.reset)
+            val page = dbReadQuery {
+                dmDeltaSync(actingUserId, request.cursor, knownUpToId, request.pageSize, request.pageToken)
+            }
+            recordSyncPage("direct_messages", page.rows.size)
+            call.appendSyncHeaders(page.nextCursor, page.reset, page.nextPageToken)
             call.respond(HttpStatusCode.OK, page.rows)
         } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

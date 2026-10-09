@@ -197,21 +197,41 @@ internal suspend fun createAndPushNotification(
     title: String,
     body: String,
     workspaceId: Int? = null,
-    referenceId: Int? = null
-) {
+    referenceId: Int? = null,
+    dedupeKey: String? = null,
+    dispatchPush: Boolean = true
+): NotificationResponse {
     val notification = dbQuery {
         val actorRow = actorId?.let {
             UsersTable.selectAll().where { UsersTable.id eq it }.singleOrNull()
         }
-        val insertedId = NotificationsTable.insert {
-            it[NotificationsTable.recipientId] = recipientId
-            it[NotificationsTable.actorId] = actorId
-            it[NotificationsTable.type] = type
-            it[NotificationsTable.title] = title
-            it[NotificationsTable.body] = body
-            it[NotificationsTable.workspaceId] = workspaceId
-            it[NotificationsTable.referenceId] = referenceId
-        }[NotificationsTable.id]
+        val insertedId = if (dedupeKey == null) {
+            NotificationsTable.insert {
+                it[NotificationsTable.recipientId] = recipientId
+                it[NotificationsTable.actorId] = actorId
+                it[NotificationsTable.type] = type
+                it[NotificationsTable.title] = title
+                it[NotificationsTable.body] = body
+                it[NotificationsTable.workspaceId] = workspaceId
+                it[NotificationsTable.referenceId] = referenceId
+            }[NotificationsTable.id]
+        } else {
+            NotificationsTable.insertIgnore {
+                it[NotificationsTable.recipientId] = recipientId
+                it[NotificationsTable.actorId] = actorId
+                it[NotificationsTable.type] = type
+                it[NotificationsTable.title] = title
+                it[NotificationsTable.body] = body
+                it[NotificationsTable.workspaceId] = workspaceId
+                it[NotificationsTable.referenceId] = referenceId
+                it[NotificationsTable.dedupeKey] = dedupeKey
+            }
+            NotificationsTable.selectAll().where { NotificationsTable.dedupeKey eq dedupeKey }
+                .single()[NotificationsTable.id]
+        }
+        val notificationRow = NotificationsTable.selectAll()
+            .where { NotificationsTable.id eq insertedId }
+            .single()
         NotificationResponse(
             id = insertedId,
             recipientId = recipientId,
@@ -223,37 +243,40 @@ internal suspend fun createAndPushNotification(
             body = body,
             workspaceId = workspaceId,
             referenceId = referenceId,
-            isRead = false,
-            createdAt = System.currentTimeMillis()
+            isRead = notificationRow[NotificationsTable.isRead],
+            createdAt = notificationRow[NotificationsTable.createdAt]
         )
     }
     val frame = NotificationPushFrame(notification = notification)
     val json = Json.encodeToString(frame)
     sendToUser(recipientId.toLong(), json)
 
-    // Send high-priority background push via Firebase Cloud Messaging
-    if (type == "DM") {
-        com.collabsphere.util.FcmService.sendDmPush(
-            recipientUserId = recipientId,
-            senderId = actorId ?: 0,
-            senderUsername = notification.actorUsername ?: "Someone",
-            workspaceId = workspaceId ?: 0,
-            messageId = referenceId ?: 0,
-            content = body,
-            timestamp = notification.createdAt
-        )
-    } else {
-        com.collabsphere.util.FcmService.sendGenericPush(
-            recipientUserId = recipientId,
-            notificationId = notification.id,
-            type = notification.type,
-            title = notification.title,
-            body = notification.body,
-            workspaceId = notification.workspaceId,
-            actorUsername = notification.actorUsername,
-            actorAvatarUrl = notification.actorAvatarUrl
-        )
+    // Durable outbox callers dispatch FCM synchronously so transient failures can be retried.
+    if (dispatchPush) {
+        if (type == "DM") {
+            com.collabsphere.util.FcmService.sendDmPush(
+                recipientUserId = recipientId,
+                senderId = actorId ?: 0,
+                senderUsername = notification.actorUsername ?: "Someone",
+                workspaceId = workspaceId ?: 0,
+                messageId = referenceId ?: 0,
+                content = body,
+                timestamp = notification.createdAt
+            )
+        } else {
+            com.collabsphere.util.FcmService.sendGenericPush(
+                recipientUserId = recipientId,
+                notificationId = notification.id,
+                type = notification.type,
+                title = notification.title,
+                body = notification.body,
+                workspaceId = notification.workspaceId,
+                actorUsername = notification.actorUsername,
+                actorAvatarUrl = notification.actorAvatarUrl
+            )
+        }
     }
+    return notification
 }
 
 fun Application.configureRouting() {

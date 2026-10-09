@@ -3,6 +3,8 @@ package plugins
 import com.collabsphere.DatabaseFactory
 import com.collabsphere.model.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -19,22 +21,38 @@ class DmHistoryIntegrationTest {
     }
 
     private val tag = UUID.randomUUID().toString().take(8)
+    private val createdUserIds = mutableSetOf<Int>()
+    private val createdWorkspaceIds = mutableSetOf<Int>()
 
-    private fun user(name: String) = transaction {
+    private fun user(name: String): Int = transaction {
         UsersTable.insert {
             it[email] = "$name-$tag@dm.test"
             it[password] = "x"
             it[username] = "$name-$tag"
         }[UsersTable.id]
-    }
+    }.also { createdUserIds += it }
 
-    private fun workspace(owner: Int) = transaction {
+    private fun workspace(owner: Int): Int = transaction {
         WorkspacesTable.insert {
             it[userId] = owner
             it[workspaceName] = "ws-$tag"
             it[workspaceOwner] = "o"
             it[workspacePassword] = ""
         }[WorkspacesTable.id]
+    }.also { createdWorkspaceIds += it }
+
+    @AfterTest
+    fun cleanUpFixtureRows() {
+        transaction {
+            if (createdWorkspaceIds.isNotEmpty()) {
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.workspaceId inList createdWorkspaceIds }
+                WorkspacesTable.deleteWhere { WorkspacesTable.id inList createdWorkspaceIds }
+            }
+            if (createdUserIds.isNotEmpty()) {
+                WorkspaceMembershipStateTable.deleteWhere { WorkspaceMembershipStateTable.userId inList createdUserIds }
+                UsersTable.deleteWhere { UsersTable.id inList createdUserIds }
+            }
+        }
     }
 
     private fun dm(ws: Int, from: Int, to: Int, text: String) = transaction {

@@ -48,9 +48,9 @@ class NoteApiService(private val client: HttpClient) {
     suspend fun deleteNote(noteId: Int): HttpStatusCode =
         client.delete("$baseUrl/$noteId").status
 
-    suspend fun getNoteUpdates(workspaceId: Int, since: Long, cursor: Long?): SyncPage<NotesSyncDto> {
+    suspend fun getNoteUpdates(workspaceId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<NotesSyncDto> {
         return client.get("$baseUrl/sync/$workspaceId") {
-            syncParameters(since, cursor)
+            syncParameters(since, cursor, pageToken = pageToken)
             contentType(ContentType.Application.Json)
         }.toSyncPage()
     }

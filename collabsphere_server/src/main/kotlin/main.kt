@@ -166,11 +166,17 @@ fun Application.module() {
                 application.environment.log.error("[Health] DB check failed", e)
                 false
             }
-            val status = if (dbOk) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
+            val redisOk = RedisFactory.checkHealth()
+            val ready = dbOk && redisOk
+            val status = if (ready) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable
             call.respond(status, mapOf(
-                "status" to if (dbOk) "UP" else "DEGRADED",
+                "status" to if (ready) "UP" else "DEGRADED",
                 "db" to if (dbOk) "UP" else "DOWN",
-                "redis" to if (RedisFactory.isAvailable) "UP" else "NOT_CONFIGURED",
+                "redis" to when {
+                    RedisFactory.isAvailable -> "UP"
+                    RedisFactory.isRequired -> "DOWN"
+                    else -> "NOT_REQUIRED"
+                },
                 "wsSessions" to WebSocketBroker.localSessionCount,
                 "ts" to System.currentTimeMillis()
             ))

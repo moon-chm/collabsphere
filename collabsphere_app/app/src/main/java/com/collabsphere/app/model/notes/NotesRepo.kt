@@ -57,10 +57,12 @@ class NotesRepo(
             try {
                 val syncKey = getSyncKey(workspaceId)
                 val position = dataStore.readSyncPosition(syncKey)
-                val page = apiService.getNoteUpdates(workspaceId, position.since, position.cursor)
-                val updates = page.items
-
-                if (updates.isNotEmpty()) {
+                var newestUpdatedAt: Long? = null
+                val page = com.collabsphere.app.remote.applySyncPages(
+                    fetch = { token -> apiService.getNoteUpdates(workspaceId, position.since, position.cursor, token) },
+                    apply = { updates ->
+                        newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
+                        if (updates.isNotEmpty()) {
                     val upserts = updates.filter { !it.isDeleted }.map { remote ->
                         NotesEntity(
                             id = remote.id,
@@ -73,10 +75,11 @@ class NotesRepo(
                     }
                     val deletes = updates.filter { it.isDeleted }.map { it.id }
                     notesDao.applyDelta(upserts, deletes)
-
                 }
+                    }
+                )
                 // After the rows are stored: committing first and dying in between would skip them.
-                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
+                dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
             } catch (e: CancellationException) {
                 throw e
