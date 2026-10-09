@@ -71,14 +71,24 @@ private suspend fun sendDueTaskReminders(now: Long) {
             }
         }
         if (claimed == 0) continue
-        createAndPushNotification(
-            recipientId = task.assigneeId,
-            actorId = null,
-            type = "TASK_DUE",
-            title = "Task due soon",
-            body = reminderBody(task.taskName, task.dueDate, now),
-            workspaceId = task.workspaceId,
-            referenceId = task.id
-        )
+        
+        try {
+            createAndPushNotification(
+                recipientId = task.assigneeId,
+                actorId = null,
+                type = "TASK_DUE",
+                title = "Task due soon",
+                body = reminderBody(task.taskName, task.dueDate, now),
+                workspaceId = task.workspaceId,
+                referenceId = task.id
+            )
+        } catch (e: Exception) {
+            logger.error("[TaskReminders] Failed to push notification for task ${task.id}, rolling back claim", e)
+            dbQuery {
+                TasksTable.update({ TasksTable.id eq task.id }) {
+                    it[reminderSentAt] = null
+                }
+            }
+        }
     }
 }
