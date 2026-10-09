@@ -154,6 +154,36 @@ class DeltaSyncIntegrationTest {
     }
 
     @Test
+    fun `member removal emits a private workspace tombstone and refreshes remaining members`() {
+        val f = fixture()
+        val cursorB = transaction {
+            workspaceDeltaSync(f.userB, SyncRequest(cursor = 0, since = 0)).nextCursor
+        }
+        val cursorA = transaction {
+            workspaceDeltaSync(f.userA, SyncRequest(cursor = 0, since = 0)).nextCursor
+        }
+
+        transaction {
+            WorkspaceMembersTable.deleteWhere {
+                (WorkspaceMembersTable.workspaceId eq f.workspaceId) and
+                    (WorkspaceMembersTable.userId eq f.userB)
+            }
+            WorkspacesTable.update({ WorkspacesTable.id eq f.workspaceId }) {
+                it[updatedAt] = System.currentTimeMillis()
+            }
+        }
+
+        val removedUserPage = transaction {
+            workspaceDeltaSync(f.userB, SyncRequest(cursor = cursorB, since = 0))
+        }
+        val remainingUserPage = transaction {
+            workspaceDeltaSync(f.userA, SyncRequest(cursor = cursorA, since = 0))
+        }
+        assertEquals(listOf(f.workspaceId to true), removedUserPage.rows.map { it.id to it.isDeleted })
+        assertEquals(listOf(f.workspaceId to false), remainingUserPage.rows.map { it.id to it.isDeleted })
+    }
+
+    @Test
     fun `dm sync returns edits and tombstones only to the two participants`() {
         val f = fixture()
         val outsider = fixture().userA

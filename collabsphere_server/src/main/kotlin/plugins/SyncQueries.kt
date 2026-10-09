@@ -21,30 +21,60 @@ import org.jetbrains.exposed.sql.transactions.TransactionManager
  * and assume the caller has already checked the acting user may see the scope (workspace membership).
  */
 
-/** Workspaces the user belongs to that changed — including ones they were just added to. */
-internal fun workspaceDeltaSync(userId: Int, request: SyncRequest): SyncPage<WorkspaceSyncDto> =
-    deltaSync(
-        request,
-        changedSince = { cursor ->
-            (WorkspacesTable.syncXid greaterEq cursor) or (WorkspaceMembersTable.syncXid greaterEq cursor)
-        },
-        legacyChangedSince = { since -> WorkspacesTable.updatedAt greater since }
-    ) { changed ->
-        (WorkspacesTable innerJoin WorkspaceMembersTable)
-            .selectAll()
-            .where { (WorkspaceMembersTable.userId eq userId) and changed }
-            .orderBy(WorkspacesTable.id)
-            .map {
-                WorkspaceSyncDto(
-                    id = it[WorkspacesTable.id],
-                    userId = it[WorkspacesTable.userId],
-                    workspaceName = it[WorkspacesTable.workspaceName],
-                    workspaceOwner = it[WorkspacesTable.workspaceOwner],
-                    isDeleted = it[WorkspacesTable.isDeleted],
-                    updatedAt = it[WorkspacesTable.updatedAt]
-                )
-            }
+/** Current workspaces changed plus durable removal tombstones for this user. */
+internal fun workspaceDeltaSync(userId: Int, request: SyncRequest): SyncPage<WorkspaceSyncDto> {
+    val snapshot = currentSyncSnapshot()
+    val cursor = request.cursor
+    if (cursor != null && cursor > snapshot.xmax) {
+        return SyncPage(emptyList(), snapshot.xmin, reset = true)
     }
+
+    val currentChanges = if (cursor != null) {
+        (WorkspacesTable.syncXid greaterEq cursor) or (WorkspaceMembersTable.syncXid greaterEq cursor)
+    } else {
+        WorkspacesTable.updatedAt greater request.since
+    }
+    val removalChanges = if (cursor != null) {
+        WorkspaceMembershipStateTable.syncXid greaterEq cursor
+    } else {
+        WorkspaceMembershipStateTable.updatedAt greater request.since
+    }
+
+    val activeWorkspaces = (WorkspacesTable innerJoin WorkspaceMembersTable)
+        .selectAll()
+        .where { (WorkspaceMembersTable.userId eq userId) and currentChanges }
+        .map {
+            WorkspaceSyncDto(
+                id = it[WorkspacesTable.id],
+                userId = it[WorkspacesTable.userId],
+                workspaceName = it[WorkspacesTable.workspaceName],
+                workspaceOwner = it[WorkspacesTable.workspaceOwner],
+                isDeleted = it[WorkspacesTable.isDeleted],
+                updatedAt = it[WorkspacesTable.updatedAt]
+            )
+        }
+
+    val removedWorkspaces = WorkspaceMembershipStateTable.selectAll()
+        .where {
+            (WorkspaceMembershipStateTable.userId eq userId) and
+                (WorkspaceMembershipStateTable.isMember eq false) and removalChanges
+        }
+        .map {
+            WorkspaceSyncDto(
+                id = it[WorkspaceMembershipStateTable.workspaceId],
+                userId = userId,
+                workspaceName = "",
+                workspaceOwner = "",
+                isDeleted = true,
+                updatedAt = it[WorkspaceMembershipStateTable.updatedAt]
+            )
+        }
+
+    return SyncPage(
+        rows = (activeWorkspaces + removedWorkspaces).distinctBy { it.id }.sortedBy { it.id },
+        nextCursor = snapshot.xmin
+    )
+}
 
 internal fun channelDeltaSync(workspaceId: Int, request: SyncRequest): SyncPage<ChannelSyncResponse> =
     deltaSync(

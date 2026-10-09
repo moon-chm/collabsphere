@@ -144,11 +144,11 @@ Fix the audit findings in dependency order while preserving current single-insta
 
 - [x] Phase 0 safety baseline: removed the tracked credential probe and live-email smoke tests; default server tests exclude database-backed suites; added explicit, guarded `integrationTest` and `checkWithIntegration` tasks.
 - [ ] Phase 0 remaining: provide disposable PostgreSQL and fake-provider integration fixtures; rotate the exposed DB credential at its provider and coordinate any history cleanup separately.
-- [ ] Phase 1 partial: member snapshot reconciliation and permanent-HTTP refusal handling are implemented. Workspace route/ViewModel ID remapping, membership removal deltas, and full acceptance coverage remain.
-- [x] Phase 2 partial: all foreground delta polling loops now back off after repeated failures while retaining their existing successful cadence. Cursor pagination, workload metrics, and removal of the full workspace reconciliation request remain gated on membership-delta correctness.
+- [ ] Phase 1 partial: member snapshot reconciliation, permanent-HTTP refusal handling, active workspace route remapping, and user-specific removal tombstones are implemented. End-to-end offline acceptance coverage remains.
+- [ ] Phase 2 partial: all foreground delta polling loops now back off after repeated failures while retaining their existing successful cadence. Full workspace reconciliation is now limited to a five-minute repair interval, and workspace delta cursors are per user. Bounded pagination and workload metrics remain.
 - [ ] Phases 3–6 remain: durable file storage requires selecting/configuring an object store; multi-instance Redis correctness is conditional on a multi-instance deployment; reminder outbox and cross-screen UI/staging regression remain.
 
-**Verification so far:** server `test` passed; Android `:app:testDebugUnitTest` passed with the Room and sync changes. The database-backed integration task has not been run because no disposable `TEST_DATABASE_URL` is configured. No production database or provider credentials are passed to the integration-test process.
+**Verification so far:** server `test` and Android `:app:testDebugUnitTest` passed after the current changes. APK packaging could not be rechecked because Gradle failed to load its Windows `native-platform.dll` before starting tasks. Route remapping still needs online/offline UI acceptance testing. The database-backed integration task has not been run because no disposable `TEST_DATABASE_URL` is configured. No production database or provider credentials are passed to the integration-test process.
 
 ## Dependency map
 

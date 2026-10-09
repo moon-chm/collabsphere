@@ -81,6 +81,21 @@ object WorkspaceMembersTable : Table("workspace_members") {
     override val primaryKey = PrimaryKey(workspaceId, userId)
 }
 
+/** Current per-user workspace access state; inactive rows act as durable sync tombstones. */
+object WorkspaceMembershipStateTable : Table("workspace_membership_state") {
+    val workspaceId = integer("workspace_id")
+    val userId = integer("user_id")
+    val isMember = bool("is_member").default(true)
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    val syncXid = long("sync_xid").default(0L)
+
+    override val primaryKey = PrimaryKey(workspaceId, userId)
+
+    init {
+        index(false, userId, syncXid)
+    }
+}
+
 object ChannelsTable : Table("channels") {
     val id = integer("id").autoIncrement()
     val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()

@@ -35,8 +35,16 @@ internal fun Route.workspaceRoutes() {
                     if (!WorkspaceRoles.canRemove(actorRole, targetRole, isSelf = actingUserId == targetUserId)) {
                         return@dbQuery HttpStatusCode.Forbidden
                     }
-                    WorkspaceMembersTable.deleteWhere {
+                    val removedMemberships = WorkspaceMembersTable.deleteWhere {
                         (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq targetUserId)
+                    }
+                    if (removedMemberships > 0) {
+                        // Stamp the workspace in the same transaction. Remaining members receive
+                        // its delta and refresh their authoritative member snapshot; the removed
+                        // user's full workspace reconciliation drops the now-inaccessible row.
+                        WorkspacesTable.update({ WorkspacesTable.id eq workspaceIdParam }) {
+                            it[updatedAt] = System.currentTimeMillis()
+                        }
                     }
                     NotificationMutesTable.deleteWhere {
                         (NotificationMutesTable.workspaceId eq workspaceIdParam) and (NotificationMutesTable.userId eq targetUserId)

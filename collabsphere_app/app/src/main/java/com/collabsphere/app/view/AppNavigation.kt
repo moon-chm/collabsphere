@@ -76,6 +76,8 @@ import org.koin.compose.KoinContext
 import org.koin.compose.koinInject
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -465,7 +467,7 @@ fun AppNavigation(
                     }
                 )
             ) { backStackEntry ->
-                val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
+                val routeWorkspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
                 val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
                 val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
                 val rawPartnerId = backStackEntry.arguments?.getInt("initialPartnerId") ?: -1
@@ -476,12 +478,36 @@ fun AppNavigation(
                     rawWorkspaceName
                 }
 
+                val workspaceRepo = koinInject<WorkspaceRepo>()
+                val workspaceId by workspaceRepo.observeCanonicalWorkspaceId(routeWorkspaceId)
+                    .collectAsStateWithLifecycle(initialValue = routeWorkspaceId)
+                var selectedWorkspaceTab by rememberSaveable(backStackEntry.id) {
+                    mutableIntStateOf(initialTab)
+                }
+                var selectedDmPartnerId by rememberSaveable(backStackEntry.id) {
+                    mutableIntStateOf(initialPartnerId ?: -1)
+                }
+
+                LaunchedEffect(routeWorkspaceId, workspaceId, selectedWorkspaceTab, selectedDmPartnerId) {
+                    if (routeWorkspaceId != workspaceId) {
+                        // Keep a nested channel/search route on screen until the user returns here.
+                        // Then replace the stale route so old ViewModels and pollers are cleared.
+                        navController.currentBackStackEntryFlow.first { it.id == backStackEntry.id }
+                        navController.navigate(
+                            "workspace_detailed/$workspaceId/$rawWorkspaceName" +
+                                "?initialTab=$selectedWorkspaceTab&initialPartnerId=$selectedDmPartnerId"
+                        ) {
+                            popUpTo(backStackEntry.destination.id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                }
+
                 val workspaceViewModel: WorkspaceViewModel =
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 val workspaceStatus by workspaceViewModel.workspaceStatus.collectAsStateWithLifecycle()
                 val workspaceMembers by workspaceViewModel.workspaceMembers.collectAsStateWithLifecycle()
 
-                val workspaceRepo = koinInject<WorkspaceRepo>()
                 val leaveScope = rememberCoroutineScope()
                 val channelRepo = koinInject<ChannelRepo>()
                 val notesRepo = koinInject<NotesRepo>()
@@ -578,7 +604,10 @@ fun AppNavigation(
                     userId = loggedInUserId,
                     workspaceId = workspaceId,
                     initialTab = initialTab,
-                    initialPartnerId = initialPartnerId,
+                    initialPartnerId = selectedDmPartnerId.takeIf { it >= 0 },
+                    currentTab = selectedWorkspaceTab,
+                    onCurrentTabChange = { selectedWorkspaceTab = it },
+                    onDmPartnerChange = { selectedDmPartnerId = it ?: -1 },
                     channelViewModel = channelViewModel,
                     taskViewModel = taskViewModel,
                     notesViewModel = notesViewModel,

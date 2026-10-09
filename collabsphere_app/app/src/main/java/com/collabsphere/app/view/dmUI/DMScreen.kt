@@ -211,6 +211,7 @@ fun DMScreen(
     initialPartnerId: Int? = null,
     baseUrl: String = AppConfig.BASE_URL,
     onConversationActiveChange: (Boolean) -> Unit = {},
+    onActivePartnerChange: (Int?) -> Unit = {},
     onExitModule: () -> Unit
 ) {
     val unfurlViewModel: GitHubUnfurlViewModel = koinViewModel()
@@ -231,6 +232,7 @@ fun DMScreen(
 
     LaunchedEffect(activeChatPartner) {
         onConversationActiveChange(activeChatPartner != null)
+        onActivePartnerChange(activeChatPartner?.id)
     }
     var typedText by remember { mutableStateOf("") }
     var selectedMessage by remember { mutableStateOf<DmEntity?>(null) }

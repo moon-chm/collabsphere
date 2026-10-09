@@ -86,6 +86,7 @@ object DatabaseFactory {
                 NotificationMutesTable,
                 ChannelReadStateTable,
                 WorkspaceMembersTable,
+                WorkspaceMembershipStateTable,
                 UserBlocksTable,
                 UserVerificationTable,
                 NotificationsTable,

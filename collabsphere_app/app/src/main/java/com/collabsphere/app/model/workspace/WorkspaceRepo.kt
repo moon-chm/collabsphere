@@ -16,6 +16,7 @@ import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -35,7 +36,10 @@ class WorkspaceRepo(
     }
 
     companion object {
-        private val LAST_SYNC_KEY = longPreferencesKey("workspaces_last_sync_time")
+        private const val FULL_WORKSPACE_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+
+        private fun lastSyncKey(userId: Int) = longPreferencesKey("workspaces_last_sync_time_$userId")
+        private fun fullWorkspaceRefreshKey(userId: Int) = longPreferencesKey("workspaces_last_full_refresh_$userId")
     }
 
     // WorkspaceRepo is a Koin singleton shared by every WorkspaceViewModel instance — without this
@@ -51,13 +55,15 @@ class WorkspaceRepo(
         if (!activeSyncLoops.add(userId)) return@withContext
         try {
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(30_000)
+        val syncKey = lastSyncKey(userId)
+        val fullRefreshKey = fullWorkspaceRefreshKey(userId)
         while (isActive) {
             // Suspends here entirely (no polling/wakeups) while backgrounded, resumes instantly
             // the moment the app returns to foreground — then goes straight to a fetch below.
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
             var syncSucceeded = false
             try {
-                val position = dataStore.readSyncPosition(LAST_SYNC_KEY)
+                val position = dataStore.readSyncPosition(syncKey)
                 val page = workspaceApiService.getWorkspaceUpdates(userId, position.since, position.cursor)
                 val updates = page.items
 
@@ -78,16 +84,20 @@ class WorkspaceRepo(
                         }
                     }
                 }
-                // Workspace deltas only describe current memberships. Reconcile against the
-                // authoritative list so a removed member's device drops a workspace whose
-                // membership row has disappeared and therefore cannot produce a delta tombstone.
-                val remoteWorkspaceIds = workspaceApiService.getWorkspacesByUserId(userId)
-                    .mapTo(HashSet()) { it.id }
-                workspaceDao.getAllWorkspacesForUser(userId).first()
-                    .filter { it.id > 0 && it.id !in remoteWorkspaceIds }
-                    .forEach { workspaceDao.deleteWorkspaceById(it.id) }
+                // Durable membership tombstones handle new removals. Keep an infrequent full
+                // reconciliation for removals that predate the tombstone migration and as repair.
+                val now = System.currentTimeMillis()
+                val lastFullRefresh = dataStore.data.first()[fullRefreshKey] ?: 0L
+                if (now - lastFullRefresh >= FULL_WORKSPACE_REFRESH_INTERVAL_MS) {
+                    val remoteWorkspaceIds = workspaceApiService.getWorkspacesByUserId(userId)
+                        .mapTo(HashSet()) { it.id }
+                    workspaceDao.getAllWorkspacesForUser(userId).first()
+                        .filter { it.id > 0 && it.id !in remoteWorkspaceIds }
+                        .forEach { workspaceDao.deleteWorkspaceById(it.id) }
+                    dataStore.edit { preferences -> preferences[fullRefreshKey] = now }
+                }
                 // After the rows are stored: committing first and dying in between would skip them.
-                dataStore.commitSyncPosition(LAST_SYNC_KEY, position, page, updates.maxOfOrNull { it.updatedAt })
+                dataStore.commitSyncPosition(syncKey, position, page, updates.maxOfOrNull { it.updatedAt })
                 syncSucceeded = true
             } catch (e: Exception) {
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
@@ -136,6 +146,13 @@ class WorkspaceRepo(
 
     fun getWorkspaceMembersFlow(workspaceId: Int): Flow<List<UserEntity>> {
         return workspaceDao.getWorkspaceMembers(workspaceId)
+    }
+
+    /** Resolves an offline workspace route after its queued create receives a server ID. */
+    fun observeCanonicalWorkspaceId(workspaceId: Int): Flow<Int> {
+        if (workspaceId >= 0) return flowOf(workspaceId)
+        val key = androidx.datastore.preferences.core.intPreferencesKey("temp_ws_$workspaceId")
+        return dataStore.data.map { preferences -> preferences[key] ?: workspaceId }
     }
 
     suspend fun syncWorkspaceMembers(workspaceId: Int) = withContext(Dispatchers.IO) {

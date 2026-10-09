@@ -90,6 +90,9 @@ fun WorkspaceDetailedScreen(
     workspaceId: Int,
     initialTab: Int = 0,
     initialPartnerId: Int? = null,
+    currentTab: Int? = null,
+    onCurrentTabChange: (Int) -> Unit = {},
+    onDmPartnerChange: (Int?) -> Unit = {},
     onBack: () -> Unit,
     onSearchClick: () -> Unit = {},
     onLeftWorkspace: () -> Unit = {},
@@ -105,7 +108,12 @@ fun WorkspaceDetailedScreen(
     isSendingInvitation: Boolean = false,
     invitationStatus: String? = null
 ) {
-    var selectedTab by remember(initialTab) { mutableStateOf(initialTab) }
+    var localSelectedTab by remember(initialTab) { mutableStateOf(initialTab) }
+    val selectedTab = currentTab ?: localSelectedTab
+    val changeSelectedTab: (Int) -> Unit = { tab ->
+        localSelectedTab = tab
+        onCurrentTabChange(tab)
+    }
     val muteRepo = koinInject<MuteRepo>()
     val mutes by muteRepo.mutes.collectAsStateWithLifecycle()
     val isWorkspaceMuted = MuteRepo.isWorkspaceMuted(mutes, workspaceId)
@@ -589,37 +597,37 @@ fun WorkspaceDetailedScreen(
                             selected = selectedTab == 0,
                             icon = Icons.Outlined.GridView,
                             label = "Spaces",
-                            onClick = { selectedTab = 0 }
+                            onClick = { changeSelectedTab(0) }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 4,
                             icon = Icons.Outlined.ChatBubbleOutline,
                             label = "Chat",
-                            onClick = { selectedTab = 4 }
+                            onClick = { changeSelectedTab(4) }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 1,
                             icon = Icons.Outlined.CheckBox,
                             label = "Tasks",
-                            onClick = { selectedTab = 1 }
+                            onClick = { changeSelectedTab(1) }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 3,
                             icon = Icons.Outlined.Description,
                             label = "Docs",
-                            onClick = { selectedTab = 3 }
+                            onClick = { changeSelectedTab(3) }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 2,
                             icon = Icons.Outlined.Folder,
                             label = "Files",
-                            onClick = { selectedTab = 2 }
+                            onClick = { changeSelectedTab(2) }
                         )
                         SkeuoTabItem(
                             selected = selectedTab == 5,
                             icon = Icons.Outlined.AccountTree,
                             label = "GitHub",
-                            onClick = { selectedTab = 5 }
+                            onClick = { changeSelectedTab(5) }
                         )
                     }
                 }
@@ -676,7 +684,8 @@ fun WorkspaceDetailedScreen(
                         currentUserId = userId,
                         initialPartnerId = initialPartnerId,
                         onConversationActiveChange = { active -> isDmInConversation = active },
-                        onExitModule = { selectedTab = 0 }
+                        onActivePartnerChange = onDmPartnerChange,
+                        onExitModule = { changeSelectedTab(0) }
                     )
                     5 -> WorkspaceGitHubScreen(
                         workspaceId = workspaceId,

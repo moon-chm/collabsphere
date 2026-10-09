@@ -10,8 +10,8 @@ Tracking doc for the Android client and Ktor backend. Findings below are based o
 
 ## Confirmed open work
 
-- **Temporary workspace ID remapping:** `WorkspaceRepo.handleRemoteWorkspaceCreation()` swaps Room foreign keys and stores the mapping, but an already-open navigation entry and its ViewModels keep the negative route ID. This can leave the open screen polling or writing under the temporary ID.
-- **Membership removal sync:** `syncWorkspaceMembers()` now reconciles the authoritative membership snapshot locally, but workspace delta sync still makes a full-list request to discover removals. A removal tombstone or membership-specific delta is needed before safely removing that fallback.
+- **Temporary workspace ID remapping:** addressed in the current fix pass. Open workspace routes observe the stored ID mapping and replace their route after returning from nested channel/search screens, preserving the selected workspace tab and DM partner so old route ViewModels are cleared. Full offline-to-online UI acceptance coverage remains.
+- **Membership removal sync:** current clients receive per-user removal tombstones through workspace delta sync; remaining members receive a workspace update and refresh their authoritative roster. A five-minute full-list reconciliation remains for pre-migration removals and repair.
 - **Task reminder crash window:** a task is claimed by setting `reminderSentAt` before inserting/pushing the notification. A process crash after the claim can lose the reminder; reliable retries need an outbox and idempotent notification creation.
 - **File durability:** Render is configured on the free plan with a local upload directory. Local fallback files can disappear on redeploy, and a configured Cloudinary outage silently falls back to that disk. Choose durable object storage and migrate existing files before changing this behavior.
 - **Multi-instance readiness (conditional):** Redis is optional. The member cache has per-JVM entries that another instance cannot invalidate, and WebSocket delivery currently publishes to Redis only when no local session received the event. Do not scale to multiple instances until shared invalidation and fan-out are corrected and tested.
@@ -24,7 +24,9 @@ Tracking doc for the Android client and Ktor backend. Findings below are based o
 - Default server tests no longer include database-backed suites; DB tests require an explicit disposable database opt-in.
 - Live email smoke tests and the hardcoded database connection test were removed from the default test source set.
 - Workspace member refresh now prunes removed local memberships, and permanent HTTP refusals no longer create optimistic memberships.
+- Removing a workspace member now stamps the workspace in the same transaction so remaining members receive a workspace delta and refresh their roster.
 - Delta polling keeps its success cadence and backs off after repeated errors across the client repositories.
+- Open workspace routes now resolve temporary IDs and replace the stale route when it is safe to do so.
 
 ## Broader maintainability work
 
