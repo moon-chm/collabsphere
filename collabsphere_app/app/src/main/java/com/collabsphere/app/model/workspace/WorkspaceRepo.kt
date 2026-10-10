@@ -130,19 +130,6 @@ class WorkspaceRepo(
 
     suspend fun syncWorkspaces(userId: Int) = withContext(Dispatchers.IO) {
         try {
-            // Only ever plant a placeholder row to satisfy the FK constraint on WorkspaceEntity.userId
-            // when the real user row genuinely isn't cached yet — never overwrite it if it already is.
-            if (workspaceDao.userCount(userId) == 0) {
-                workspaceDao.upsertUser(
-                    UserEntity(
-                        id = userId,
-                        email = "",
-                        password = "",
-                        userName = ""
-                    )
-                )
-            }
-
             val remote = workspaceApiService.getWorkspacesByUserId(userId)
             val workspaceEntities = remote.map {
                 WorkspaceEntity(
@@ -155,6 +142,18 @@ class WorkspaceRepo(
             }
 
             workspaceEntities.forEach { workspace ->
+                // Only ever plant a placeholder row to satisfy the FK constraint on WorkspaceEntity.userId
+                // when the real user row genuinely isn't cached yet — never overwrite it if it already is.
+                if (workspaceDao.userCount(workspace.userId) == 0) {
+                    workspaceDao.upsertUser(
+                        UserEntity(
+                            id = workspace.userId,
+                            email = "",
+                            password = "",
+                            userName = ""
+                        )
+                    )
+                }
                 workspaceDao.upsertWorkspace(workspace)
                 syncWorkspaceMembers(workspace.id)
             }
