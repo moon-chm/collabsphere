@@ -278,7 +278,7 @@ object GitHubDataStore {
         return newSuspendedTransaction(Dispatchers.IO, db = com.collabsphere.DatabaseFactory.writeDatabase) {
             val stillLinked = GitHubRepositoriesTable.selectAll()
                 .where { GitHubRepositoriesTable.id eq repositoryId }
-                .count() > 0
+                .count() > 0L
             if (!stillLinked) return@newSuspendedTransaction emptyList()
 
             val activities = if (incremental) {

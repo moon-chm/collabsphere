@@ -60,7 +60,7 @@ private fun Transaction.lockVerificationCode(userId: Int) {
     }
 }
 
-suspend fun <T> dbQuery(block: suspend () -> T): T {
+suspend fun <T> dbQuery(block: suspend Transaction.() -> T): T {
     var attempt = 0
     while (true) {
         try {
@@ -76,7 +76,7 @@ suspend fun <T> dbQuery(block: suspend () -> T): T {
     }
 }
 
-suspend fun <T> dbReadQuery(block: suspend () -> T): T {
+suspend fun <T> dbReadQuery(block: suspend Transaction.() -> T): T {
     var attempt = 0
     while (true) {
         try {
@@ -412,7 +412,7 @@ fun Application.configureRouting() {
                 }
 
                 val userExists = dbQuery {
-                    UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.count() > 0
+                    UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.count() > 0L
                 }
 
                 if (userExists) {
@@ -503,7 +503,7 @@ fun Application.configureRouting() {
                     if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
                         val attempts = verificationRow[UserVerificationTable.attempts] + 1
                         UserVerificationTable.update({ UserVerificationTable.userId eq uid }) {
-                            it[UserVerificationTable.attempts] = UserVerificationTable.attempts + 1
+                            it[UserVerificationTable.attempts] = org.jetbrains.exposed.sql.SqlExpressionBuilder.run { UserVerificationTable.attempts + 1 }
                             if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) it[UserVerificationTable.consumed] = true
                         }
                         if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) return@dbQuery "TOO_MANY_ATTEMPTS"
@@ -625,7 +625,7 @@ fun Application.configureRouting() {
                 val userExists = dbQuery {
                     UsersTable.selectAll()
                         .where { UsersTable.email.lowerCase() eq trimmedEmail }
-                        .count() > 0
+                        .count() > 0L
                 }
 
                 if (userExists) {
@@ -702,7 +702,7 @@ fun Application.configureRouting() {
                     }
                     if (resetRow[PasswordResetTable.otp] != trimmedOtp) {
                         PasswordResetTable.update({ PasswordResetTable.email eq trimmedEmail }) {
-                        it[PasswordResetTable.attempts] = PasswordResetTable.attempts + 1
+                        it[PasswordResetTable.attempts] = org.jetbrains.exposed.sql.SqlExpressionBuilder.run { PasswordResetTable.attempts + 1 }
                             if (resetRow[PasswordResetTable.attempts] + 1 >= AuthRules.OTP_MAX_ATTEMPTS) {
                                 it[PasswordResetTable.consumed] = true
                             }
@@ -729,7 +729,7 @@ fun Application.configureRouting() {
                     if (consumed != 1) return@dbQuery "INVALID"
 
                     val updated = UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) {
-                        it[password] = PasswordHasher.hash(request.newPassword)
+                        it[password] = PasswordHasher.hash(request.newPassword ?: "")
                         it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                     }
 
@@ -900,7 +900,7 @@ fun Application.configureRouting() {
                                     it[UsersTable.username] = username
                                     it[bio] = request.bio
                                     it[statusMessage] = request.statusMessage
-                                    it[password] = PasswordHasher.hash(request.newPassword)
+                                    it[password] = PasswordHasher.hash(request.newPassword ?: "")
                                     it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                                 }
                                 TokenVersions.invalidate(actingUserId)
@@ -1029,7 +1029,7 @@ fun Application.configureRouting() {
                         if (UsersTable.selectAll().where {
                                 ((UsersTable.email.lowerCase() eq newEmail) or (UsersTable.pendingEmail.lowerCase() eq newEmail)) and
                                     (UsersTable.id neq actingUserId)
-                            }.count() > 0
+                            }.count() > 0L
                         ) {
                             return@dbQuery "CONFLICT"
                         }
@@ -1149,7 +1149,7 @@ fun Application.configureRouting() {
                         if (verificationRow[UserVerificationTable.token] != trimmedOtp) {
                             val attempts = verificationRow[UserVerificationTable.attempts] + 1
                             UserVerificationTable.update({ UserVerificationTable.userId eq actingUserId }) {
-                                it[UserVerificationTable.attempts] = UserVerificationTable.attempts + 1
+                                it[UserVerificationTable.attempts] = org.jetbrains.exposed.sql.SqlExpressionBuilder.run { UserVerificationTable.attempts + 1 }
                                 if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) it[UserVerificationTable.consumed] = true
                             }
                             if (attempts >= AuthRules.OTP_MAX_ATTEMPTS) return@dbQuery "TOO_MANY_ATTEMPTS"
@@ -1221,7 +1221,7 @@ fun Application.configureRouting() {
                             WorkspaceMembersTable.selectAll().where {
                                 (WorkspaceMembersTable.workspaceId eq workspaceId) and
                                     (WorkspaceMembersTable.userId neq actingUserId)
-                            }.count() > 0
+                            }.count() > 0L
                         }
                         if (ownsSharedWorkspace) return@dbQuery "OWNED_SHARED_WORKSPACES"
 
@@ -1286,7 +1286,7 @@ fun Application.configureRouting() {
                         val isBlocked = UserBlocksTable.selectAll().where {
                             ((UserBlocksTable.blockerId eq targetId) and (UserBlocksTable.blockedId eq actingUserId)) or
                                 ((UserBlocksTable.blockerId eq actingUserId) and (UserBlocksTable.blockedId eq targetId))
-                        }.count() > 0
+                        }.count() > 0L
                         if (isBlocked) return@dbQuery null
 
                         UsersTable.selectAll().where { UsersTable.id eq targetId }.singleOrNull()?.let { row ->
@@ -1298,7 +1298,7 @@ fun Application.configureRouting() {
                                 val sharesWorkspace = viewerWorkspaces.isNotEmpty() && WorkspaceMembersTable.selectAll().where {
                                     (WorkspaceMembersTable.userId eq targetId) and
                                         (WorkspaceMembersTable.workspaceId inList viewerWorkspaces)
-                                }.count() > 0
+                                }.count() > 0L
                                 if (!sharesWorkspace) return@dbQuery null
                             }
                             val isOnlineNow = WebSocketBroker.isUserConnected(targetId.toLong())
@@ -1383,7 +1383,7 @@ fun Application.configureRouting() {
 
                     val targetExists = dbQuery {
                         lockUserPair(actingUserId, targetId)
-                        if (UsersTable.selectAll().where { UsersTable.id eq targetId }.count() == 0) return@dbQuery false
+                        if (UsersTable.selectAll().where { UsersTable.id eq targetId }.count() == 0L) return@dbQuery false
                         UserBlocksTable.insertIgnore {
                             it[blockerId] = actingUserId
                             it[blockedId] = targetId
@@ -1586,18 +1586,30 @@ fun Application.configureRouting() {
                                                 logger.info("[DM] Refused SEND_MESSAGE from userId=${requestedDto.senderId} to ${requestedDto.receiverId}: $rejection")
                                                 return@dbQuery null
                                             }
-                                            val validReplyToId = requestedDto.replyToId?.takeIf { targetId ->
-                                                DirectMessagesTable.selectAll().where {
+                                            val validReplyToId = requestedDto.replyToId?.let { targetId ->
+                                                val exists = DirectMessagesTable.selectAll().where {
                                                     (DirectMessagesTable.id eq targetId) and
                                                             (DirectMessagesTable.isDeleted eq false) and
                                                             (DirectMessagesTable.workspaceId eq requestedDto.workspaceId) and (
                                                             ((DirectMessagesTable.senderId eq requestedDto.senderId) and (DirectMessagesTable.receiverId eq requestedDto.receiverId)) or
                                                                     ((DirectMessagesTable.senderId eq requestedDto.receiverId) and (DirectMessagesTable.receiverId eq requestedDto.senderId))
                                                             )
-                                                }.count() > 0
+                                                }.count() > 0L
+                                                if (!exists) return@dbQuery null
+                                                targetId
                                             }
                                             val outgoingDto = requestedDto.copy(replyToId = validReplyToId)
-                                            val insertedStatement = DirectMessagesTable.insert {
+                                            val prior = DirectMessagesTable.selectAll().where {
+                                                (DirectMessagesTable.senderId eq outgoingDto.senderId) and
+                                                (DirectMessagesTable.receiverId eq outgoingDto.receiverId) and
+                                                (DirectMessagesTable.timestamp eq outgoingDto.timestamp) and
+                                                (DirectMessagesTable.content eq outgoingDto.content)
+                                            }.singleOrNull()
+
+                                            val generatedId = if (prior != null) {
+                                                prior[DirectMessagesTable.id]
+                                            } else {
+                                                val insertedStatement = DirectMessagesTable.insert {
                                                 it[workspaceId] = outgoingDto.workspaceId
                                                 it[senderId] = outgoingDto.senderId
                                                 it[receiverId] = outgoingDto.receiverId
@@ -1608,10 +1620,11 @@ fun Application.configureRouting() {
                                             }
 
                                             val rawId = insertedStatement[DirectMessagesTable.id]
-                                            val generatedId = when (rawId) {
+                                            when (rawId) {
                                                 is org.jetbrains.exposed.dao.id.EntityID<*> -> (rawId.value as Number).toInt()
                                                 is Number -> rawId.toInt()
                                                 else -> rawId.toString().toInt()
+                                            }
                                             }
                                             outgoingDto.copy(id = generatedId)
                                         }

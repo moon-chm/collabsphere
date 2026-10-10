@@ -501,7 +501,7 @@ private suspend fun postToChannel(repo: LinkedRepo, content: String) {
                     (ChannelsTable.workspaceId eq repo.workspaceId) and
                     (ChannelsTable.isDeleted eq false)
             }
-            .count() > 0
+            .count() > 0L
         if (!channelExists) return@dbQuery
         MessageTable.insert {
             it[MessageTable.userId] = GitHubBot.ensureExists()

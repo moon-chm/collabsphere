@@ -136,6 +136,18 @@ internal fun Route.filesRoutes() {
 
                 val finalMimeType = contentType ?: "application/octet-stream"
                 val fileSize = stagedFile.length()
+
+                if (fileSize == 0L) {
+                    call.respond(HttpStatusCode.BadRequest, "File cannot be empty")
+                    return@post
+                }
+                
+                val forbiddenMimes = listOf("application/x-executable", "application/x-msdownload", "application/x-sh")
+                if (finalMimeType in forbiddenMimes || fileName!!.endsWith(".exe") || fileName!!.endsWith(".sh")) {
+                    call.respond(HttpStatusCode.UnsupportedMediaType, "Unsupported file type")
+                    return@post
+                }
+
                 val contentHash = stagedFile.sha256Hex()
                 val matchingPrior = idempotencyKey?.let { key ->
                     dbQuery { LocalFilesTable.selectAll().where { LocalFilesTable.idempotencyKey eq key }.singleOrNull() }

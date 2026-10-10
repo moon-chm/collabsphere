@@ -253,6 +253,7 @@ object DirectMessagesTable : Table("direct_messages") {
     // Soft delete: the row stays as a tombstone (content/media cleared) so a device that was offline
     // when the message was deleted still learns about it through /api/dm/sync.
     val isDeleted = bool("is_deleted").default(false)
+    val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
     // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
     val syncXid = long("sync_xid").default(0L)

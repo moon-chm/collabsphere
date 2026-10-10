@@ -78,17 +78,17 @@ class SessionManagerTest {
     @Test
     fun `logout waits for work cancellation before clearing account data`() = runTest {
         val events = mutableListOf<String>()
-        val future = mockk<ListenableFuture<Void>>()
+        val future = mockk<ListenableFuture<Operation.State.SUCCESS>>()
         val operation = mockk<Operation>()
         every { workManager.cancelAllWork() } returns operation
         every { operation.result } returns future
         every { future.get(any<Long>(), TimeUnit.MILLISECONDS) } answers {
-            events += "work-cancelled"
-            null
+            events.add("work-cancelled")
+            Operation.SUCCESS
         }
         coEvery { loginApiService.clearFcmToken() } coAnswers {
             events += "fcm-unregistered"
-            Unit
+            true
         }
         coEvery { appDatabase.clearAllTables() } coAnswers {
             events += "database-cleared"

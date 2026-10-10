@@ -29,6 +29,10 @@ internal fun Route.tasksRoutes() {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<TaskRequest>()
 
+                if (request.taskName.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Task name cannot be blank")
+                if (request.taskName.length > 255) return@post call.respond(HttpStatusCode.BadRequest, "Task name too long")
+                if (request.status !in listOf("TODO", "IN_PROGRESS", "DONE")) return@post call.respond(HttpStatusCode.BadRequest, "Invalid status")
+
                 val newTask = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) return@dbQuery null
                     if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
@@ -196,6 +200,10 @@ internal fun Route.tasksRoutes() {
                 call.respond(HttpStatusCode.BadRequest, "Invalid request body")
                 return@put
             }
+
+            if (request.taskName.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Task name cannot be blank")
+            if (request.taskName.length > 255) return@put call.respond(HttpStatusCode.BadRequest, "Task name too long")
+            if (request.status !in listOf("TODO", "IN_PROGRESS", "DONE")) return@put call.respond(HttpStatusCode.BadRequest, "Invalid status")
 
             var previousStatus: String? = null
             val updateResult = dbQuery {

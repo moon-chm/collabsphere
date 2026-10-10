@@ -1,3 +1,4 @@
+import com.collabsphere.dto.*
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.MessageTable
@@ -178,8 +179,8 @@ class RoutesEndToEndTest {
         assertEquals(HttpStatusCode.Created, first.status)
         assertEquals(HttpStatusCode.Created, retry.status)
         assertEquals(
-            json.decodeFromString<dto.MessageResponse>(first.bodyAsText()).id,
-            json.decodeFromString<dto.MessageResponse>(retry.bodyAsText()).id
+            json.decodeFromString<com.collabsphere.dto.MessageResponse>(first.bodyAsText()).id,
+            json.decodeFromString<com.collabsphere.dto.MessageResponse>(retry.bodyAsText()).id
         )
         assertEquals(HttpStatusCode.BadRequest, conflictingReplay.status)
         assertEquals(
@@ -344,5 +345,318 @@ class RoutesEndToEndTest {
             }))
         }
         assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+    }
+
+    @Test
+    fun `workspace member role constraints prevent owner removal and enforce self-leave rules`() = testApplication {
+        application { module() }
+        val (ownerId, ownerToken) = client.signUp()
+        val (memberId, memberToken) = client.signUp()
+        val ws = ownedWorkspace(ownerId, "Roles", "pass")
+        
+        transaction { WorkspaceMembersTable.insert { it[workspaceId] = ws; it[userId] = memberId } }
+
+        val memRes = client.delete("/api/workspace/$ws/members/$ownerId") { bearerAuth(memberToken) }
+        assertEquals(HttpStatusCode.Forbidden, memRes.status)
+
+        val ownerSelfRemove = client.delete("/api/workspace/$ws/members/$ownerId") { bearerAuth(ownerToken) }
+        assertEquals(HttpStatusCode.Forbidden, ownerSelfRemove.status)
+
+        val ownerDemote = client.put("/api/workspace/$ws/members/$ownerId/role") {
+            bearerAuth(ownerToken)
+            contentType(ContentType.Application.Json)
+            setBody("""{"role":"MEMBER"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, ownerDemote.status)
+
+        val memberLeave = client.delete("/api/workspace/$ws/members/$memberId") { bearerAuth(memberToken) }
+        assertEquals(HttpStatusCode.OK, memberLeave.status)
+    }
+
+    @Test
+    fun `workspace search rejects nonmembers and handles query length boundaries`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val (_, outsiderToken) = client.signUp()
+        val ws = workspaceWith(me)
+
+        val longQuery = "a".repeat(300)
+        val shortQuery = "a"
+        val validQuery = "test"
+
+        val shortRes = client.get("/api/workspace/$ws/search?q=$shortQuery") { bearerAuth(token) }
+        assertEquals(HttpStatusCode.OK, shortRes.status)
+
+        val longRes = client.get("/api/workspace/$ws/search?q=$longQuery") { bearerAuth(token) }
+        assertEquals(HttpStatusCode.OK, longRes.status)
+
+        val outsiderRes = client.get("/api/workspace/$ws/search?q=$validQuery") { bearerAuth(outsiderToken) }
+        assertEquals(HttpStatusCode.Forbidden, outsiderRes.status)
+    }
+
+    @Test
+    fun `channel duplicate names are rejected in same workspace but allowed across workspaces`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws1 = workspaceWith(me)
+        val ws2 = workspaceWith(me)
+
+        val channelName = "general"
+        val reqWs1 = """{"id":0,"userId":$me,"channelName":"$channelName","workspaceId":$ws1,"description":"test"}"""
+        val reqWs2 = """{"id":0,"userId":$me,"channelName":"$channelName","workspaceId":$ws2,"description":"test"}"""
+
+        val c1 = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(reqWs1)
+        }
+        assertEquals(HttpStatusCode.Created, c1.status)
+
+        val c1Dup = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(reqWs1.replace(""""id":0""", """"id":0,"idempotencyKey":"${UUID.randomUUID()}""""))
+        }
+        assertEquals(HttpStatusCode.BadRequest, c1Dup.status)
+
+        val c2 = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(reqWs2)
+        }
+        assertEquals(HttpStatusCode.Created, c2.status)
+    }
+
+    @Test
+    fun `cannot delete the last channel in a workspace`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws = workspaceWith(me)
+        val channelName = "only-channel"
+
+        val c1 = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"userId":$me,"channelName":"$channelName","workspaceId":$ws,"description":"test"}""")
+        }
+        assertEquals(HttpStatusCode.Created, c1.status)
+
+        val delRes = client.delete("/api/channels/$channelName/$ws/$me") {
+            bearerAuth(token)
+        }
+        assertEquals(HttpStatusCode.BadRequest, delRes.status)
+
+        val c2Name = "second-channel"
+        client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"userId":$me,"channelName":"$c2Name","workspaceId":$ws,"description":"test"}""")
+        }
+
+        val delRes2 = client.delete("/api/channels/$channelName/$ws/$me") {
+            bearerAuth(token)
+        }
+        assertEquals(HttpStatusCode.OK, delRes2.status)
+    }
+    @Test
+    fun `message creation edge cases are rejected`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws = workspaceWith(me)
+
+        val channelName = "general"
+        val c1 = client.post("/api/channels") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"userId":$me,"channelName":"$channelName","workspaceId":$ws,"description":"test"}""")
+        }
+        val channelResponse = Json.decodeFromString<dto.ChannelResponse>(c1.bodyAsText())
+        val channelId = channelResponse.id
+
+        // blank content
+        val req1 = """{"id":0,"userId":$me,"workspaceId":$ws,"channelId":$channelId,"content":"   ","status":"SENT"}"""
+        val res1 = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(req1)
+        }
+        assertEquals(HttpStatusCode.BadRequest, res1.status)
+
+        // invalid reply target
+        val req2 = """{"id":0,"userId":$me,"workspaceId":$ws,"channelId":$channelId,"content":"reply","status":"SENT","replyToId":99999}"""
+        val res2 = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(req2)
+        }
+        assertEquals(HttpStatusCode.BadRequest, res2.status)
+
+        // too long
+        val longContent = "A".repeat(5000)
+        val req3 = """{"id":0,"userId":$me,"workspaceId":$ws,"channelId":$channelId,"content":"$longContent","status":"SENT"}"""
+        val res3 = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(req3)
+        }
+        assertEquals(HttpStatusCode.BadRequest, res3.status)
+
+        // deleted channel
+        client.delete("/api/channels/$channelName/$ws/$me") { bearerAuth(token) }
+        val req4 = """{"id":0,"userId":$me,"workspaceId":$ws,"channelId":$channelId,"content":"valid","status":"SENT"}"""
+        val res4 = client.post("/api/message") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(req4)
+        }
+        assertEquals(HttpStatusCode.BadRequest, res4.status)
+    }
+    @Test
+    fun `task creation and update boundaries are enforced`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws = workspaceWith(me)
+
+        val longName = "A".repeat(300)
+
+        // Blank name
+        val t1 = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, t1.status)
+
+        // Long name
+        val t2 = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"taskName":"$longName","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, t2.status)
+
+        // Invalid status
+        val t3 = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"INVALID","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, t3.status)
+
+        // Invalid assignee
+        val t4 = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":99999,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, t4.status)
+
+        // Valid creation
+        val t5 = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.Created, t5.status)
+        val taskId = Json.decodeFromString<dto.TaskResponse>(t5.bodyAsText()).id
+
+        // Invalid update
+        val t6 = client.put("/api/tasks/$taskId") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":$taskId,"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, t6.status)
+        @Test
+    fun `note creation and update boundaries are enforced`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws = workspaceWith(me)
+
+        val longName = "A".repeat(300)
+        val longDesc = "A".repeat(15000)
+
+        // Blank name
+        val n1 = client.post("/api/notes") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"notesName":"  ","description":"test","workspaceId":$ws}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, n1.status)
+
+        // Long name
+        val n2 = client.post("/api/notes") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"notesName":"$longName","description":"test","workspaceId":$ws}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, n2.status)
+
+        // Long description
+        val n3 = client.post("/api/notes") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"notesName":"valid","description":"$longDesc","workspaceId":$ws}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, n3.status)
+
+        // Valid creation
+        val n4 = client.post("/api/notes") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"notesName":"valid","description":"test","workspaceId":$ws}""")
+        }
+        assertEquals(HttpStatusCode.Created, n4.status)
+        val noteId = Json.decodeFromString<com.collabsphere.dto.NotesResponse>(n4.bodyAsText()).id
+
+        // Invalid update
+        val n5 = client.put("/api/notes/$noteId") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":$noteId,"notesName":"valid","description":"$longDesc","workspaceId":$ws}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, n5.status)
+    }
+    }
+
+    @Test
+    fun `file upload boundaries are enforced`() = testApplication {
+        application { module() }
+        val (me, token) = client.signUp()
+        val ws = workspaceWith(me)
+
+        // Zero-byte file
+        val req1 = client.post("/api/file") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(
+                formData {
+                    append("workspaceId", ws.toString())
+                    append("userName", "test")
+                    append("fileName", "test.txt")
+                    append("fileBytes", ByteArray(0), Headers.build {
+                        append(HttpHeaders.ContentType, "text/plain")
+                        append(HttpHeaders.ContentDisposition, "filename=\"test.txt\"")
+                    })
+                }
+            ))
+        }
+        assertEquals(HttpStatusCode.BadRequest, req1.status)
+
+        // Unsupported MIME (executable)
+        val req2 = client.post("/api/file") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(
+                formData {
+                    append("workspaceId", ws.toString())
+                    append("userName", "test")
+                    append("fileName", "test.exe")
+                    append("fileBytes", byteArrayOf(1, 2, 3), Headers.build {
+                        append(HttpHeaders.ContentType, "application/x-msdownload")
+                        append(HttpHeaders.ContentDisposition, "filename=\"test.exe\"")
+                    })
+                }
+            ))
+        }
+        assertEquals(HttpStatusCode.UnsupportedMediaType, req2.status)
     }
 }

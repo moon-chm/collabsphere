@@ -1,3 +1,4 @@
+import org.jetbrains.exposed.sql.lowerCase
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspacesTable
 import com.collabsphere.model.PasswordResetTable

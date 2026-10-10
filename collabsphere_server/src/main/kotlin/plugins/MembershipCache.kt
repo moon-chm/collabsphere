@@ -104,7 +104,7 @@ internal fun isMemberCached(userId: Int, workspaceId: Int): Boolean {
             (WorkspaceMembersTable.userId eq userId) and
             (WorkspacesTable.isDeleted eq false)
         }
-        .count() > 0
+        .count() > 0L
 
     // Populate cache (async, non-blocking even inside a transaction)
     MembershipCache.put(userId, workspaceId, result)

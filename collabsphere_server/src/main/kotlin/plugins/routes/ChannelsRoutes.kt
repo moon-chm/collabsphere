@@ -52,6 +52,15 @@ internal fun Route.channelsRoutes() {
                         ) { "Idempotency key was already used for a different channel" }
                         return@dbQuery prior.toChannelResponse() to false
                     }
+
+                    val existingName = ChannelsTable.selectAll().where {
+                        (ChannelsTable.workspaceId eq request.workspaceId) and
+                        (ChannelsTable.channelName eq request.channelName) and
+                        (ChannelsTable.isDeleted eq false)
+                    }.singleOrNull()
+                    if (existingName != null) {
+                        throw IllegalArgumentException("Channel name already exists in this workspace")
+                    }
                     val insertResult = ChannelsTable.insertIgnore {
                         it[ChannelsTable.userId] = actingUserId
                         it[ChannelsTable.channelName] = request.channelName
@@ -117,6 +126,14 @@ internal fun Route.channelsRoutes() {
                     if (!WorkspaceRoles.canModerate(role) && channel[ChannelsTable.userId] != actingUserId) {
                         return@dbQuery -1
                     }
+                    val remainingCount = ChannelsTable.selectAll().where {
+                        (ChannelsTable.workspaceId eq workspaceIdParam) and
+                        (ChannelsTable.isDeleted eq false) and
+                        (ChannelsTable.id neq channel[ChannelsTable.id])
+                    }.count()
+                    if (remainingCount == 0L) {
+                        throw IllegalArgumentException("Cannot delete the last channel in a workspace")
+                    }
                     ChannelsTable.update({ ChannelsTable.id eq channel[ChannelsTable.id] }) {
                         it[ChannelsTable.isDeleted] = true
                         it[ChannelsTable.updatedAt] = System.currentTimeMillis()
@@ -128,6 +145,8 @@ internal fun Route.channelsRoutes() {
                     updatedRows > 0   -> call.respond(HttpStatusCode.OK, true)
                     else              -> call.respond(HttpStatusCode.NotFound, false)
                 }
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, false)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, false)

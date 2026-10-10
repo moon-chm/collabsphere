@@ -77,7 +77,7 @@ object TaskExtras {
     fun normalizeChecklist(items: List<ChecklistItem>): List<ChecklistItem> =
         items.mapNotNull { item ->
             item.text.trim().take(MAX_CHECKLIST_TEXT).takeIf { it.isNotEmpty() }?.let { ChecklistItem(it, item.done) }
-        }.take(MAX_CHECKLIST_ITEMS)
+        }.distinctBy { it.text.lowercase() }.take(MAX_CHECKLIST_ITEMS)
 
     fun normalizeLabels(labels: List<String>): List<String> =
         labels.map { it.trim().take(MAX_LABEL_LENGTH) }

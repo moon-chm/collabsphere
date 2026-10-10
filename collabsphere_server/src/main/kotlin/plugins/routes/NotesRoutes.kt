@@ -27,6 +27,9 @@ internal fun Route.notesRoutes() {
             try {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<NotesRequest>()
+                if (request.notesName.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Note name cannot be blank")
+                if (request.notesName.length > 255) return@post call.respond(HttpStatusCode.BadRequest, "Note name too long")
+                if (request.description.length > 10000) return@post call.respond(HttpStatusCode.BadRequest, "Note description too long")
                 val newNotes = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) return@dbQuery null
 
@@ -106,6 +109,9 @@ internal fun Route.notesRoutes() {
                     ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing or invalid noteId")
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<NotesRequest>()
+                if (request.notesName.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Note name cannot be blank")
+                if (request.notesName.length > 255) return@put call.respond(HttpStatusCode.BadRequest, "Note name too long")
+                if (request.description.length > 10000) return@put call.respond(HttpStatusCode.BadRequest, "Note description too long")
                 val updateResult = dbQuery {
                     val existingNote = NotesTable.selectAll().where { NotesTable.id eq noteIdParam }.singleOrNull()
                         ?: return@dbQuery -1

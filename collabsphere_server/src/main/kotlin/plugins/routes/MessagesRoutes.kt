@@ -44,6 +44,20 @@ internal fun Route.messagesRoutes() {
                         return@dbQuery null
                     }
                     val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
+                    
+                    if (request.content.isBlank() && validMediaUrl == null) {
+                        throw IllegalArgumentException("Message content cannot be blank")
+                    }
+                    if (request.content.length > 4000) {
+                        throw IllegalArgumentException("Message content too long")
+                    }
+                    
+                    val channel = ChannelsTable.selectAll().where {
+                        (ChannelsTable.id eq request.channelId) and
+                                (ChannelsTable.workspaceId eq request.workspaceId) and
+                                (ChannelsTable.isDeleted eq false)
+                    }.singleOrNull() ?: throw IllegalArgumentException("Channel is missing or deleted")
+
                     val priorByKey = request.idempotencyKey?.let { key ->
                         MessageTable.selectAll().where { MessageTable.idempotencyKey eq key }.singleOrNull()
                     }
@@ -58,12 +72,15 @@ internal fun Route.messagesRoutes() {
                         val prior = priorByKey.toMessageResponse()
                         return@dbQuery prior to false
                     }
-                    val validReplyToId = request.replyToId?.takeIf { targetId ->
-                        MessageTable.selectAll().where {
+                    val validReplyToId = request.replyToId?.let { targetId ->
+                        val targetExists = MessageTable.selectAll().where {
                             (MessageTable.id eq targetId) and
                                     (MessageTable.workspaceId eq request.workspaceId) and
-                                    (MessageTable.channelId eq request.channelId)
-                        }.count() > 0
+                                    (MessageTable.channelId eq request.channelId) and
+                                    (MessageTable.isDeleted eq false)
+                        }.count() > 0L
+                        if (!targetExists) throw IllegalArgumentException("Reply target is missing, deleted, or in another channel")
+                        targetId
                     }
                     val insertResult = MessageTable.insertIgnore {
                         it[MessageTable.userId] = actingUserId
@@ -172,6 +189,8 @@ internal fun Route.messagesRoutes() {
                     }
                     }
                 }
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid request")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(
@@ -368,7 +387,7 @@ internal fun Route.messagesRoutes() {
                         (MessageTable.id eq request.lastReadMessageId) and
                                 (MessageTable.workspaceId eq workspaceIdParam) and
                                 (MessageTable.channelId eq channelIdParam)
-                    }.count() > 0
+                    }.count() > 0L
                     if (!messageExists) return@dbQuery null
                     val existing = ChannelReadStateTable.selectAll().where {
                         (ChannelReadStateTable.userId eq actingUserId) and (ChannelReadStateTable.channelId eq channelIdParam)

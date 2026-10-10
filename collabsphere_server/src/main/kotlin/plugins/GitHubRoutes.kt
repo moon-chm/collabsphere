@@ -287,6 +287,12 @@ fun Application.configureGitHubRoutes() {
                 val rawState = call.request.queryParameters["state"]
                 val state = rawState?.let { JwtConfig.verifyGitHubState(it) }
 
+                val error = call.request.queryParameters["error"]
+                if (error != null) {
+                    call.redirectGitHubResult(state?.second, error)
+                    return@get
+                }
+
                 if (code == null || state == null) {
                     call.redirectGitHubResult(state?.second, "invalid_request")
                     return@get
@@ -328,7 +334,7 @@ fun Application.configureGitHubRoutes() {
                                     (WorkspacesTable.userId eq userId) and
                                     (WorkspacesTable.isDeleted eq false)
                             }
-                            .count() > 0
+                            .count() > 0L
                         if (!isOwner) return@dbQuery false
 
                         if (findConnection(userId) == null) {
@@ -369,6 +375,10 @@ fun Application.configureGitHubRoutes() {
         }
 
         post("/webhook/github") {
+            if ((call.request.header(HttpHeaders.ContentLength)?.toLongOrNull() ?: 0L) > 5 * 1024 * 1024) {
+                call.respond(HttpStatusCode.PayloadTooLarge, "Payload too large")
+                return@post
+            }
             val payload = call.receive<ByteArray>()
             val signature = call.request.header("X-Hub-Signature-256")
             val eventType = call.request.header("X-GitHub-Event")
@@ -567,7 +577,7 @@ fun Application.configureGitHubRoutes() {
                                         (ChannelsTable.workspaceId eq access.workspaceId) and
                                         (ChannelsTable.isDeleted eq false)
                                 }
-                                .count() > 0
+                                .count() > 0L
                             if (!valid) return@dbQuery false
                         }
                         GitHubRepositoriesTable.update({
@@ -592,6 +602,12 @@ fun Application.configureGitHubRoutes() {
                         return@post
                     }
 
+                    val target = syncTarget(access.workspaceId, call.requestedRepoId())
+                    if (target == null) {
+                        call.respond(HttpStatusCode.NotFound, "No repository linked to this workspace")
+                        return@post
+                    }
+
                     val context = dbQuery {
                         val task = TasksTable.selectAll()
                             .where {
@@ -603,7 +619,25 @@ fun Application.configureGitHubRoutes() {
                         val existingIssue = GitHubTaskLinksTable.selectAll()
                             .where { (GitHubTaskLinksTable.taskId eq taskId) and (GitHubTaskLinksTable.kind eq "issue") }
                             .firstOrNull()
-                        Triple(task[TasksTable.taskName], task[TasksTable.taskDescription], existingIssue != null)
+                            
+                        if (existingIssue != null) {
+                            return@dbQuery Triple(task[TasksTable.taskName], task[TasksTable.taskDescription], true)
+                        }
+                        
+                        val insertedCount = GitHubTaskLinksTable.insertIgnore {
+                            it[GitHubTaskLinksTable.taskId] = taskId
+                            it[GitHubTaskLinksTable.repositoryId] = target.repositoryId
+                            it[GitHubTaskLinksTable.kind] = "issue"
+                            it[GitHubTaskLinksTable.ref] = "pending"
+                            it[GitHubTaskLinksTable.title] = "Creating..."
+                            it[GitHubTaskLinksTable.url] = ""
+                            it[GitHubTaskLinksTable.createdAt] = System.currentTimeMillis()
+                        }.insertedCount
+                        
+                        if (insertedCount == 0) {
+                            return@dbQuery Triple(task[TasksTable.taskName], task[TasksTable.taskDescription], true)
+                        }
+                        Triple(task[TasksTable.taskName], task[TasksTable.taskDescription], false)
                     }
                     if (context == null) {
                         call.respond(HttpStatusCode.NotFound, "Task not found")
@@ -615,13 +649,13 @@ fun Application.configureGitHubRoutes() {
                         return@post
                     }
 
-                    val target = syncTarget(access.workspaceId, call.requestedRepoId())
-                    if (target == null) {
-                        call.respond(HttpStatusCode.NotFound, "No repository linked to this workspace")
-                        return@post
-                    }
                     val token = GitHubService.repoAccessToken(target.installationId, target.userToken)
                     if (token == null) {
+                        dbQuery {
+                            GitHubTaskLinksTable.deleteWhere {
+                                (GitHubTaskLinksTable.taskId eq taskId) and (GitHubTaskLinksTable.ref eq "pending")
+                            }
+                        }
                         call.respond(HttpStatusCode.BadGateway, "GitHub access is not available. Reconnect GitHub and try again.")
                         return@post
                     }
@@ -631,6 +665,11 @@ fun Application.configureGitHubRoutes() {
                         .joinToString("\n\n---\n")
                     val (issue, status) = GitHubService.createIssue(token, target.repoFullName, taskName, body)
                     if (issue == null) {
+                        dbQuery {
+                            GitHubTaskLinksTable.deleteWhere {
+                                (GitHubTaskLinksTable.taskId eq taskId) and (GitHubTaskLinksTable.ref eq "pending")
+                            }
+                        }
                         if (status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound) {
                             call.respond(
                                 HttpStatusCode.Forbidden,
@@ -651,10 +690,7 @@ fun Application.configureGitHubRoutes() {
                     )
                     dbQuery {
                         GitHubDataStore.saveIssue(target.repositoryId, issue.toRecord())
-                        GitHubTaskLinksTable.insertIgnore {
-                            it[GitHubTaskLinksTable.taskId] = taskId
-                            it[GitHubTaskLinksTable.repositoryId] = target.repositoryId
-                            it[GitHubTaskLinksTable.kind] = link.kind
+                        GitHubTaskLinksTable.update({ (GitHubTaskLinksTable.taskId eq taskId) and (GitHubTaskLinksTable.ref eq "pending") }) {
                             it[GitHubTaskLinksTable.ref] = link.ref
                             it[GitHubTaskLinksTable.title] = link.title
                             it[GitHubTaskLinksTable.url] = link.url.take(500)
@@ -674,7 +710,7 @@ fun Application.configureGitHubRoutes() {
                     val links = dbQuery {
                         val taskInWorkspace = TasksTable.selectAll()
                             .where { (TasksTable.id eq taskId) and (TasksTable.workspaceId eq access.workspaceId) }
-                            .count() > 0
+                            .count() > 0L
                         if (!taskInWorkspace) return@dbQuery null
                         GitHubTaskLinksTable.selectAll()
                             .where { GitHubTaskLinksTable.taskId eq taskId }
@@ -723,7 +759,7 @@ fun Application.configureGitHubRoutes() {
                             val connectionId = connRow[GitHubConnectionsTable.id]
                             val stillUsed = GitHubRepositoriesTable.selectAll()
                                 .where { GitHubRepositoriesTable.connectionId eq connectionId }
-                                .count() > 0
+                                .count() > 0L
                             if (stillUsed) return@dbQuery null
                             GitHubConnectionsTable.deleteWhere { GitHubConnectionsTable.id eq connectionId }
                             CryptoService.decrypt(connRow[GitHubConnectionsTable.accessTokenEncrypted])

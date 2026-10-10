@@ -61,10 +61,25 @@ object LinkPreviewService {
     private fun fetch(rawUrl: String): LinkPreview? {
         var current = requirePublicHttpUrl(URI(rawUrl.trim()))
         repeat(MAX_REDIRECTS + 1) {
-            val connection = (current.toURL().openConnection() as HttpURLConnection).apply {
+            val host = current.host
+            val addresses = java.net.InetAddress.getAllByName(host)
+            require(addresses.isNotEmpty() && addresses.none { isBlockedAddress(it) }) { "Blocked host" }
+            val ip = addresses.first().hostAddress
+            val isIpv6 = ip.contains(":")
+            val hostPart = if (isIpv6) "[$ip]" else ip
+            
+            val urlWithIp = URI(current.scheme, current.userInfo, hostPart, current.port, current.path, current.query, current.fragment).toURL()
+
+            val connection = (urlWithIp.openConnection() as HttpURLConnection).apply {
+                if (this is javax.net.ssl.HttpsURLConnection) {
+                    hostnameVerifier = javax.net.ssl.HostnameVerifier { _, session ->
+                        javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier().verify(host, session)
+                    }
+                }
                 instanceFollowRedirects = false
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
+                setRequestProperty("Host", host)
                 setRequestProperty("User-Agent", "CollabSphereLinkPreview/1.0")
                 setRequestProperty("Accept", "text/html,application/xhtml+xml")
             }

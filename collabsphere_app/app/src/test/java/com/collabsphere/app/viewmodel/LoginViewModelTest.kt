@@ -4,7 +4,6 @@ import com.collabsphere.app.SessionManager
 import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.model.UserRepo
 import com.collabsphere.app.model.UserEntity
-import io.mockk.coAnswers
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

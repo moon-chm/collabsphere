@@ -14,6 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileInputStream
@@ -167,7 +170,15 @@ object FcmService {
             } catch (e: com.google.firebase.messaging.FirebaseMessagingException) {
                 fcmFailureCounter.increment()
                 if (e.messagingErrorCode?.name == "UNREGISTERED") {
-                    logger.info("[FCM] Stale token (UNREGISTERED) skipped: ${token.take(20)}...")
+                    logger.info("[FCM] Stale token (UNREGISTERED) skipped, deleting from DB: ${token.take(20)}...")
+                    org.jetbrains.exposed.sql.transactions.transaction {
+                        com.collabsphere.model.UsersTable.update({ com.collabsphere.model.UsersTable.fcmToken eq token }) {
+                            it[com.collabsphere.model.UsersTable.fcmToken] = null
+                        }
+                        com.collabsphere.model.UserFcmTokensTable.deleteWhere {
+                            com.collabsphere.model.UserFcmTokensTable.token eq token
+                        }
+                    }
                 } else {
                     retryableFailure = true
                     logger.error("[FCM] Failed to send to token ${token.take(20)}...: ${e.message}")

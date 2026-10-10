@@ -87,6 +87,9 @@ internal fun Route.workspaceRoutes() {
                     }) {
                         it[WorkspaceMembersTable.role] = requestedRole
                     }
+                    WorkspacesTable.update({ WorkspacesTable.id eq workspaceIdParam }) {
+                        it[updatedAt] = System.currentTimeMillis()
+                    }
                     HttpStatusCode.OK
                 }
                 call.respond(outcome, outcome == HttpStatusCode.OK)
@@ -113,7 +116,11 @@ internal fun Route.workspaceRoutes() {
                 val perTypeLimit = 20
 
                 val result = dbReadQuery {
-                    if (!isMember(actingUserId, workspaceIdParam)) {
+                    if (!isMember(actingUserId, workspaceIdParam) ||
+                        WorkspacesTable.select(WorkspacesTable.id)
+                            .where { (WorkspacesTable.id eq workspaceIdParam) and (WorkspacesTable.isDeleted eq false) }
+                            .singleOrNull() == null
+                    ) {
                         return@dbReadQuery null
                     }
 
@@ -224,6 +231,12 @@ internal fun Route.workspaceRoutes() {
                 ) {
                     return@post call.respond(HttpStatusCode.BadRequest, "Invalid clientRequestId")
                 }
+                if (request.workspaceName.isBlank() || request.workspaceName.length > 255 ||
+                    request.workspaceOwner.isBlank() || request.workspaceOwner.length > 255 ||
+                    request.workspacePassword.isBlank() || request.workspacePassword.length > 1024
+                ) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid workspace fields")
+                }
 
                 val response = dbQuery {
                     request.clientRequestId?.let { requestId ->
@@ -300,15 +313,24 @@ internal fun Route.workspaceRoutes() {
                 val actingUserId = call.authenticatedUserId()
 
                 val request = call.receive<AddMemberRequest>()
+                val normalizedEmail = request.email.trim().lowercase()
+                if (normalizedEmail.isBlank() || normalizedEmail.length > 255 ||
+                    !normalizedEmail.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid email address")
+                }
 
                 val response = dbQuery {
-                    if (!isMember(actingUserId, workspaceIdParam)) {
+                    val actorRole = workspaceRole(actingUserId, workspaceIdParam)
+                    if (!WorkspaceRoles.canModerate(actorRole)) {
                         return@dbQuery "FORBIDDEN"
                     }
+                    val activeWorkspace = WorkspacesTable.select(WorkspacesTable.id)
+                        .where { (WorkspacesTable.id eq workspaceIdParam) and (WorkspacesTable.isDeleted eq false) }
+                        .singleOrNull() ?: return@dbQuery "NOT_FOUND"
 
                     val targetUserRow = UsersTable
                         .selectAll()
-                        .where { UsersTable.email eq request.email }
+                        .where { UsersTable.email.lowerCase() eq normalizedEmail }
                         .singleOrNull()
 
                     if (targetUserRow == null) {
@@ -324,10 +346,10 @@ internal fun Route.workspaceRoutes() {
                                 (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and
                                         (WorkspaceMembersTable.userId eq targetUserId)
                             }
-                            .count() > 0
+                            .count() > 0L
 
                         if (!alreadyMember) {
-                            WorkspaceMembersTable.insert {
+                            WorkspaceMembersTable.insertIgnore {
                                 it[workspaceId] = workspaceIdParam
                                 it[userId] = targetUserId
                             }
@@ -341,13 +363,7 @@ internal fun Route.workspaceRoutes() {
                             userId = targetUserId,
                             userName = targetUserName,
                             email = targetUserEmail,
-                            avatarUrl = dbQuery {
-                                UsersTable
-                                    .selectAll()
-                                    .where { UsersTable.id eq targetUserId }
-                                    .firstOrNull()
-                                    ?.get(UsersTable.avatarUrl)
-                            }
+                            avatarUrl = targetUserRow[UsersTable.avatarUrl]
                         )
                     }
                 }
@@ -358,8 +374,9 @@ internal fun Route.workspaceRoutes() {
                 }
 
                 when (response) {
-                    "FORBIDDEN" -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                    null -> call.respond(HttpStatusCode.NotFound, "No user found with email: ${request.email}")
+                    "FORBIDDEN" -> call.respond(HttpStatusCode.Forbidden, "Insufficient workspace role")
+                    "NOT_FOUND" -> call.respond(HttpStatusCode.NotFound, "Workspace not found")
+                    null -> call.respond(HttpStatusCode.NotFound, "No user found with email: $normalizedEmail")
                     else -> call.respond(HttpStatusCode.Created, response)
                 }
             } catch (e: Exception) {
@@ -379,9 +396,12 @@ internal fun Route.workspaceRoutes() {
                 if (trimmedEmail.isBlank()) {
                     return@post call.respond(HttpStatusCode.BadRequest, "Email cannot be blank")
                 }
+                if (trimmedEmail.length > 255 || !trimmedEmail.matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid email address")
+                }
 
                 val wsInfo = dbReadQuery {
-                    if (!isMember(actingUserId, workspaceIdParam)) return@dbReadQuery null
+                    if (!WorkspaceRoles.canModerate(workspaceRole(actingUserId, workspaceIdParam))) return@dbReadQuery null
                     val ws = WorkspacesTable.selectAll().where { WorkspacesTable.id eq workspaceIdParam }.singleOrNull()
                     val inviter = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                     if (ws != null && inviter != null) {
@@ -397,7 +417,7 @@ internal fun Route.workspaceRoutes() {
                     if (userRow != null) {
                         WorkspaceMembersTable.selectAll().where {
                             (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and (WorkspaceMembersTable.userId eq userRow[UsersTable.id])
-                        }.count() > 0
+                        }.count() > 0L
                     } else false
                 }
 
@@ -410,7 +430,42 @@ internal fun Route.workspaceRoutes() {
                 val inviteCode = (1..6).map { chars.random() }.joinToString("")
                 val expiresAt = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // 7 days
 
-                val insertedInvitation = dbQuery {
+                val insertResult = dbQuery {
+                    // Serialize concurrent invite taps for the same normalized workspace/email pair.
+                    TransactionManager.current().exec(
+                        "SELECT pg_advisory_xact_lock(?, ?)",
+                        listOf(
+                            IntegerColumnType() to workspaceIdParam,
+                            IntegerColumnType() to trimmedEmail.hashCode()
+                        ),
+                        explicitStatementType = StatementType.SELECT
+                    ) { rows -> rows.next() }
+
+                    val currentRole = workspaceRole(actingUserId, workspaceIdParam)
+                    if (!WorkspaceRoles.canModerate(currentRole)) return@dbQuery "FORBIDDEN" to null
+                    val activeWorkspace = WorkspacesTable.select(WorkspacesTable.id)
+                        .where { (WorkspacesTable.id eq workspaceIdParam) and (WorkspacesTable.isDeleted eq false) }
+                        .singleOrNull() ?: return@dbQuery "NOT_FOUND" to null
+
+                    val pending = WorkspaceInvitationsTable.select(WorkspaceInvitationsTable.id)
+                        .where {
+                            (WorkspaceInvitationsTable.workspaceId eq workspaceIdParam) and
+                                (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq trimmedEmail) and
+                                (WorkspaceInvitationsTable.status eq "PENDING") and
+                                (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
+                        }.singleOrNull()
+                    if (pending != null) return@dbQuery "DUPLICATE" to null
+
+                    val recipientId = UsersTable.select(UsersTable.id)
+                        .where { UsersTable.email.lowerCase() eq trimmedEmail }
+                        .singleOrNull()?.get(UsersTable.id)
+                    if (recipientId != null && WorkspaceMembersTable.select(WorkspaceMembersTable.userId)
+                            .where {
+                                (WorkspaceMembersTable.workspaceId eq workspaceIdParam) and
+                                    (WorkspaceMembersTable.userId eq recipientId)
+                            }.singleOrNull() != null
+                    ) return@dbQuery "ALREADY_MEMBER" to null
+
                     val invId = WorkspaceInvitationsTable.insert {
                         it[workspaceId] = workspaceIdParam
                         it[inviterUserId] = actingUserId
@@ -424,7 +479,7 @@ internal fun Route.workspaceRoutes() {
                     val recipientRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
                     if (recipientRow != null) {
                         NotificationsTable.insert {
-                            it[recipientId] = recipientRow[UsersTable.id]
+                            it[NotificationsTable.recipientId] = recipientRow[UsersTable.id]
                             it[actorId] = actingUserId
                             it[type] = "WORKSPACE_INVITE"
                             it[title] = "Workspace Invitation"
@@ -434,7 +489,7 @@ internal fun Route.workspaceRoutes() {
                         }
                     }
 
-                    InvitationResponse(
+                    "CREATED" to InvitationResponse(
                         id = invId,
                         workspaceId = workspaceIdParam,
                         workspaceName = workspaceName,
@@ -446,6 +501,14 @@ internal fun Route.workspaceRoutes() {
                         createdAt = System.currentTimeMillis()
                     )
                 }
+
+                when (insertResult.first) {
+                    "FORBIDDEN" -> return@post call.respond(HttpStatusCode.Forbidden, "Insufficient workspace role")
+                    "NOT_FOUND" -> return@post call.respond(HttpStatusCode.NotFound, "Workspace not found")
+                    "DUPLICATE" -> return@post call.respond(HttpStatusCode.Conflict, "A pending invitation already exists")
+                    "ALREADY_MEMBER" -> return@post call.respond(HttpStatusCode.Conflict, "User is already a member of this workspace")
+                }
+                val insertedInvitation = requireNotNull(insertResult.second)
 
                 EmailService.sendWorkspaceInvitation(trimmedEmail, workspaceName, inviterName, inviteCode)
                 call.respond(HttpStatusCode.Created, insertedInvitation)
@@ -502,6 +565,11 @@ internal fun Route.workspaceRoutes() {
                 } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
 
                 val acceptResult = dbQuery {
+                    TransactionManager.current().exec(
+                        "SELECT pg_advisory_xact_lock(?, ?)",
+                        listOf(IntegerColumnType() to 0x494E56, IntegerColumnType() to invId),
+                        explicitStatementType = StatementType.SELECT
+                    ) { rows -> rows.next() }
                     val invRow = WorkspaceInvitationsTable.selectAll()
                         .where { (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) }
                         .singleOrNull() ?: return@dbQuery "NOT_FOUND"
@@ -510,7 +578,7 @@ internal fun Route.workspaceRoutes() {
                         return@dbQuery "ALREADY_PROCESSED"
                     }
 
-                    if (System.currentTimeMillis() > invRow[WorkspaceInvitationsTable.expiresAt]) {
+                    if (System.currentTimeMillis() >= invRow[WorkspaceInvitationsTable.expiresAt]) {
                         return@dbQuery "EXPIRED"
                     }
 
@@ -522,7 +590,7 @@ internal fun Route.workspaceRoutes() {
 
                     val alreadyMember = WorkspaceMembersTable.selectAll().where {
                         (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
-                    }.count() > 0
+                    }.count() > 0L
 
                     if (!alreadyMember) {
                         WorkspaceMembersTable.insert {
@@ -579,12 +647,24 @@ internal fun Route.workspaceRoutes() {
                 } ?: return@post call.respond(HttpStatusCode.Unauthorized, "User not found")
 
                 val declined = dbQuery {
-                    val updated = WorkspaceInvitationsTable.update({
-                        (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase())
-                    }) {
-                        it[status] = "DECLINED"
+                    TransactionManager.current().exec(
+                        "SELECT pg_advisory_xact_lock(?, ?)",
+                        listOf(IntegerColumnType() to 0x494E56, IntegerColumnType() to invId),
+                        explicitStatementType = StatementType.SELECT
+                    ) { rows -> rows.next() }
+                    val invitation = WorkspaceInvitationsTable.selectAll()
+                        .where {
+                            (WorkspaceInvitationsTable.id eq invId) and
+                                (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase())
+                        }
+                        .singleOrNull() ?: return@dbQuery false
+                    when (invitation[WorkspaceInvitationsTable.status]) {
+                        "DECLINED" -> true // Idempotent retry after the response was lost.
+                        "PENDING" -> WorkspaceInvitationsTable.update({
+                            (WorkspaceInvitationsTable.id eq invId) and (WorkspaceInvitationsTable.status eq "PENDING")
+                        }) { it[status] = "DECLINED" } > 0
+                        else -> false
                     }
-                    updated > 0
                 }
 
                 if (declined) {
@@ -625,6 +705,21 @@ internal fun Route.workspaceRoutes() {
 
                     if (wsId == null) return@dbQuery null
 
+                    TransactionManager.current().exec(
+                        "SELECT pg_advisory_xact_lock(?, ?)",
+                        listOf(IntegerColumnType() to 0x494E56, IntegerColumnType() to invRow!![WorkspaceInvitationsTable.id]),
+                        explicitStatementType = StatementType.SELECT
+                    ) { rows -> rows.next() }
+
+                    // Re-read after acquiring the invitation lock. Another request may have
+                    // accepted/declined this code while this transaction was waiting.
+                    val currentInvitation = WorkspaceInvitationsTable.selectAll()
+                        .where { WorkspaceInvitationsTable.id eq invRow!![WorkspaceInvitationsTable.id] }
+                        .singleOrNull() ?: return@dbQuery null
+                    if (currentInvitation[WorkspaceInvitationsTable.status] != "PENDING" ||
+                        System.currentTimeMillis() >= currentInvitation[WorkspaceInvitationsTable.expiresAt]
+                    ) return@dbQuery null
+
                     val ws = WorkspacesTable.selectAll().where {
                         (WorkspacesTable.id eq wsId) and (WorkspacesTable.isDeleted eq false)
                     }.singleOrNull()
@@ -632,7 +727,7 @@ internal fun Route.workspaceRoutes() {
 
                     val alreadyMember = WorkspaceMembersTable.selectAll().where {
                         (WorkspaceMembersTable.workspaceId eq wsId) and (WorkspaceMembersTable.userId eq actingUserId)
-                    }.count() > 0
+                    }.count() > 0L
 
                     if (!alreadyMember) {
                         WorkspaceMembersTable.insert {
@@ -645,7 +740,7 @@ internal fun Route.workspaceRoutes() {
                     }
 
                     if (invRow != null) {
-                        WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invRow[WorkspaceInvitationsTable.id] }) {
+                        WorkspaceInvitationsTable.update({ WorkspaceInvitationsTable.id eq invRow!![WorkspaceInvitationsTable.id] }) {
                             it[status] = "ACCEPTED"
                         }
                     }
@@ -710,7 +805,11 @@ internal fun Route.workspaceRoutes() {
                 val actingUserId = call.authenticatedUserId()
 
                 val members = dbReadQuery {
-                    if (!isMember(actingUserId, workspaceIdParam)) {
+                    if (!isMember(actingUserId, workspaceIdParam) ||
+                        WorkspacesTable.select(WorkspacesTable.id)
+                            .where { (WorkspacesTable.id eq workspaceIdParam) and (WorkspacesTable.isDeleted eq false) }
+                            .singleOrNull() == null
+                    ) {
                         return@dbReadQuery null
                     }
                     val ownerId = workspaceOwnerId(workspaceIdParam)
