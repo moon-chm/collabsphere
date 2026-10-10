@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel
 
+import app.cash.turbine.test
 import com.collabsphere.app.SessionManager
 import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.model.workspace.WorkspaceEntity
@@ -11,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -78,5 +80,69 @@ class DashboardViewModelTest {
 
         // Assert
         coVerify(exactly = 1) { sessionManager.logout() }
+    }
+
+    @Test
+    fun `workspaces flow emits items fetched from repository when user is valid`() = runTest {
+        val fakeWorkspaces = listOf(
+            WorkspaceEntity(
+                id = 100,
+                userId = 1,
+                workspaceName = "Test Workspace",
+                workspaceOwner = "test_user",
+                workspacePassword = ""
+            )
+        )
+        every { repository.getAllWorkspacesForUser(1) } returns flowOf(fakeWorkspaces)
+
+        // Setup Turbine to test the flow
+        viewModel.workspaces.test {
+            // initial state is null
+            assertEquals(null, awaitItem())
+
+            // Emit valid user ID
+            mockUserIdFlow.value = 1
+            
+            // Advance dispatcher to allow flatMapLatest to switch flows
+            testScheduler.advanceUntilIdle()
+            
+            // It might emit an empty list briefly or directly the fake workspaces
+            // Let's just skip items until we get our expected list
+            val workspacesList = skipItems(1).let { 
+                // Alternatively, just await the non-null item
+                var item = awaitItem()
+                while (item == null || item.isEmpty()) {
+                    item = awaitItem()
+                }
+                item
+            }
+            
+            assertEquals(1, workspacesList.size)
+            assertEquals("Test Workspace", workspacesList[0].workspaceName)
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `refreshWorkspaces triggers baseline sync and updates isRefreshing state`() = runTest {
+        mockUserIdFlow.value = 1
+        testScheduler.advanceUntilIdle()
+
+        viewModel.isRefreshing.test {
+            // Initially false
+            assertEquals(false, awaitItem())
+            
+            viewModel.refreshWorkspaces()
+            
+            // Should become true during sync
+            assertEquals(true, awaitItem())
+            
+            // Should become false after sync finishes
+            assertEquals(false, awaitItem())
+        }
+        
+        // It's called once from the init block and once from refreshWorkspaces
+        coVerify(exactly = 2) { repository.syncWorkspaces(1) }
     }
 }
