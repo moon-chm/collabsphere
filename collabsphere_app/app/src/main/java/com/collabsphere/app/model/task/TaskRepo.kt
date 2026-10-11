@@ -91,6 +91,8 @@ class TaskRepo(
                     )
                 )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("TaskRepo", "Explicit workspace member initialization synchronization failed", e)
         }
@@ -117,6 +119,8 @@ class TaskRepo(
                 )
             }
             entities.forEach { taskDao.insertTask(it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("TaskRepo", "Failed to sync tasks from remote source.", e)
         }
@@ -172,6 +176,8 @@ class TaskRepo(
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("TaskRepo", "Delta sync iteration error", e)
             }
@@ -204,9 +210,10 @@ class TaskRepo(
             val remoteTask = apiService.createTask(task.createdByUserId, request)
             val savedId = taskDao.insertTask(task.copy(id = remoteTask.id))
             Result.success(savedId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("TaskRepo", "POST request failed.", e)
-            if (e is kotlinx.coroutines.CancellationException) throw e
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) {
                 return@withContext Result.failure(e)
             }
@@ -250,9 +257,10 @@ class TaskRepo(
             )
             apiService.updateTask(taskId = task.id, request = request)
             Result.success(TaskSyncOutcome.CONFIRMED)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("TaskRepo", "PUT request failed.", e)
-            if (e is kotlinx.coroutines.CancellationException) throw e
             // The server answered and refused — queueing it would only fail again in the background.
             if (SyncPolicy.forFailure(e, isDelete = false) == SyncDecision.DROP) return@withContext Result.failure(e)
             val syncData = workDataOf(
@@ -287,9 +295,10 @@ class TaskRepo(
                 // Refused (e.g. no permission): keep the task instead of hiding one that still exists.
                 SyncDecision.DROP -> Result.failure(ApiStatusException(status.value))
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("TaskRepo", "DELETE request failed.", e)
-            if (e is kotlinx.coroutines.CancellationException) throw e
             if (SyncPolicy.forFailure(e, isDelete = true) == SyncDecision.DROP) {
                 return@withContext Result.failure(e)
             }

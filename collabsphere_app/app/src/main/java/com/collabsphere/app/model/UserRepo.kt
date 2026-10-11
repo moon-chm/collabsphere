@@ -197,6 +197,7 @@ class UserRepo(
             )
             Result.success(profile)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             val cached = userDao.getUserById(userId)
             if (cached != null) {
                 Result.success(

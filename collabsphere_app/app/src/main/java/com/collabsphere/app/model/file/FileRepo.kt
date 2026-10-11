@@ -186,6 +186,8 @@ class FileRepo(
                 // After the rows are stored: committing first and dying in between would skip them.
                 dataStore.commitSyncPosition(syncKey, position, page, newestUpdatedAt)
                 syncSucceeded = true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)

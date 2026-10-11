@@ -157,6 +157,8 @@ class WorkspaceRepo(
                 workspaceDao.upsertWorkspace(workspace)
                 syncWorkspaceMembers(workspace.id)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WorkspaceRepo", "Fallback baseline tracking failed", e)
         }
@@ -203,6 +205,8 @@ class WorkspaceRepo(
             // The endpoint is an authoritative snapshot. Prune removed users as well as adding
             // current ones so task assignee/member pickers cannot retain departed members.
             workspaceDao.reconcileWorkspaceMembers(workspaceId, localMembers)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("WorkspaceRepo", "Workspace member sync failed", e)
         }
