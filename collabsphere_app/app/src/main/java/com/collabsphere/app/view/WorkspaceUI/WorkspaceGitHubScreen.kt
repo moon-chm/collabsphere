@@ -70,6 +70,7 @@ fun WorkspaceGitHubScreen(
     val isLoadingRepos by viewModel.isLoadingRepos.collectAsState()
     val isPickingRepo by viewModel.isPickingRepo.collectAsState()
     val error by viewModel.error.collectAsState()
+    val analyticsLoadFailed by viewModel.analyticsLoadFailed.collectAsState()
     val authResult by GitHubAuthEvents.result.collectAsState()
     val pullRequestList by viewModel.pullRequestList.collectAsState()
     val releaseList by viewModel.releaseList.collectAsState()
@@ -148,6 +149,8 @@ fun WorkspaceGitHubScreen(
         val isConnected = analytics?.isConnected == true
         if (isLoading) {
             CollabSpinner(modifier = Modifier.align(Alignment.Center))
+        } else if (analyticsLoadFailed && analytics == null) {
+            GitHubLoadErrorView(onRetry = { viewModel.retryAnalytics(workspaceId) })
         } else if (canManage && (isPickingRepo || (!isConnected && analytics?.hasConnection == true))) {
             val linkedNames = analytics?.repositories.orEmpty().map { it.fullName }.toSet()
             RepoPickerView(
@@ -194,7 +197,49 @@ fun WorkspaceGitHubScreen(
 }
 
 @Composable
+private fun GitHubLoadErrorView(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Sync,
+            contentDescription = "Error",
+            modifier = Modifier.size(56.dp),
+            tint = Color(0xFF70625E)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Could not load GitHub data",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF2C2A28)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Check your connection and try again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF70625E),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2A28))
+        ) {
+            Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Retry")
+        }
+    }
+}
+
+@Composable
 private fun OwnerOnlyView() {
+
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,

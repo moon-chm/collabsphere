@@ -256,6 +256,9 @@ class GitHubViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    private val _analyticsLoadFailed = MutableStateFlow(false)
+    val analyticsLoadFailed: StateFlow<Boolean> = _analyticsLoadFailed
+
     private var pollJob: Job? = null
 
     private val _selectedRepoId = MutableStateFlow<Int?>(null)
@@ -306,6 +309,7 @@ class GitHubViewModel(
                 selectedRepo()
             }
             if (response.status == HttpStatusCode.OK) {
+                _analyticsLoadFailed.value = false
                 val result = response.body<GitHubAnalyticsResponse>()
                 _analytics.value = result
                 _selectedRepoId.value = result.repositoryId
@@ -313,9 +317,11 @@ class GitHubViewModel(
                     fetchAvailableRepos(workspaceId)
                 }
             } else {
+                _analyticsLoadFailed.value = true
                 _error.value = response.errorMessage("Could not load GitHub data")
             }
         } catch (e: Exception) {
+            _analyticsLoadFailed.value = true
             _error.value = "Could not reach the server"
         }
     }
@@ -535,11 +541,18 @@ class GitHubViewModel(
         _isPickingRepo.value = false
     }
 
+    fun retryAnalytics(workspaceId: Int) {
+        loadAnalytics(workspaceId)
+    }
+
     fun resetForWorkspace() {
         _isPickingRepo.value = false
         _selectedRepoId.value = null
+        _analyticsLoadFailed.value = false
+        _analytics.value = null
         closePullRequests()
     }
+
 
     fun selectRepo(workspaceId: Int, repoId: Int) {
         if (_selectedRepoId.value == repoId) return
