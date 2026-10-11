@@ -139,13 +139,12 @@ fun LoginScreen(
     val handleLogin = {
         hasAttemptedSubmit = true
         val currentTime = System.currentTimeMillis()
-        if (isFormValid && currentTime - lastClickTime > 500L) {
+        if (isFormValid && currentTime - lastClickTime > 300L) {
             lastClickTime = currentTime
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
         } else if (!isFormValid) {
-            // AppToast.warning("Please enter your email and password")
-            // Replaced with inline validation
+            AppToast.warning("Please enter your email and password")
         }
     }
 

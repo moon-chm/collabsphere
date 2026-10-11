@@ -360,14 +360,16 @@ class LoginViewModel(
     }
 
     fun logout() {
+        _isLoggedIn.value = false
+        _isLoadingLogin.value = false
+        _isLoadingEmail.value = false
+        _loginStatus.value = null
+        _loggedInUserId.value = 0L
+        _loggedInUserName.value = ""
+        _loggedInUserEmail.value = ""
+        _loggedInAvatarUrl.value = ""
         viewModelScope.launch {
             sessionManager.logout()
-            _isLoggedIn.value = false
-            _loginStatus.value = null
-            _loggedInUserId.value = 0L
-            _loggedInUserName.value = ""
-            _loggedInUserEmail.value = ""
-            _loggedInAvatarUrl.value = ""
         }
     }
 

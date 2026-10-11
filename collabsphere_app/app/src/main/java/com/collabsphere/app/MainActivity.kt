@@ -218,6 +218,8 @@ class MainActivity : ComponentActivity() {
                                 onSplashFinished = { showSplash = false }
                             )
                         }
+
+                        com.collabsphere.app.view.components.AppToastHost()
                     }
                 }
             }
