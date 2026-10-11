@@ -23,6 +23,8 @@ import com.collabsphere.app.model.message.MessageDao
 import com.collabsphere.app.model.file.FileEntity
 import com.collabsphere.app.model.file.FileDao
 import com.collabsphere.app.model.message.MessageEntity
+import com.collabsphere.app.model.vote.TaskVoteDao
+import com.collabsphere.app.model.vote.TaskVoteProposalEntity
 
 @Database(
     entities = [
@@ -35,9 +37,10 @@ import com.collabsphere.app.model.message.MessageEntity
         MessageEntity::class,
         FileEntity::class,
         DmEntity::class,
-        DmReactionEntity::class
+        DmReactionEntity::class,
+        TaskVoteProposalEntity::class
     ],
-    version = 44,
+    version = 45,
     exportSchema = false
 )
 @TypeConverters(TaskListConverters::class)
@@ -52,6 +55,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun fileDao(): FileDao
     abstract fun dmDao(): DmDao
     abstract fun dmReactionDao(): DmReactionDao
+    abstract fun taskVoteDao(): TaskVoteDao
 
     companion object {
         /**
@@ -137,6 +141,42 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_43_44 = object : Migration(43, 44) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE message ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
+            }
+        }
+
+        val MIGRATION_44_45 = object : Migration(44, 45) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `task_vote_proposal` (
+                        `id` INTEGER NOT NULL,
+                        `workspaceId` INTEGER NOT NULL,
+                        `proposerId` INTEGER NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `taskId` INTEGER,
+                        `taskName` TEXT,
+                        `taskDescription` TEXT,
+                        `assignedToUserId` INTEGER,
+                        `priority` TEXT,
+                        `dueDate` INTEGER,
+                        `checklist` TEXT NOT NULL DEFAULT '[]',
+                        `labels` TEXT NOT NULL DEFAULT '[]',
+                        `deleteReason` TEXT,
+                        `eligibleCount` INTEGER NOT NULL,
+                        `approvalThreshold` INTEGER NOT NULL,
+                        `approveCount` INTEGER NOT NULL,
+                        `rejectCount` INTEGER NOT NULL,
+                        `resolvedAt` INTEGER,
+                        `createdTaskId` INTEGER,
+                        `deadline` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                        `myVote` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_task_vote_proposal_workspaceId` ON `task_vote_proposal` (`workspaceId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_task_vote_proposal_status` ON `task_vote_proposal` (`status`)")
             }
         }
     }

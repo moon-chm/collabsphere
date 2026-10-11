@@ -1487,6 +1487,7 @@ fun Application.configureRouting() {
 
             // â”€â”€ Tasks â”€â”€ extracted to plugins/routes/TasksRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             tasksRoutes()
+            taskVotesRoutes()
 
             // â”€â”€ Notes â”€â”€ extracted to plugins/routes/NotesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             notesRoutes()

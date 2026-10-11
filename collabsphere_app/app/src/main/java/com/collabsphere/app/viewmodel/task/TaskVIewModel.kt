@@ -36,8 +36,8 @@ sealed class TaskUiEvent {
 
 class TaskViewModel(
     private val repo: TaskRepo,
-    private val loggedUserId: Int,
-    private val loggedWorkspaceId: Int
+    val loggedUserId: Int,
+    val loggedWorkspaceId: Int
 ) : ViewModel() {
 
     private val rawTasksFlow = repo.getTasks(loggedWorkspaceId)

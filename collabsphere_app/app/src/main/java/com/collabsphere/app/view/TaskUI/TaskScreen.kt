@@ -67,13 +67,21 @@ import com.collabsphere.app.viewmodel.task.TaskUiEvent
 import com.collabsphere.app.viewmodel.task.TaskUiModel
 import com.collabsphere.app.viewmodel.task.TaskViewModel
 
+import com.collabsphere.app.viewmodel.vote.TaskVoteViewModel
+import org.koin.androidx.compose.koinViewModel
+
 @Composable
 fun TaskScreen(
     viewModel: TaskViewModel,
     modifier: Modifier = Modifier,
-    gitHubViewModel: GitHubViewModel? = null
+    gitHubViewModel: GitHubViewModel? = null,
+    taskVoteViewModel: TaskVoteViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+
+    LaunchedEffect(viewModel.loggedWorkspaceId) {
+        taskVoteViewModel.initWorkspace(viewModel.loggedWorkspaceId)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
@@ -94,7 +102,9 @@ fun TaskScreen(
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val availableLabels by viewModel.availableLabels.collectAsStateWithLifecycle()
     val labelFilter by viewModel.labelFilter.collectAsStateWithLifecycle()
+    val pendingProposals by taskVoteViewModel.pendingProposals.collectAsStateWithLifecycle()
 
+    var selectedViewMode by remember { mutableIntStateOf(0) } // 0 = Board, 1 = Team Votes
     var showCreateDialog by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
     var taskToUpdate by remember { mutableStateOf<TaskEntity?>(null) }
@@ -120,63 +130,100 @@ fun TaskScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Kanban board",
+                        text = if (selectedViewMode == 0) "Kanban board" else "Team votes",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 22.sp
                         ),
                         color = MaterialTheme.colorScheme.onBackground
                     )
-                    // Total tasks pill
-                    Box(
-                        modifier = Modifier
-                            .drawWithCache {
-                                onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.12f),
-                                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        color = SurfaceRaised,
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
+                    // View Toggle Pills
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selectedViewMode == 0) SurfaceRaised else Color.Transparent)
+                                .clickable { selectedViewMode = 0 }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Board (${tasks.size})",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (selectedViewMode == 0) Ink else Muted
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selectedViewMode == 1) SurfaceRaised else Color.Transparent)
+                                .clickable { selectedViewMode = 1 }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Votes",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (selectedViewMode == 1) Ink else Muted
+                                )
+                                if (pendingProposals.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(Amber),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "${pendingProposals.size}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = Color.White
+                                        )
+                                    }
                                 }
                             }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "${tasks.size} tasks",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Muted
-                        )
+                        }
                     }
                 }
 
                 // Tactile Header Action Button
                 SkeuoHeaderActionButton(
-                    text = "New task",
+                    text = "Propose task",
                     icon = Icons.Default.Add,
                     onClick = { showCreateDialog = true }
                 )
             }
 
-            LabelFilterRow(
-                labels = availableLabels,
-                selected = labelFilter,
-                onSelect = viewModel::onLabelFilterChange,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
-            )
+            if (selectedViewMode == 1) {
+                TaskVotingSection(
+                    viewModel = taskVoteViewModel,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                LabelFilterRow(
+                    labels = availableLabels,
+                    selected = labelFilter,
+                    onSelect = viewModel::onLabelFilterChange,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+                )
 
-            // Kanban Horizontal Scroll Columns
-            androidx.compose.animation.Crossfade(
-                targetState = Pair(isSyncing, tasks.isEmpty()),
-                label = "tasksCrossfade",
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) { (syncing, empty) ->
+                // Kanban Horizontal Scroll Columns
+                androidx.compose.animation.Crossfade(
+                    targetState = Pair(isSyncing, tasks.isEmpty()),
+                    label = "tasksCrossfade",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) { (syncing, empty) ->
                 when {
                     syncing && empty -> {
                         TaskSkeletonList(modifier = Modifier.fillMaxSize())
@@ -239,24 +286,32 @@ fun TaskScreen(
                     } // else
                 } // when
             } // Crossfade
-        }
-
-
+            } // else
+        } // Column
 
         if (showCreateDialog) {
             CreateTaskDialog(
                 viewModel = viewModel,
                 members = members,
-                onDismiss = { showCreateDialog = false }
+                onDismiss = { showCreateDialog = false },
+                taskVoteViewModel = taskVoteViewModel
             )
         }
 
         taskToDelete?.let { task ->
-            DeleteTaskConfirmationDialog(
+            RequestDeleteProposalDialog(
                 taskName = task.taskName,
-                onConfirm = {
-                    viewModel.onDeleteTask(task.id)
-                    taskToDelete = null
+                onConfirm = { reason ->
+                    taskVoteViewModel.submitDeleteProposal(
+                        workspaceId = viewModel.loggedWorkspaceId,
+                        taskId = task.id,
+                        deleteReason = reason
+                    ) { success ->
+                        if (success) {
+                            AppToast.show("Deletion proposal submitted for team vote")
+                            taskToDelete = null
+                        }
+                    }
                 },
                 onDismiss = { taskToDelete = null }
             )
@@ -612,7 +667,8 @@ onDrawBehind {
 fun CreateTaskDialog(
     viewModel: TaskViewModel,
     members: List<UserEntity>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    taskVoteViewModel: TaskVoteViewModel? = null
 ) {
     val name by viewModel.taskName.collectAsStateWithLifecycle()
     val description by viewModel.taskDescription.collectAsStateWithLifecycle()
@@ -675,7 +731,7 @@ onDrawBehind {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Create new task",
+                    text = "Propose new task",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
@@ -840,7 +896,30 @@ onDrawBehind {
                             .clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = canCreate) {
                                 if (canCreate) {
-                                    viewModel.onCreateTask(onCreated = onDismiss)
+                                    if (taskVoteViewModel != null) {
+                                        taskVoteViewModel.submitCreateProposal(
+                                            workspaceId = viewModel.loggedWorkspaceId,
+                                            taskName = name.trim(),
+                                            taskDescription = description.trim(),
+                                            assignedToUserId = assignedUserId,
+                                            priority = priority.name,
+                                            dueDate = dueDate,
+                                            labels = labels
+                                        ) { success ->
+                                            if (success) {
+                                                AppToast.show("Task proposal submitted for team vote")
+                                                viewModel.onTaskNameChange("")
+                                                viewModel.onTaskDescriptionChange("")
+                                                viewModel.onAssigneeChange(null)
+                                                viewModel.onDueDateChange(null)
+                                                viewModel.onPriorityChange(com.collabsphere.app.model.task.TaskPriority.MEDIUM)
+                                                viewModel.onLabelsChange(emptyList())
+                                                onDismiss()
+                                            }
+                                        }
+                                    } else {
+                                        viewModel.onCreateTask(onCreated = onDismiss)
+                                    }
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -853,7 +932,7 @@ onDrawBehind {
                             )
                         } else {
                             Text(
-                                text = "Create",
+                                text = "Propose",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
                             )

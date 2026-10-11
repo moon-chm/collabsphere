@@ -21,7 +21,8 @@ internal object SyncSchema {
         "message",
         "notes",
         "task",
-        "direct_messages"
+        "direct_messages",
+        "task_vote_proposals"
     )
 
     fun install(tx: Transaction) {

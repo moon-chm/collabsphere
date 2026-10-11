@@ -115,7 +115,9 @@ object DatabaseFactory {
                 GitHubIdentityMappingTable,
                 GitHubAssigneeSyncTable,
                 GitHubCodeReferencesTable,
-                GitHubCodeCacheTable
+                GitHubCodeCacheTable,
+                TaskVoteProposalsTable,
+                TaskVotesTable
             )
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()

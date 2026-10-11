@@ -699,3 +699,46 @@ object GitHubCodeCacheTable : Table("github_code_cache") {
         uniqueIndex("github_code_cache_unique", repositoryId, commitSha, filePath)
     }
 }
+
+object TaskVoteProposalsTable : Table("task_vote_proposals") {
+    val id = integer("id").autoIncrement()
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val proposerId = integer("proposer_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val type = varchar("type", 10) // "CREATE", "DELETE"
+    val status = varchar("status", 15).default("PENDING") // "PENDING", "APPROVED", "REJECTED", "EXPIRED"
+    val taskId = integer("task_id").references(TasksTable.id, onDelete = ReferenceOption.CASCADE).nullable()
+    val taskName = varchar("task_name", 255).nullable()
+    val taskDescription = text("task_description").nullable()
+    val assignedToUserId = integer("assigned_to_user_id").references(UsersTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val priority = varchar("priority", 10).nullable()
+    val dueDate = long("due_date").nullable()
+    val checklist = text("checklist").nullable()
+    val labels = text("labels").nullable()
+    val deleteReason = text("delete_reason").nullable()
+    val eligibleCount = integer("eligible_count")
+    val approvalThreshold = integer("approval_threshold")
+    val approveCount = integer("approve_count").default(0)
+    val rejectCount = integer("reject_count").default(0)
+    val resolvedAt = long("resolved_at").nullable()
+    val createdTaskId = integer("created_task_id").references(TasksTable.id, onDelete = ReferenceOption.SET_NULL).nullable()
+    val deadline = long("deadline")
+    val createdAt = long("created_at").clientDefault { System.currentTimeMillis() }
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
+    val syncXid = long("sync_xid").default(0L)
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, workspaceId, syncXid, id)
+    }
+}
+
+object TaskVotesTable : Table("task_votes") {
+    val proposalId = integer("proposal_id").references(TaskVoteProposalsTable.id, onDelete = ReferenceOption.CASCADE)
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val vote = varchar("vote", 10) // "APPROVE", "REJECT"
+    val votedAt = long("voted_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(proposalId, userId)
+}

@@ -75,7 +75,7 @@ val databaseModule = module {
         )
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42, AppDatabase.MIGRATION_42_43, AppDatabase.MIGRATION_43_44)
+            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42, AppDatabase.MIGRATION_42_43, AppDatabase.MIGRATION_43_44, AppDatabase.MIGRATION_44_45)
             .build()
     }
 
@@ -88,6 +88,7 @@ val databaseModule = module {
     single { get<AppDatabase>().fileDao() }
     single { get<AppDatabase>().dmDao() }
     single { get<AppDatabase>().dmReactionDao() }
+    single { get<AppDatabase>().taskVoteDao() }
 }
 
 val DynamicTokenPlugin = io.ktor.client.plugins.api.createClientPlugin("DynamicTokenPlugin") {
@@ -165,6 +166,7 @@ val networkModule = module {
     single { MediaApiService() }
     single { FileApiService(get(named("RegularHttpClient"))) }
     single { NotificationApiService(get(named("RegularHttpClient"))) }
+    single { com.collabsphere.app.remote.vote.TaskVoteApiService(get(named("RegularHttpClient"))) }
 }
 
 val repositoryModule = module {
@@ -172,6 +174,7 @@ val repositoryModule = module {
     single { WorkspaceRepo(get(), get(), get(), get()) }
     single { ChannelRepo(get(), get(), get(), get()) }
     single { TaskRepo(get(), get(), get(), get(), get(), get()) }
+    single { com.collabsphere.app.model.vote.TaskVoteRepo(get(), get(), get()) }
     single { NotesRepo(get(), get(), get(), get()) }
     single { MessageRepo(get(), get(), get(), get(), get(), get()) }
     single { FileRepo(get(), get(), get(), get()) }
@@ -288,6 +291,7 @@ val viewModelModule = module {
 
     viewModel { GitHubViewModel(get(named("RegularHttpClient"))) }
     viewModel { com.collabsphere.app.viewmodel.GitHubUnfurlViewModel(get(named("RegularHttpClient"))) }
+    viewModel { com.collabsphere.app.viewmodel.vote.TaskVoteViewModel(get<com.collabsphere.app.model.vote.TaskVoteRepo>(), get<com.collabsphere.app.UserPreferences>()) }
 }
 
 val appModules = listOf(databaseModule, networkModule, repositoryModule, appModule, workerModule, viewModelModule)
