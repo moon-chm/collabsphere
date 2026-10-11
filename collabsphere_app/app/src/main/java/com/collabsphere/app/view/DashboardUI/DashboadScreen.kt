@@ -366,7 +366,7 @@ fun DashboardScreen(
                         if (avatarUrl.isNotEmpty()) {
                             SubcomposeAsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(avatarUrl)
+                                    .data(com.collabsphere.app.view.UserUI.resolveAvatarUrl(avatarUrl))
                                     .crossfade(true)
                                     // Explicit decode-size cap — this is a 46dp circle, never needs a
                                     // full-resolution decode regardless of the source image's size.

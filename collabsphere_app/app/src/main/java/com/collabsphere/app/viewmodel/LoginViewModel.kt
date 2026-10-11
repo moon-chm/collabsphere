@@ -89,6 +89,15 @@ class LoginViewModel(
                     if (savedEmail.isEmpty()) _loggedInUserEmail.value = localUser.email
                     if (localUser.avatarUrl != null) _loggedInAvatarUrl.value = localUser.avatarUrl
                 }
+
+                // Silently refresh profile in background for returning users
+                try {
+                    repo.fetchProfile(savedId).onSuccess { profile ->
+                        if (profile.avatarUrl.isNotBlank()) {
+                            _loggedInAvatarUrl.value = profile.avatarUrl
+                        }
+                    }
+                } catch (_: Exception) {}
             }
         }
     }
@@ -118,8 +127,21 @@ class LoginViewModel(
                     _loggedInUserId.value = user.id.toLong()
                     _loggedInUserName.value = user.userName
                     _loggedInUserEmail.value = user.email
+                    _loggedInAvatarUrl.value = user.avatarUrl ?: ""
                     _loginStatus.value = "Login Successful!"
                     _isLoggedIn.value = true
+
+                    // Asynchronously fetch full profile to ensure the latest avatar and details are up to date
+                    viewModelScope.launch {
+                        repo.fetchProfile(user.id).onSuccess { profile ->
+                            if (profile.avatarUrl.isNotBlank()) {
+                                _loggedInAvatarUrl.value = profile.avatarUrl
+                            }
+                            if (profile.username.isNotBlank()) {
+                                _loggedInUserName.value = profile.username
+                            }
+                        }
+                    }
                 }
                 .onFailure { throwable ->
                     val rawMsg = throwable.message ?: ""
