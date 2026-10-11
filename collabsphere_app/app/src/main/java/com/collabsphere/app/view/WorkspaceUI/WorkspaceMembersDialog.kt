@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GroupAdd
@@ -137,10 +139,15 @@ fun WorkspaceMembersDialog(
                 members == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CollabSpinner(color = CoralStart, modifier = Modifier.size(28.dp))
                 }
-                else -> LazyColumn(
-                    modifier = Modifier.heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                else -> {
+                    val listState = rememberLazyListState()
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .fadingScrollEdges(listState = listState, top = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                     items(members.orEmpty(), key = { it.userId }) { member ->
                         MemberRow(
                             member = member,
@@ -172,6 +179,7 @@ fun WorkspaceMembersDialog(
                     }
                 }
             }
+        }
 
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                 Text("Close", color = Muted)

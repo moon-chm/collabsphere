@@ -40,6 +40,13 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -956,4 +963,107 @@ fun Modifier.skeuoGlass(
             style = Stroke(width = 1.dp.toPx())
         )
     }
+}
+
+/**
+ * Modern Seamless Fading Edge Modifier.
+ * Creates an ultra-smooth alpha-gradient dissolve at the scroll boundaries
+ * (top and/or bottom) using CompositingStrategy.Offscreen and BlendMode.DstIn.
+ *
+ * Prevents harsh, boxy rectangular cut-offs when content scrolls behind headers,
+ * floating action bars, or bottom capsule docks, matching modern UI standards (like ChatGPT).
+ *
+ * @param top Fade height at the top boundary (0.dp to disable)
+ * @param bottom Fade height at the bottom boundary (0.dp to disable)
+ */
+fun Modifier.fadingEdge(
+    top: Dp = 0.dp,
+    bottom: Dp = 0.dp
+): Modifier = if (top <= 0.dp && bottom <= 0.dp) {
+    this
+} else {
+    this
+        .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+        .drawWithContent {
+            drawContent()
+            val topPx = top.toPx()
+            val bottomPx = bottom.toPx()
+
+            if (topPx > 0f) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black),
+                        startY = 0f,
+                        endY = topPx
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
+            }
+            if (bottomPx > 0f) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Black, Color.Transparent),
+                        startY = size.height - bottomPx,
+                        endY = size.height
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
+            }
+        }
+}
+
+/**
+ * Dynamic scroll-aware fading edge modifier for LazyListState.
+ * Automatically animates the top dissolve when the user scrolls down,
+ * and the bottom dissolve when more content remains below.
+ */
+@Composable
+fun Modifier.fadingScrollEdges(
+    listState: LazyListState,
+    top: Dp = 24.dp,
+    bottom: Dp = 48.dp
+): Modifier {
+    val canScrollBackward by remember { derivedStateOf { listState.canScrollBackward } }
+    val canScrollForward by remember { derivedStateOf { listState.canScrollForward } }
+
+    val animatedTop by animateDpAsState(
+        targetValue = if (canScrollBackward) top else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "topFadingEdge"
+    )
+    val animatedBottom by animateDpAsState(
+        targetValue = if (canScrollForward) bottom else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "bottomFadingEdge"
+    )
+
+    return this.fadingEdge(top = animatedTop, bottom = animatedBottom)
+}
+
+/**
+ * Dynamic scroll-aware fading edge modifier for ScrollState (regular Column/Row scroll).
+ * Automatically animates the top dissolve when the user scrolls down,
+ * and the bottom dissolve when more content remains below.
+ */
+@Composable
+fun Modifier.fadingScrollEdges(
+    scrollState: ScrollState,
+    top: Dp = 24.dp,
+    bottom: Dp = 48.dp
+): Modifier {
+    val canScrollBackward by remember { derivedStateOf { scrollState.canScrollBackward } }
+    val canScrollForward by remember { derivedStateOf { scrollState.canScrollForward } }
+
+    val animatedTop by animateDpAsState(
+        targetValue = if (canScrollBackward) top else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "scrollStateTopFadingEdge"
+    )
+    val animatedBottom by animateDpAsState(
+        targetValue = if (canScrollForward) bottom else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "scrollStateBottomFadingEdge"
+    )
+
+    return this.fadingEdge(top = animatedTop, bottom = animatedBottom)
 }

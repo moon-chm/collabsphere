@@ -608,7 +608,9 @@ fun MessageScreen(
                     else -> {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadingScrollEdges(listState = listState, top = 24.dp, bottom = 24.dp),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,

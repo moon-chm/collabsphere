@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -494,10 +495,14 @@ fun DashboardScreen(
                         DashboardEmptyState(onNavigateToWorkspace = onNavigateToWorkspace)
                     }
                     else -> {
+                        val listState = rememberLazyListState()
                         LazyColumn(
-                            modifier            = Modifier.fillMaxSize(),
+                            state               = listState,
+                            modifier            = Modifier
+                                .fillMaxSize()
+                                .fadingScrollEdges(listState = listState, top = 28.dp, bottom = 64.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding      = PaddingValues(bottom = 100.dp)
+                            contentPadding      = PaddingValues(top = 4.dp, bottom = 100.dp)
                         ) {
                             items(
                                 items = state,

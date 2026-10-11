@@ -6,6 +6,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.collabsphere.app.ui.theme.fadingScrollEdges
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -146,8 +148,13 @@ fun NotificationsScreen(
                     }
                 }
                 else -> {
+                    val listState = rememberLazyListState()
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 48.dp)
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(notifications, key = { it.id }) { notification ->

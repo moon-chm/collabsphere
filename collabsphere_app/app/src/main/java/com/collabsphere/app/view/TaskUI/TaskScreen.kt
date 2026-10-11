@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -401,9 +402,13 @@ onDrawBehind {
                     )
                 }
             } else {
+                val columnListState = rememberLazyListState()
                 LazyColumn(
+                    state = columnListState,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fadingScrollEdges(listState = columnListState, top = 16.dp, bottom = 24.dp)
                 ) {
                     items(tasks, key = { it.task.id }) { taskUi ->
                         SkeuoKanbanTaskCard(
@@ -1140,10 +1145,13 @@ onDrawBehind {
                     color = Ink
                 )
 
+                val assignListState = rememberLazyListState()
                 LazyColumn(
+                    state = assignListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 260.dp),
+                        .heightIn(max = 260.dp)
+                        .fadingScrollEdges(listState = assignListState, top = 14.dp, bottom = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {

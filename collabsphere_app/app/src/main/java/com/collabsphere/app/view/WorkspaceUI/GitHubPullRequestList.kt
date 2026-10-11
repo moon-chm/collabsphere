@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.collabsphere.app.ui.theme.fadingScrollEdges
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import com.collabsphere.app.view.components.CollabSpinner
@@ -81,7 +83,13 @@ internal fun PullRequestListView(
                 }
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 48.dp)
+            ) {
                 items(state.items, key = { it.number }) { pr ->
                     val (statusLabel, statusColor) = pullRequestStatus(pr)
                     ActivityRow(

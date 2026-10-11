@@ -902,8 +902,13 @@ fun DMScreen(
                             }
                         }
                     } else {
+                        val membersListState = rememberLazyListState()
                         LazyColumn(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            state = membersListState,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .fadingScrollEdges(listState = membersListState, top = 20.dp, bottom = 48.dp),
                             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
@@ -1175,7 +1180,9 @@ fun DMScreen(
                         } else {
                             LazyColumn(
                                 state = lazyListState,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .fadingScrollEdges(listState = lazyListState, top = 20.dp, bottom = 20.dp),
                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {

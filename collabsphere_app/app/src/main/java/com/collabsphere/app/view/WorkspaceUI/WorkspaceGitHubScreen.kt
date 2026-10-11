@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
@@ -273,11 +274,13 @@ private fun RepoPickerView(
     onCancel: (() -> Unit)?,
     onDisconnect: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .fadingScrollEdges(scrollState = scrollState, top = 20.dp, bottom = 64.dp)
             .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 140.dp)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         Text(
             text = "Select a Repository",
@@ -401,8 +404,12 @@ private fun ConnectedView(
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 64.dp),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 140.dp)
     ) {
         item {

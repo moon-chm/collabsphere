@@ -5,6 +5,7 @@ import com.collabsphere.app.view.components.CollabSpinner
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -155,8 +156,12 @@ fun UserSearchScreen(
                         )
                     }
                     else -> {
+                        val listState = rememberLazyListState()
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 48.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             items(currentResults, key = { it.id }) { user ->
