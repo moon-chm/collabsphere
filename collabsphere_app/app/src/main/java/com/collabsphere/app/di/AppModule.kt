@@ -142,6 +142,11 @@ val networkModule = module {
                     isLenient = true
                 })
             }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60000
+                connectTimeoutMillis = 60000
+                socketTimeoutMillis  = 60000
+            }
             install(WebSockets) {
                 pingIntervalMillis = 15000
             }

@@ -33,7 +33,7 @@ object DatabaseFactory {
             envUrlKey = "DATABASE_URL",
             envJdbcKey = "JDBC_DATABASE_URL",
             envPoolSizeKey = "DB_MAX_POOL_SIZE",
-            defaultPoolSize = 25
+            defaultPoolSize = 10
         )
         val writeDataSource = HikariDataSource(writeConfig).apply {
             metricRegistry = io.micrometer.core.instrument.Metrics.globalRegistry
@@ -44,18 +44,26 @@ object DatabaseFactory {
             envUrlKey = "DATABASE_READ_URL",
             envJdbcKey = "JDBC_DATABASE_READ_URL",
             envPoolSizeKey = "DB_READ_POOL_SIZE",
-            defaultPoolSize = 15
+            defaultPoolSize = 10
         ).apply {
             isReadOnly = true
         }
         
-        // If no read replica is configured, we fall back to the primary write database
-        if (readConfig.jdbcUrl.isNullOrBlank()) {
+        // If no read replica is configured or it matches primary, use primary write database
+        val hasDistinctReadReplica = !readConfig.jdbcUrl.isNullOrBlank() && readConfig.jdbcUrl != writeConfig.jdbcUrl
+        if (!hasDistinctReadReplica) {
             readDatabase = writeDatabase
+            logger.info("[DatabaseFactory] Single database configuration active: readDatabase points to primary writeDatabase")
         } else {
-            val readDataSource = HikariDataSource(readConfig)
-            // Optionally could bind metrics for read pool here as well, omitting to avoid naming collision in micrometer unless tagged
-            readDatabase = Database.connect(readDataSource)
+            try {
+                val readDataSource = HikariDataSource(readConfig)
+                readDatabase = Database.connect(readDataSource)
+                logger.info("[DatabaseFactory] Dedicated read replica pool initialized successfully")
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                logger.warn("[DatabaseFactory] Failed to initialize read replica pool; falling back to primary writeDatabase: ${e.message}")
+                readDatabase = writeDatabase
+            }
         }
 
         transaction(writeDatabase) {
@@ -214,6 +222,7 @@ object DatabaseFactory {
                 connectionInitSql = "SET search_path TO public;"
                 maxLifetime = System.getenv("DB_MAX_LIFETIME_MS")?.toLongOrNull() ?: 1800000L // 30 mins
                 idleTimeout = System.getenv("DB_IDLE_TIMEOUT_MS")?.toLongOrNull() ?: 600000L // 10 mins
+                leakDetectionThreshold = 15000L
             }
         }
     }

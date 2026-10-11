@@ -69,6 +69,11 @@ tasks.withType<Test> {
     environment("JWT_SECRET", "test-secret")
 }
 
+tasks.named<JavaExec>("run") {
+    val localSecret = System.getenv("JWT_SECRET") ?: "collabsphere-local-dev-jwt-secret-key-32chars"
+    environment("JWT_SECRET", localSecret)
+}
+
 // DB-backed route/locking tests mutate shared state and must never inherit a developer's
 // DATABASE_URL or provider credentials. Keep them out of the default test task.
 val databaseBackedTestPatterns = listOf(

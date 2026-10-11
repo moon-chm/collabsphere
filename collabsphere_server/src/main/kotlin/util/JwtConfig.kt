@@ -8,9 +8,13 @@ import org.slf4j.LoggerFactory
 
 object JwtConfig {
     private val logger = LoggerFactory.getLogger(JwtConfig::class.java)
-    private val secret = requireNotNull(System.getenv("JWT_SECRET")) {
-        "JWT_SECRET environment variable must be configured"
-    }
+    private val secret = System.getenv("JWT_SECRET")
+        ?: if (System.getenv("APP_ENV") == "production") {
+            throw IllegalArgumentException("JWT_SECRET environment variable must be configured in production")
+        } else {
+            logger.warn("JWT_SECRET is not set; using local development secret")
+            "collabsphere-local-dev-jwt-secret-key-32chars"
+        }
 
     const val issuer = "collabsphere-server"
     const val audience = "collabsphere-app"

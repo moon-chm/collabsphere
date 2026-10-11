@@ -82,7 +82,16 @@ suspend fun <T> dbReadQuery(block: suspend Transaction.() -> T): T {
         try {
             return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.readDatabase) { block() }
         } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            // If readDatabase is unavailable (e.g. read replica is suspended, down, or pool timed out),
+            // gracefully execute the query on the primary database so client requests never fail.
+            if (DatabaseFactory.readDatabase != DatabaseFactory.writeDatabase) {
+                try {
+                    return newSuspendedTransaction(Dispatchers.IO, db = DatabaseFactory.writeDatabase) { block() }
+                } catch (writeErr: Exception) {
+                    if (writeErr is kotlinx.coroutines.CancellationException) throw writeErr
+                }
+            }
             val sqlState = (e as? java.sql.SQLException)?.sqlState
                 ?: (e.cause as? java.sql.SQLException)?.sqlState
             attempt++
