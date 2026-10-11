@@ -91,12 +91,18 @@ class ChannelViewModel(
                     _channelName.value = ""
                     _description.value = ""
                 } else {
-                    _channelStatus.value = result.exceptionOrNull()?.localizedMessage ?: "Failed to create channel"
+                    val msg = result.exceptionOrNull()?.localizedMessage ?: ""
+                    if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                        _channelStatus.value = msg.ifBlank { "Failed to create channel" }
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _channelStatus.value = e.localizedMessage ?: "Failed to create channel"
+                val msg = e.localizedMessage ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _channelStatus.value = msg.ifBlank { "Failed to create channel" }
+                }
             } finally {
                 _isCreatingChannel.value = false
             }
@@ -122,7 +128,10 @@ class ChannelViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _channelStatus.value = e.localizedMessage ?: "Failed to delete channel"
+                val msg = e.localizedMessage ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _channelStatus.value = msg.ifBlank { "Failed to delete channel" }
+                }
             } finally {
                 _deletingChannelKeys.value = _deletingChannelKeys.value - key
             }

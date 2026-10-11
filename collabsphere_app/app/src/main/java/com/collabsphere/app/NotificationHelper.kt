@@ -86,13 +86,28 @@ class NotificationHelper(
         }
     }
 
+    private val recentGenericNotifications = ConcurrentHashMap<String, Long>()
+
     /**
-     * Posts a plain system-tray notification for MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED
+     * Posts a plain system-tray notification for MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED/GITHUB_CI
      * events — distinct from [showDmNotification]'s MessagingStyle thread since these aren't 1:1 chats.
      */
     fun showGenericNotification(notification: NotificationResponse) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         if (quietHoursStore.isQuietNow()) return
+
+        // Deduplicate identical push messages received in rapid succession (e.g. multi-workspace GitHub CI hooks)
+        val dedupeKey = "${notification.title}:${notification.body}"
+        val now = System.currentTimeMillis()
+        val lastSeen = recentGenericNotifications[dedupeKey] ?: 0L
+        if (now - lastSeen < 4_000L) {
+            Log.d("NotificationHelper", "Suppressed duplicate generic notification: ${notification.title}")
+            return
+        }
+        recentGenericNotifications[dedupeKey] = now
+        if (recentGenericNotifications.size > 20) {
+            recentGenericNotifications.clear()
+        }
 
         val targetTab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
         val clickIntent = Intent(context, MainActivity::class.java).apply {
@@ -112,6 +127,7 @@ class NotificationHelper(
         )
 
         val avatar = createAvatarBitmap(notification.actorUsername ?: notification.title)
+        val groupKey = "collabsphere_activity_group"
 
         val builder = NotificationCompat.Builder(context, genericChannelId)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
@@ -122,11 +138,26 @@ class NotificationHelper(
             .setContentIntent(clickPendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
+            .setGroup(groupKey)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setColor(0xFFF0633D.toInt()) // CollabSphere coral
 
+        val summaryNotification = NotificationCompat.Builder(context, genericChannelId)
+            .setSmallIcon(R.drawable.ic_stat_collabsphere)
+            .setContentTitle("CollabSphere Updates")
+            .setContentText("New workspace updates")
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("CollabSphere Updates"))
+            .setGroup(groupKey)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(0xFFF0633D.toInt())
+            .build()
+
         try {
             notificationManager.notify(2_000_000 + notification.id, builder.build())
+            notificationManager.notify(2_999_999, summaryNotification)
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed posting generic notification", e)
         }

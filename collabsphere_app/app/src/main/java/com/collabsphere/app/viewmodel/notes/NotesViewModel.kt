@@ -94,12 +94,18 @@ class NotesViewModel(
                         _notesStatus.value = "Failed to save notes locally"
                     }
                 }.onFailure { exception ->
-                    _notesStatus.value = "Failed to create notes: ${exception.localizedMessage}"
+                    val msg = exception.localizedMessage ?: ""
+                    if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                        _notesStatus.value = "Failed to create notes: $msg"
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _notesStatus.value = "Failed to create notes: ${e.localizedMessage}"
+                val msg = e.localizedMessage ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _notesStatus.value = "Failed to create notes: $msg"
+                }
             } finally {
                 _isCreatingNote.value = false
             }
@@ -132,7 +138,10 @@ class NotesViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _notesStatus.value = e.localizedMessage ?: SyncPolicy.REFUSED_MESSAGE
+                val msg = e.localizedMessage ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _notesStatus.value = msg.ifBlank { SyncPolicy.REFUSED_MESSAGE }
+                }
             } finally {
                 finishNoteAction(oldNote.id)
             }
@@ -163,7 +172,10 @@ class NotesViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _notesStatus.value = e.localizedMessage ?: SyncPolicy.REFUSED_MESSAGE
+                val msg = e.localizedMessage ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _notesStatus.value = msg.ifBlank { SyncPolicy.REFUSED_MESSAGE }
+                }
             } finally {
                 finishNoteAction(noteId)
             }

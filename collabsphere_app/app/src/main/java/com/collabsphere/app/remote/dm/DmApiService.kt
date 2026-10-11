@@ -176,7 +176,11 @@ class DmApiService(
                 sessionMutex.withLock { session = null }
                 throw IllegalStateException("WebSocket incoming channel closed by remote host")
             } catch (e: Exception) {
-                Log.e("DM_DEBUG", "Exception inside websocket incoming iteration loop", e)
+                if (e is java.net.SocketException || e is kotlinx.coroutines.CancellationException || e.message?.contains("Software caused connection abort") == true) {
+                    Log.d("DM_DEBUG", "WebSocket disconnected: ${e.message}")
+                } else {
+                    Log.e("DM_DEBUG", "Exception inside websocket incoming iteration loop", e)
+                }
                 sessionMutex.withLock { session = null }
                 throw e
             }

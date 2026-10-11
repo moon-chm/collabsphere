@@ -51,7 +51,12 @@ class NotificationsViewModel(private val repo: NotificationRepo) : ViewModel() {
             _isLoading.value = true
             repo.getNotifications()
                 .onSuccess { _notifications.value = it }
-                .onFailure { _statusMessage.value = it.message ?: "Failed to load notifications" }
+                .onFailure { error ->
+                    val msg = error.message ?: ""
+                    if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                        _statusMessage.value = msg.ifBlank { "Failed to load notifications" }
+                    }
+                }
             _isLoading.value = false
             refreshCount()
         }
