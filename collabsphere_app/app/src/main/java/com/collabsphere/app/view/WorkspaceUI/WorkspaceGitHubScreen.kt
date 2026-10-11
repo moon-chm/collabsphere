@@ -141,8 +141,7 @@ fun WorkspaceGitHubScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF9F6F0))
-            .padding(16.dp)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         val canManage = analytics?.canManage == true
         val isConnected = analytics?.isConnected == true
@@ -277,6 +276,7 @@ private fun RepoPickerView(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 140.dp)
             .verticalScroll(rememberScrollState())
     ) {
         Text(
@@ -326,7 +326,7 @@ private fun RepoPickerView(
                         .padding(vertical = 4.dp)
                         .clickable(enabled = !isLinking) { onRepoSelected(repo) },
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = Surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Row(
@@ -403,7 +403,7 @@ private fun ConnectedView(
     val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 140.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 140.dp)
     ) {
         item {
             Row(
@@ -831,15 +831,16 @@ private fun SectionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
+            .skeuoFloatingCard(cornerRadius = 18.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Surface)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, fontWeight = FontWeight.Medium, color = Color(0xFF70625E), modifier = Modifier.weight(1f))
+            Text(title, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f))
             action?.invoke()
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         content()
     }
 }
@@ -925,14 +926,15 @@ internal fun relativeTime(epochMillis: Long): String =
 fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White)
+            .skeuoFloatingCard(cornerRadius = 14.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
             .padding(16.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Text(text = title, fontSize = 12.sp, color = Color(0xFF70625E), fontWeight = FontWeight.Medium)
+            Text(text = title, fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, fontSize = 24.sp, color = Color(0xFF2C2A28), fontWeight = FontWeight.Bold)
+            Text(text = value, fontSize = 24.sp, color = Ink, fontWeight = FontWeight.Bold)
         }
     }
 }
