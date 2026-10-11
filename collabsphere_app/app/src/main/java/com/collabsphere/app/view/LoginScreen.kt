@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -82,9 +84,8 @@ fun LoginScreen(
     val isPasswordError = hasAttemptedSubmit && password.isBlank()
     val isFormValid = email.isNotBlank() && password.isNotBlank()
 
-    LaunchedEffect(loginStatus) {
-        loginStatus?.let {
-            AppToast.show(it)
+    LaunchedEffect(email, password) {
+        if (!loginStatus.isNullOrBlank()) {
             viewModel.clearLoginStatus()
         }
     }
@@ -143,8 +144,6 @@ fun LoginScreen(
             lastClickTime = currentTime
             focusManager.clearFocus()
             viewModel.onLoginClick(email, password)
-        } else if (!isFormValid) {
-            AppToast.warning("Please enter your email and password")
         }
     }
 
@@ -280,7 +279,23 @@ fun LoginScreen(
                 )
             }
 
-            Spacer(Modifier.height(36.dp))
+            AnimatedVisibility(
+                visible = !loginStatus.isNullOrBlank(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Text(
+                    text = loginStatus.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = DestructiveStart,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 4.dp)
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
 
             // CTA Button
             SkeuoPrimaryButton(

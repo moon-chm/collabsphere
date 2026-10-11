@@ -218,10 +218,6 @@ class MainActivity : ComponentActivity() {
                                 onSplashFinished = { showSplash = false }
                             )
                         }
-
-                        com.collabsphere.app.view.components.AppToastHost(
-                            modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter)
-                        )
                     }
                 }
             }

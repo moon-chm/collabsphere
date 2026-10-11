@@ -128,19 +128,21 @@ class LoginViewModel(
                     _loggedInUserName.value = user.userName
                     _loggedInUserEmail.value = user.email
                     _loggedInAvatarUrl.value = user.avatarUrl ?: ""
-                    _loginStatus.value = "Login Successful!"
+                    _loginStatus.value = null
                     _isLoggedIn.value = true
 
                     // Asynchronously fetch full profile to ensure the latest avatar and details are up to date
                     viewModelScope.launch {
-                        repo.fetchProfile(user.id).onSuccess { profile ->
-                            if (profile.avatarUrl.isNotBlank()) {
-                                _loggedInAvatarUrl.value = profile.avatarUrl
+                        try {
+                            repo.fetchProfile(user.id).onSuccess { profile ->
+                                if (profile.avatarUrl.isNotBlank()) {
+                                    _loggedInAvatarUrl.value = profile.avatarUrl
+                                }
+                                if (profile.username.isNotBlank()) {
+                                    _loggedInUserName.value = profile.username
+                                }
                             }
-                            if (profile.username.isNotBlank()) {
-                                _loggedInUserName.value = profile.username
-                            }
-                        }
+                        } catch (_: Exception) {}
                     }
                 }
                 .onFailure { throwable ->
@@ -149,21 +151,32 @@ class LoginViewModel(
                         rawMsg.contains("verify your email", ignoreCase = true)
                     ) {
                         _unverifiedEmailForLogin.value = trimmedEmail
-                        _loginStatus.value = "EMAIL_NOT_VERIFIED: Please verify your email before logging in."
+                        _loginStatus.value = "Please verify your email before logging in."
                     } else {
                         val errorMessage = when (throwable) {
                             is HttpRequestTimeoutException,
                             is SocketTimeoutException -> "Server is waking up, please try again in a moment ☕"
                             is IOException -> "Network issue. Please check your internet connection."
-                            else -> rawMsg.ifBlank { "Invalid credentials or network issue" }
+                            else -> if (rawMsg.contains("Parent job", ignoreCase = true) || rawMsg.contains("cancel", ignoreCase = true)) {
+                                ""
+                            } else {
+                                rawMsg.ifBlank { "Invalid credentials or network issue" }
+                            }
                         }
-                        _loginStatus.value = errorMessage
+                        if (errorMessage.isNotBlank()) {
+                            _loginStatus.value = errorMessage
+                        }
                     }
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
+            } catch (cancelled: java.util.concurrent.CancellationException) {
+                // Ignore coroutine cancellation
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                // Ignore coroutine cancellation
             } catch (error: Exception) {
-                _loginStatus.value = error.message ?: "Login failed. Please try again."
+                val msg = error.message ?: ""
+                if (!msg.contains("Parent job", ignoreCase = true) && !msg.contains("cancel", ignoreCase = true)) {
+                    _loginStatus.value = msg.ifBlank { "Login failed. Please try again." }
+                }
             } finally {
                 _isLoadingLogin.value = false
             }
