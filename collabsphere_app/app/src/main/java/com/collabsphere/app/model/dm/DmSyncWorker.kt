@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.dm
+
 import android.util.Log
 
 import android.content.Context
@@ -41,6 +42,13 @@ class DmSyncWorker(
             val userIdFlowKey = intPreferencesKey("saved_user_id")
             val savedUserId = dataStore.data.map { it[userIdFlowKey] ?: -1 }.first()
             val connectUserId = if (senderId != -1) senderId else savedUserId
+
+            // Account isolation guard
+            if (senderId != -1 && savedUserId != -1 && savedUserId != senderId) {
+                Log.w("DmSyncWorker", "Aborting — userId mismatch (senderId=$senderId authenticated=$savedUserId)")
+                return@withContext Result.failure()
+            }
+
             val wasConnected = com.collabsphere.app.remote.dm.DmWebSocketService.isWebSocketConnected
 
             if (!wasConnected) {

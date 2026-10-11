@@ -33,8 +33,14 @@ class SyncPolicyTest {
     }
 
     @Test
+    fun `401 unauthorized triggers session refresh retry`() {
+        assertEquals(SyncDecision.RETRY_AFTER_REFRESH, SyncPolicy.forStatus(401, isDelete = false))
+        assertEquals(SyncDecision.RETRY_AFTER_REFRESH, SyncPolicy.forStatus(401, isDelete = true))
+    }
+
+    @Test
     fun `permanent client errors are dropped`() {
-        listOf(400, 401, 403, 409, 413, 422).forEach { code ->
+        listOf(400, 403, 409, 413, 422).forEach { code ->
             assertEquals("status $code", SyncDecision.DROP, SyncPolicy.forStatus(code, isDelete = false))
         }
     }
@@ -49,5 +55,6 @@ class SyncPolicyTest {
         assertEquals(SyncDecision.DROP, SyncPolicy.forFailure(ApiStatusException(403), isDelete = false))
         assertEquals(SyncDecision.RETRY, SyncPolicy.forFailure(ApiStatusException(503), isDelete = true))
         assertEquals(SyncDecision.DONE, SyncPolicy.forFailure(ApiStatusException(404), isDelete = true))
+        assertEquals(SyncDecision.RETRY_AFTER_REFRESH, SyncPolicy.forFailure(ApiStatusException(401), isDelete = false))
     }
 }

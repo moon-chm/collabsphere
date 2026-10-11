@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.collabsphere.app.model.OutboxSyncStatus
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.workspace.WorkspaceEntity
 import com.collabsphere.app.model.channels.ChannelEntity
@@ -51,5 +52,7 @@ data class MessageEntity(
     val status: MessageStatus = MessageStatus.Delivered,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val clientMutationId: String? = null,
+    val syncStatus: OutboxSyncStatus = OutboxSyncStatus.SYNCED
 )

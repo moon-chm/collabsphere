@@ -116,7 +116,7 @@ class FileRepo(
             val status = fileApiService.deleteFile(fileId)
             when (SyncPolicy.forStatus(status.value, isDelete = true)) {
                 SyncDecision.DONE -> fileDoa.deleteFileById(fileId)
-                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> throw ApiStatusException(status.value)
                 // Refused (e.g. not the uploader): keep showing the file — it still exists on the server.
                 SyncDecision.DROP -> Log.w("FileRepo", "Server refused delete for file $fileId (HTTP ${status.value})")
             }

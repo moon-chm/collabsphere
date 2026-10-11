@@ -5,6 +5,11 @@ import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.SvgDecoder
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.collabsphere.app.di.appModules
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -13,15 +18,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.android.ext.android.get
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
-class MyApplication : Application() {
+class MyApplication : Application(), ImageLoaderFactory {
 
     companion object {
         private val _isAppForegroundFlow = MutableStateFlow(false)
@@ -35,6 +39,26 @@ class MyApplication : Application() {
             private set(value) { _isAppForegroundFlow.value = value }
 
         val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(100L * 1024 * 1024) // 100 MB hard cap
+                    .build()
+            }
+            .components {
+                add(SvgDecoder.Factory())
+            }
+            .crossfade(true)
+            .build()
     }
 
     override fun onCreate() {
@@ -61,15 +85,17 @@ class MyApplication : Application() {
         }
 
         val userPreferences: UserPreferences = get()
-        // A bare Dispatchers.IO scope has no SupervisorJob — an unhandled exception here would
-        // crash the whole process instead of just this sync staying stuck.
+        // On startup: run the one-time migration from plaintext DataStore → EncryptedSharedPreferences,
+        // then hydrate the in-memory holder so the Ktor interceptor can attach the token to the very
+        // first request (before any ViewModel has had a chance to call saveAuthToken again).
         val authTokenSyncScope = CoroutineScope(
             SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
-                Log.e("MyApplication", "Auth token sync failed", e)
+                Log.e("MyApplication", "Auth token migration failed", e)
             }
         )
-        userPreferences.authTokenFlow
-            .onEach { AuthTokenHolder.token = it }
-            .launchIn(authTokenSyncScope)
+        authTokenSyncScope.launch {
+            val token = userPreferences.migrateTokenToEncryptedStore()
+            AuthTokenHolder.token = token
+        }
     }
 }

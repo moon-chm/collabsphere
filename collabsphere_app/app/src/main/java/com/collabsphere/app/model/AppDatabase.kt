@@ -37,7 +37,7 @@ import com.collabsphere.app.model.message.MessageEntity
         DmEntity::class,
         DmReactionEntity::class
     ],
-    version = 42,
+    version = 44,
     exportSchema = false
 )
 @TypeConverters(TaskListConverters::class)
@@ -125,6 +125,18 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE task ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]'")
                 database.execSQL("ALTER TABLE task ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN clientMutationId TEXT")
+            }
+        }
+
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
             }
         }
     }

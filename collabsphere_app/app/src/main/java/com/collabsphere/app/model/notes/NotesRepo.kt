@@ -155,7 +155,7 @@ class NotesRepo(
             val status = apiService.deleteNote(noteId)
             when (SyncPolicy.forStatus(status.value, isDelete = true)) {
                 SyncDecision.DONE -> notesDao.deleteNoteById(noteId)
-                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> throw ApiStatusException(status.value)
                 // Refused: keep the note rather than hiding one that still exists on the server.
                 SyncDecision.DROP -> return@withContext false
             }

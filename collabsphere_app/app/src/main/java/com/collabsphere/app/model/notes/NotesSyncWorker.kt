@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.dto.notes.NotesRequest
 import com.collabsphere.app.remote.note.NoteApiService
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,13 @@ class NotesSyncWorker(
         val rawNoteId = inputData.getInt("NOTE_ID", 0)
 
         if (userId == -1 || workspaceIdParam == -1) return@withContext Result.failure()
+
+        // Account isolation guard
+        val authenticatedUserId = dataStore.data.map { it[UserPreferences.USER_ID] ?: -1 }.first()
+        if (authenticatedUserId != -1 && authenticatedUserId != userId) {
+            Log.w("NotesSyncWorker", "Aborting — userId mismatch (payload=$userId authenticated=$authenticatedUserId)")
+            return@withContext Result.failure()
+        }
 
         // An UPDATE/DELETE enqueued before this note's own CREATE resolved still carries the
         // frozen temp id in its inputData — resolve it via the same temp-id mapping the CREATE

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ (API 31+) backup exclusion rules.
+    These apply to both cloud backup (allowBackup) and device-to-device transfer.
+
+    Excluded:
+    - app_database*  : Room SQLite database containing cached messages, tasks, DMs.
+    - collabsphere_secure_prefs* : EncryptedSharedPreferences file (JWT credential).
+    - datastore/     : Legacy plaintext DataStore files (may still contain session data
+                       from previous installs that have not yet migrated).
+
+    Note: allowBackup="false" in the manifest disables *cloud* backup but does NOT
+    suppress device-to-device transfers on API 31+ without this file.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="app_database" />
+        <exclude domain="database" path="app_database-shm" />
+        <exclude domain="database" path="app_database-wal" />
+        <exclude domain="sharedpref" path="collabsphere_secure_prefs.xml" />
+        <exclude domain="file" path="datastore" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="app_database" />
+        <exclude domain="database" path="app_database-shm" />
+        <exclude domain="database" path="app_database-wal" />
+        <exclude domain="sharedpref" path="collabsphere_secure_prefs.xml" />
+        <exclude domain="file" path="datastore" />
+    </device-transfer>
+</data-extraction-rules>

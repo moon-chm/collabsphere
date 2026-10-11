@@ -73,6 +73,7 @@ dependencies {
     val work_version = "2.10.2"
 
     implementation("androidx.datastore:datastore-preferences:$datastore")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     ksp("androidx.room:room-compiler:$room_ver")
     implementation("androidx.room:room-runtime:$room_ver")

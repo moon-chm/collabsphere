@@ -1,4 +1,6 @@
 package com.collabsphere.app.model.task
+
+import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
@@ -30,6 +32,17 @@ class TaskSyncWorker(
 
         if (rawTaskId == 0) return@withContext Result.failure()
 
+        // Account isolation guard: if this work item carries a specific creator, ensure
+        // it doesn't execute under a different authenticated account
+        val createdByUserId = inputData.getInt("CREATED_BY_USER_ID", -1)
+        if (createdByUserId != -1) {
+            val authenticatedUserId = dataStore.data.map { it[UserPreferences.USER_ID] ?: -1 }.first()
+            if (authenticatedUserId != -1 && authenticatedUserId != createdByUserId) {
+                Log.w("TaskSyncWorker", "Aborting — userId mismatch (payload=$createdByUserId authenticated=$authenticatedUserId)")
+                return@withContext Result.failure()
+            }
+        }
+
         // An UPDATE/DELETE enqueued before this task's own CREATE resolved still carries the
         // frozen temp id in its inputData — resolve it via the same temp-id mapping the CREATE
         // branch below writes. If it hasn't resolved yet, retry later rather than 404ing forever.
@@ -52,7 +65,6 @@ class TaskSyncWorker(
                 return@withContext SyncPolicy.toWorkResult(SyncPolicy.forStatus(status.value, isDelete = true))
             }
 
-            val createdByUserId = inputData.getInt("CREATED_BY_USER_ID", -1)
             val assignedToUserId = inputData.getInt("ASSIGNED_TO_USER_ID", -1)
             val workspaceIdParam = inputData.getInt("WORKSPACE_ID", 0)
             val taskName = inputData.getString("TASK_NAME") ?: ""

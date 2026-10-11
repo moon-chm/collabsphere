@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.message
+import com.collabsphere.app.model.OutboxSyncStatus
 import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
@@ -10,6 +11,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.remote.message.MessageApiService
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,19 @@ class MessageSyncWorker(
         val channelIdParam = inputData.getInt("CHANNEL_ID", -1)
 
         if (messageId == 0 || userId == -1 || workspaceIdParam == -1 || channelIdParam == -1) {
+            return@withContext Result.failure()
+        }
+
+        // Account isolation guard: if the currently authenticated user in DataStore is different
+        // from this work item's owner, abort immediately to prevent cross-account payload contamination.
+        val authenticatedUserId = dataStore.data
+            .map { it[UserPreferences.USER_ID] ?: -1 }
+            .first()
+        if (authenticatedUserId != -1 && authenticatedUserId != userId) {
+            Log.w(
+                "MessageSyncWorker",
+                "Aborting work item $messageId — payload userId=$userId but authenticated userId=$authenticatedUserId"
+            )
             return@withContext Result.failure()
         }
 
@@ -70,7 +85,8 @@ class MessageSyncWorker(
                 status = status,
                 replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 },
                 mediaUrl = inputData.getString("MEDIA_URL"),
-                idempotencyKey = inputData.getString("IDEMPOTENCY_KEY")
+                idempotencyKey = messageDao.getMessageById(messageId)?.clientMutationId
+                    ?: inputData.getString("IDEMPOTENCY_KEY")
                     ?: "message-local-${userId}-$messageId"
             )
 
@@ -88,7 +104,11 @@ class MessageSyncWorker(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e("MessageSyncWorker", "Operation failed", e)
-            return@withContext SyncPolicy.toWorkResult(SyncPolicy.forFailure(e, isDelete = actionType == "DELETE"))
+            val decision = SyncPolicy.forFailure(e, isDelete = actionType == "DELETE")
+            if (decision == com.collabsphere.app.model.SyncDecision.DROP) {
+                messageDao.updateSyncStatus(messageId, OutboxSyncStatus.FAILED_PERMANENT)
+            }
+            return@withContext SyncPolicy.toWorkResult(decision)
         }
     }
 }

@@ -291,7 +291,7 @@ class TaskRepo(
                     Result.success(TaskSyncOutcome.CONFIRMED)
                 }
                 // Server is up but struggling (e.g. a Render cold start) — same as being offline.
-                SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> throw ApiStatusException(status.value)
                 // Refused (e.g. no permission): keep the task instead of hiding one that still exists.
                 SyncDecision.DROP -> Result.failure(ApiStatusException(status.value))
             }

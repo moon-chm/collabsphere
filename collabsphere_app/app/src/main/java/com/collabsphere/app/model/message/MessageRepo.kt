@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.message
+import com.collabsphere.app.model.OutboxSyncStatus
 
 import com.collabsphere.app.remote.ApiStatusException
 import com.collabsphere.app.model.SyncDecision
@@ -90,16 +91,21 @@ class MessageRepo(
         val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {
             val remoteMessage = apiService.createMessage(message.toCreateRequest(idempotencyKey))
-            val updatedMessage = message.copy(id = remoteMessage.id)
+            val updatedMessage = message.copy(id = remoteMessage.id, clientMutationId = idempotencyKey, syncStatus = OutboxSyncStatus.SYNCED)
             messageDao.sendMessage(updatedMessage)
         } catch (e: Exception) {
             Log.e("MessageRepo", "Operation failed", e)
             if (e is kotlinx.coroutines.CancellationException) throw e
             // Draw the placeholder id from the negative range — Room autoGenerate only kicks in for
             // id == 0, so a positive fallback here could collide with a real id synced down later.
-            val localId = messageDao.sendMessage(message.copy(id = TempId.next()))
+            val localMessage = message.copy(
+                id = TempId.next(),
+                clientMutationId = idempotencyKey,
+                syncStatus = OutboxSyncStatus.PENDING
+            )
+            val localId = messageDao.sendMessage(localMessage)
             dataStore.edit { it[stringPreferencesKey("message_idempotency_$localId")] = idempotencyKey }
-            enqueueSync(message.toCreateWorkData(localId.toInt(), idempotencyKey))
+            enqueueSync(localMessage.toCreateWorkData(localId.toInt(), idempotencyKey))
             localId
         }
     }
@@ -110,9 +116,14 @@ class MessageRepo(
         if (isWorkRunning(workManager, workName)) return@withContext RetryOutcome.ALREADY_SENDING
         workManager.cancelUniqueWork(workName)
         val keyPreference = stringPreferencesKey("message_idempotency_${message.id}")
-        val idempotencyKey = dataStore.data.map { it[keyPreference] }.first()
+        val cached = messageDao.getMessageById(message.id)
+        val idempotencyKey = cached?.clientMutationId
+            ?: dataStore.data.map { it[keyPreference] }.first()
             ?: java.util.UUID.randomUUID().toString().also { generated ->
                 dataStore.edit { it[keyPreference] = generated }
+                if (cached != null) {
+                    messageDao.updateMessage(cached.copy(clientMutationId = generated))
+                }
             }
         try {
             val remote = apiService.createMessage(message.toCreateRequest(idempotencyKey))
@@ -122,6 +133,10 @@ class MessageRepo(
         } catch (e: Exception) {
             Log.e("MessageRepo", "Manual retry failed", e)
             if (e is kotlinx.coroutines.CancellationException) throw e
+            val decision = SyncPolicy.forFailure(e, isDelete = false)
+            if (decision == SyncDecision.DROP) {
+                messageDao.updateSyncStatus(message.id, OutboxSyncStatus.FAILED_PERMANENT)
+            }
             enqueueSync(message.toCreateWorkData(message.id, idempotencyKey))
             RetryOutcome.STILL_OFFLINE
         }
@@ -140,7 +155,7 @@ class MessageRepo(
                         messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
                         true
                     }
-                    SyncDecision.RETRY -> throw ApiStatusException(status.value)
+                    SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> throw ApiStatusException(status.value)
                     // Refused: the message still exists for everyone else, so keep it here too.
                     SyncDecision.DROP -> false
                 }

@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.file
+import com.collabsphere.app.UserPreferences
 import com.collabsphere.app.model.SyncPolicy
 import android.util.Log
 
@@ -58,6 +59,15 @@ class FileSyncWorker(
             val sizeBytes = inputData.getLong("SIZE_BYTES", physicalFile.length())
 
             if (workspaceIdParam == -1) return@withContext Result.failure()
+
+            // Account isolation guard
+            if (userId != -1) {
+                val authenticatedUserId = dataStore.data.map { it[UserPreferences.USER_ID] ?: -1 }.first()
+                if (authenticatedUserId != -1 && authenticatedUserId != userId) {
+                    Log.w("FileSyncWorker", "Aborting — userId mismatch (payload=$userId authenticated=$authenticatedUserId)")
+                    return@withContext Result.failure()
+                }
+            }
 
             val workspaceId = if (workspaceIdParam < 0) {
                 val mappingKey = intPreferencesKey("temp_ws_$workspaceIdParam")

@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.work.WorkManager
 import com.collabsphere.app.SessionManager
 import com.collabsphere.app.UserPreferences
+import com.collabsphere.app.EncryptedTokenStore
 import com.collabsphere.app.dataStore
 import com.collabsphere.app.viewmodel.file.FileViewModel
 import com.collabsphere.app.model.AppDatabase
@@ -74,7 +75,7 @@ val databaseModule = module {
         )
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42)
+            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42, AppDatabase.MIGRATION_42_43, AppDatabase.MIGRATION_43_44)
             .build()
     }
 
@@ -180,7 +181,8 @@ val repositoryModule = module {
 
 val appModule = module {
     single { androidContext().dataStore }
-    single { UserPreferences(get()) }
+    single { EncryptedTokenStore(androidContext()) }
+    single { UserPreferences(get(), get()) }
     single { SessionManager(androidContext(), get(), get(), get(), get()) }
     single { NotificationHelper(androidContext(), get(), get()) }
     single { WorkManager.getInstance(androidContext()) }

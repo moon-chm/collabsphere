@@ -415,7 +415,8 @@ fun UploadFileDialog(
             selectedFileName = displayName
 
             try {
-                val tempFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}_$displayName")
+                val stagingDir = File(context.filesDir, "pending_uploads").apply { mkdirs() }
+                val tempFile = File(stagingDir, "upload_${System.currentTimeMillis()}_$displayName")
                 context.contentResolver.openInputStream(selectedUri)?.use { inputStream ->
                     tempFile.outputStream().use { outputStream ->
                         inputStream.copyTo(outputStream)

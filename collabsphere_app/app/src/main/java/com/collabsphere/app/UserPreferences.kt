@@ -1,6 +1,7 @@
 package com.collabsphere.app
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -9,9 +10,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.SharedPreferencesMigration
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
@@ -26,7 +30,10 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     }
 )
 
-class UserPreferences(private val dataStore: DataStore<Preferences>) {
+class UserPreferences(
+    private val dataStore: DataStore<Preferences>,
+    private val encryptedTokenStore: EncryptedTokenStore
+) {
 
     companion object {
         val USER_ID = intPreferencesKey("saved_user_id")
@@ -57,23 +64,47 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         }
     }
 
-    val authTokenFlow: Flow<String?> = dataStore.data
+    // Legacy plaintext DataStore flow — used only during the one-time migration in
+    // migrateTokenToEncryptedStore(). Do not read this for normal authentication purposes.
+    private val legacyAuthTokenFlow: Flow<String?> = dataStore.data
         .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
+            if (exception is IOException) emit(emptyPreferences()) else throw exception
         }
         .map { preferences -> preferences[AUTH_TOKEN] }
 
+    /**
+     * One-time migration: if a token exists in the legacy plaintext DataStore, move it to
+     * EncryptedSharedPreferences and delete the plaintext copy. Safe to call on every launch;
+     * it is a no-op if the encrypted store already has a token or the plaintext store is empty.
+     *
+     * Returns the migrated/existing token so the caller can hydrate AuthTokenHolder immediately.
+     */
+    suspend fun migrateTokenToEncryptedStore(): String? = withContext(Dispatchers.IO) {
+        // Already have an encrypted token — nothing to do.
+        val existing = encryptedTokenStore.readToken()
+        if (!existing.isNullOrBlank()) return@withContext existing
+
+        // Check if a plaintext token was left from a previous install.
+        val legacy = legacyAuthTokenFlow.first()
+        if (!legacy.isNullOrBlank()) {
+            Log.i("UserPreferences", "Migrating token from DataStore to EncryptedSharedPreferences")
+            encryptedTokenStore.writeToken(legacy)
+            // Erase the plaintext copy only after the encrypted write succeeds.
+            dataStore.edit { it.remove(AUTH_TOKEN) }
+            return@withContext legacy
+        }
+        null
+    }
+
+    /**
+     * Persist a new auth token securely and mirror it to the in-memory holder so the
+     * Ktor request interceptor can attach it synchronously.
+     */
     suspend fun saveAuthToken(token: String?) {
-        dataStore.edit { preferences ->
-            if (token.isNullOrBlank()) {
-                preferences.remove(AUTH_TOKEN)
-            } else {
-                preferences[AUTH_TOKEN] = token
-            }
+        withContext(Dispatchers.IO) {
+            encryptedTokenStore.writeToken(token)
+            // Belt-and-suspenders: ensure no plaintext copy remains.
+            dataStore.edit { it.remove(AUTH_TOKEN) }
         }
         AuthTokenHolder.token = token
     }
@@ -149,9 +180,10 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun clearPreferences() {
-        dataStore.edit { preferences ->
-            preferences.clear()
-        }
+        // Clear encrypted credential first — prevents a window where the DataStore is cleared
+        // but the encrypted token could still be used to authenticate.
+        withContext(Dispatchers.IO) { encryptedTokenStore.clearAll() }
+        dataStore.edit { preferences -> preferences.clear() }
         AuthTokenHolder.token = null
     }
 }

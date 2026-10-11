@@ -3,7 +3,7 @@ package com.collabsphere.app.model
 import androidx.work.ListenableWorker
 import com.collabsphere.app.remote.ApiStatusException
 
-enum class SyncDecision { DONE, RETRY, DROP }
+enum class SyncDecision { DONE, RETRY, RETRY_AFTER_REFRESH, DROP }
 
 /**
  * One rule for every offline-sync path: what to do with a server answer (or a failure to get one).
@@ -18,6 +18,8 @@ object SyncPolicy {
     fun forStatus(statusCode: Int, isDelete: Boolean): SyncDecision = when {
         statusCode in 200..299 -> SyncDecision.DONE
         isDelete && (statusCode == 404 || statusCode == 410) -> SyncDecision.DONE
+        // 401 Unauthorized should trigger session refresh and retry, never permanent drop of user work
+        statusCode == 401 -> SyncDecision.RETRY_AFTER_REFRESH
         statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500 -> SyncDecision.RETRY
         else -> SyncDecision.DROP
     }
@@ -29,7 +31,7 @@ object SyncPolicy {
 
     fun toWorkResult(decision: SyncDecision): ListenableWorker.Result = when (decision) {
         SyncDecision.DONE -> ListenableWorker.Result.success()
-        SyncDecision.RETRY -> ListenableWorker.Result.retry()
+        SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> ListenableWorker.Result.retry()
         SyncDecision.DROP -> ListenableWorker.Result.failure()
     }
 }
