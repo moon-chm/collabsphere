@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -219,6 +221,7 @@ fun AppToastHost(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .wrapContentHeight()
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.TopCenter
@@ -253,6 +256,7 @@ private fun ToastCard(toast: ToastMessage, onDismiss: () -> Unit) {
         modifier = Modifier
             .widthIn(max = 520.dp)
             .fillMaxWidth()
+            .height(IntrinsicSize.Min)
             .graphicsLayer {
                 translationY = dragY.coerceAtMost(0f)
                 alpha = 1f - (-dragY / 300f).coerceIn(0f, 0.8f)
