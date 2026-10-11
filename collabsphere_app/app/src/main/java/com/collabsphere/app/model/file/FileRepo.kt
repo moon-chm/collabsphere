@@ -201,8 +201,15 @@ class FileRepo(
     }
 
     private fun enqueueSync(data: Data) {
+        val sizeBytes = data.getLong("SIZE_BYTES", 0L)
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
+            .apply {
+                // Large uploads (> 5MB) require healthy battery level to prevent brownouts
+                if (sizeBytes > 5 * 1024 * 1024) {
+                    setRequiresBatteryNotLow(true)
+                }
+            }
             .build()
 
         val syncRequest = OneTimeWorkRequestBuilder<FileSyncWorker>()

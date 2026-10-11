@@ -27,6 +27,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -206,6 +209,10 @@ class MessageViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
+
+    val pagedMessages: Flow<PagingData<MessageEntity>> =
+        repo.getMessagesPaged(loggedWorkspaceId, loggedChannelId)
+            .cachedIn(viewModelScope)
 
     private val _isLoadingOlder = MutableStateFlow(false)
     val isLoadingOlder = _isLoadingOlder.asStateFlow()

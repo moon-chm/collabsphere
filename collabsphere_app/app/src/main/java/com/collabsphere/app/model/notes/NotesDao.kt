@@ -29,6 +29,14 @@ interface NotesDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllNotes(notes: List<NotesEntity>)
 
+    @Query("""
+        SELECT id, notesName, description AS snippet
+        FROM notes
+        WHERE workspaceId = :workspaceId AND (notesName LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%')
+        ORDER BY id DESC LIMIT 50
+    """)
+    suspend fun searchNotesOffline(workspaceId: Int, query: String): List<com.collabsphere.app.dto.search.SearchNoteHit>
+
     @Update
     suspend fun updatenotes(notes: NotesEntity)
 

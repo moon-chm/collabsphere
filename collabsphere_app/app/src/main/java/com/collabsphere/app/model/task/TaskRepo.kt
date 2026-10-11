@@ -19,6 +19,9 @@ import com.collabsphere.app.remote.task.TaskApiService
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -53,6 +56,12 @@ class TaskRepo(
     fun getTasks(workspaceId: Int): Flow<List<TaskEntity>> {
         return taskDao.getTasksForWorkspace(workspaceId)
     }
+
+    fun getTasksPaged(workspaceId: Int): Flow<PagingData<TaskEntity>> =
+        Pager(
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+            pagingSourceFactory = { taskDao.getTasksPaged(workspaceId) }
+        ).flow
 
     fun getMyOpenTasks(userId: Int): Flow<List<TaskEntity>> =
         taskDao.getTasksByUserAllWorkspaces(userId).map { tasks ->
@@ -155,20 +164,28 @@ class TaskRepo(
                         if (remote.isDeleted) {
                             taskDao.deleteTask(remote.id)
                         } else {
-                            val entity = TaskEntity(
-                                id = remote.id,
-                                createdByUserId = remote.createdByUserId,
-                                assignedToUserId = remote.assignedToUserId,
-                                workspaceId = remote.workspaceId,
-                                taskName = remote.taskName,
-                                taskDescription = remote.taskDescription,
-                                status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
-                                dueDate = remote.dueDate,
-                                priority = TaskPriority.fromRemote(remote.priority),
-                                checklist = remote.checklist,
-                                labels = remote.labels
-                            )
-                            taskDao.insertTask(entity)
+                            // Concurrency protection: do not overwrite local entity if user has a pending/running sync operation
+                            val hasLocalPendingWork = runCatching {
+                                workManager.getWorkInfosForUniqueWork("TASK_SYNC_${remote.id}").get()
+                                    .any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+                            }.getOrDefault(false)
+
+                            if (!hasLocalPendingWork) {
+                                val entity = TaskEntity(
+                                    id = remote.id,
+                                    createdByUserId = remote.createdByUserId,
+                                    assignedToUserId = remote.assignedToUserId,
+                                    workspaceId = remote.workspaceId,
+                                    taskName = remote.taskName,
+                                    taskDescription = remote.taskDescription,
+                                    status = try { TaskStatus.valueOf(remote.status) } catch (e: Exception) { TaskStatus.TO_DO },
+                                    dueDate = remote.dueDate,
+                                    priority = TaskPriority.fromRemote(remote.priority),
+                                    checklist = remote.checklist,
+                                    labels = remote.labels
+                                )
+                                taskDao.insertTask(entity)
+                            }
                         }
                     }
                     }

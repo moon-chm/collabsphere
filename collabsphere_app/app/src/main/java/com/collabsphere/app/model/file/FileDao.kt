@@ -19,6 +19,14 @@ interface FileDao {
     @Query("SELECT * FROM local_files WHERE workspaceId = :workspaceId")
     fun getallfiles(workspaceId: Int): Flow<List<FileEntity>>
 
+    @Query("""
+        SELECT id, fileName, mimeType
+        FROM local_files
+        WHERE workspaceId = :workspaceId AND fileName LIKE '%' || :query || '%'
+        ORDER BY id DESC LIMIT 50
+    """)
+    suspend fun searchFilesOffline(workspaceId: Int, query: String): List<com.collabsphere.app.dto.search.SearchFileHit>
+
     @Query("DELETE FROM local_files WHERE id = :fileId")
     suspend fun deleteFileById(fileId: Long)
 
@@ -30,4 +38,4 @@ interface FileDao {
         if (deletes.isNotEmpty()) deleteByIds(deletes)
         if (upserts.isNotEmpty()) insertAllFiles(upserts)
     }
-}
+}

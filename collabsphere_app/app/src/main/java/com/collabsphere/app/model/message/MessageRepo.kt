@@ -27,6 +27,9 @@ import com.collabsphere.app.remote.message.MessageApiService
 import com.collabsphere.app.remote.media.MediaApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -145,6 +148,16 @@ class MessageRepo(
     // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
     fun getMessage(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>> =
         messageDao.getMessageForChannels(workspaceId, channelId)
+
+    fun getMessagesPaged(workspaceId: Int, channelId: Int): Flow<PagingData<MessageEntity>> =
+        Pager(
+            config = PagingConfig(
+                pageSize = 30,
+                prefetchDistance = 10,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = { messageDao.getMessagesPaged(workspaceId, channelId) }
+        ).flow
 
     suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Boolean =
         withContext(Dispatchers.IO) {

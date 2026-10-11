@@ -658,13 +658,19 @@ fun AppNavigation(
                     rawWorkspaceName
                 }
                 val workspaceApiService = koinInject<WorkspaceApiService>()
+                val appDb = koinInject<com.collabsphere.app.model.AppDatabase>()
                 val searchViewModel: WorkspaceSearchViewModel = viewModel(
                     viewModelStoreOwner = backStackEntry,
                     key = "workspace_search_$workspaceId",
                     factory = object : ViewModelProvider.Factory {
                         @Suppress("UNCHECKED_CAST")
                         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                            return WorkspaceSearchViewModel(workspaceApiService, workspaceId) as T
+                            return WorkspaceSearchViewModel(
+                                api = workspaceApiService,
+                                workspaceId = workspaceId,
+                                appDb = appDb,
+                                currentUserId = loggedInUserId.toInt()
+                            ) as T
                         }
                     }
                 )

@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.collabsphere.app.model.UserEntity
+import androidx.paging.PagingSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -16,6 +17,17 @@ interface TaskDao {
 
     @Query("SELECT * FROM task WHERE workspaceId = :workspaceId")
     fun getTasksForWorkspace(workspaceId: Int): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM task WHERE workspaceId = :workspaceId ORDER BY id DESC")
+    fun getTasksPaged(workspaceId: Int): PagingSource<Int, TaskEntity>
+
+    @Query("""
+        SELECT id, taskName, status
+        FROM task
+        WHERE workspaceId = :workspaceId AND (taskName LIKE '%' || :query || '%' OR taskDescription LIKE '%' || :query || '%')
+        ORDER BY id DESC LIMIT 50
+    """)
+    suspend fun searchTasksOffline(workspaceId: Int, query: String): List<com.collabsphere.app.dto.search.SearchTaskHit>
 
     @Update
     suspend fun updateTask(task: TaskEntity)

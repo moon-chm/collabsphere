@@ -32,6 +32,21 @@ interface DmDao {
     """)
     suspend fun oldestSyncedDmId(workspaceId: Int, currentUserId: Int, chatPartnerId: Int): Int?
 
+    @Query("""
+        SELECT d.id AS id, 
+               CASE WHEN d.senderId = :currentUserId THEN d.receiverId ELSE d.senderId END AS partnerId,
+               COALESCE(u.userName, '') AS partnerName,
+               d.dm_content AS content,
+               d.timestamp AS timestamp
+        FROM DM d
+        LEFT JOIN users u ON u.id = CASE WHEN d.senderId = :currentUserId THEN d.receiverId ELSE d.senderId END
+        WHERE d.workspaceId = :workspaceId 
+          AND (d.senderId = :currentUserId OR d.receiverId = :currentUserId)
+          AND d.dm_content LIKE '%' || :query || '%'
+        ORDER BY d.timestamp DESC LIMIT 50
+    """)
+    suspend fun searchDmsOffline(workspaceId: Int, currentUserId: Int, query: String): List<com.collabsphere.app.dto.search.SearchDmHit>
+
     @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
     suspend fun updateDmContent(dmId: Int, newContent: String)
 

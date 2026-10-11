@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.Upsert
 import com.collabsphere.app.model.OutboxSyncStatus
+import androidx.paging.PagingSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -21,6 +22,9 @@ interface MessageDao {
 
     @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId ORDER BY id ASC")
     fun getMessageForChannels(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId ORDER BY id ASC")
+    fun getMessagesPaged(workspaceId: Int, channelId: Int): PagingSource<Int, MessageEntity>
 
     @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId AND syncStatus = 'FAILED_PERMANENT'")
     fun getFailedMessages(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>>
@@ -57,6 +61,15 @@ interface MessageDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllMessage(message: List<MessageEntity>)
+
+    @Query("""
+        SELECT m.id AS id, m.channelId AS channelId, COALESCE(c.channelName, '') AS channelName, m.userName AS userName, m.content AS content
+        FROM message m
+        LEFT JOIN channels c ON m.channelId = c.id
+        WHERE m.workspaceId = :workspaceId AND m.content LIKE '%' || :query || '%'
+        ORDER BY m.id DESC LIMIT 50
+    """)
+    suspend fun searchMessagesOffline(workspaceId: Int, query: String): List<com.collabsphere.app.dto.search.SearchMessageHit>
 
     @Upsert
     suspend fun upsertAll(messages: List<MessageEntity>)

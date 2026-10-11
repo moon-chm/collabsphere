@@ -74,8 +74,15 @@ class NotesRepo(
                     apply = { updates ->
                         newestUpdatedAt = listOfNotNull(newestUpdatedAt, updates.maxOfOrNull { it.updatedAt }).maxOrNull()
                         if (updates.isNotEmpty()) {
-                    val upserts = updates.filter { !it.isDeleted }.map { remote ->
-                        NotesEntity(
+                    val upserts = updates.filter { !it.isDeleted }.mapNotNull { remote ->
+                        // Concurrency protection: do not overwrite local entity if user has pending local edit in flight
+                        val hasLocalPendingWork = runCatching {
+                            workManager.getWorkInfosForUniqueWork("NOTES_SYNC_${remote.id}").get()
+                                .any { it.state == androidx.work.WorkInfo.State.ENQUEUED || it.state == androidx.work.WorkInfo.State.RUNNING }
+                        }.getOrDefault(false)
+
+                        if (hasLocalPendingWork) null
+                        else NotesEntity(
                             id = remote.id,
                             userId = remote.userId,
                             workspaceId = remote.workspaceId,
