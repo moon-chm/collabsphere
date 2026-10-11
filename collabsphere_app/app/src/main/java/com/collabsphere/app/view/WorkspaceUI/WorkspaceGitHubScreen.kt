@@ -15,6 +15,9 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.OpenInNew
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -400,23 +403,31 @@ private fun ConnectedView(
     val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp)
+        contentPadding = PaddingValues(bottom = 140.dp)
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
                         text = analytics.repositoryName ?: "GitHub Activity",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2C2A28)
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     when (analytics.syncState) {
                         "SYNCING" -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CollabSpinner(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "Syncing with GitHub…", fontSize = 12.sp, color = Color(0xFF9E8E89))
+                                Text(text = "Syncing with GitHub…", fontSize = 12.sp, color = Muted)
                             }
                         }
                         "RATE_LIMITED" -> {
@@ -430,19 +441,33 @@ private fun ConnectedView(
                                 Text(
                                     text = "Updated ${relativeTime(it)}",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF9E8E89)
+                                    color = Muted
                                 )
                             }
                         }
                     }
                 }
-                TextButton(onClick = onSync, enabled = analytics.syncState != "SYNCING") {
-                    Text("Sync", color = Color(0xFF2C2A28))
-                }
-                analytics.repositoryUrl?.let { url ->
-                    TextButton(onClick = { openInBrowser(context, url) }) {
-                        Text("Open", color = Color(0xFF2C2A28))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    analytics.repositoryUrl?.let { url ->
+                        SkeuoActionIconButton(
+                            onClick = { openInBrowser(context, url) },
+                            icon = Icons.Default.OpenInNew,
+                            contentDescription = "Open in browser",
+                            size = 36.dp,
+                            iconSize = 18.dp,
+                            tint = Ink
+                        )
                     }
+
+                    SkeuoHeaderActionButton(
+                        text = if (analytics.syncState == "SYNCING") "Syncing…" else "Sync",
+                        icon = Icons.Default.Sync,
+                        onClick = onSync
+                    )
                 }
             }
         }

@@ -436,25 +436,14 @@ fun WorkspaceDetailedScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             // Back button
-                            IconButton(
+                            SkeuoActionIconButton(
                                 onClick = onBack,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                            drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
-                                            drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
-                                            drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                        }
-                                    }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Ink,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                size = 36.dp,
+                                iconSize = 18.dp,
+                                tint = Ink
+                            )
 
                             // Workspace Title
                             Text(
@@ -474,7 +463,7 @@ fun WorkspaceDetailedScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Mute / Unmute
-                                IconButton(
+                                SkeuoActionIconButton(
                                     onClick = {
                                         muteScope.launch {
                                             muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
@@ -486,65 +475,32 @@ fun WorkspaceDetailedScreen(
                                                 }
                                         }
                                     },
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
-                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
-                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                            }
-                                        }
-                                ) {
-                                    Icon(
-                                        imageVector = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                                        contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
-                                        tint = if (isWorkspaceMuted) Muted else IndigoStart,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                    icon = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                                    contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
+                                    size = 32.dp,
+                                    iconSize = 16.dp,
+                                    tint = if (isWorkspaceMuted) Muted else IndigoStart
+                                )
 
                                 // Search
-                                IconButton(
+                                SkeuoActionIconButton(
                                     onClick = onSearchClick,
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
-                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
-                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                            }
-                                        }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = "Search workspace",
-                                        tint = IndigoStart,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                    icon = Icons.Default.Search,
+                                    contentDescription = "Search workspace",
+                                    size = 32.dp,
+                                    iconSize = 16.dp,
+                                    tint = IndigoStart
+                                )
 
                                 // Members / Add Member
-                                IconButton(
+                                SkeuoActionIconButton(
                                     onClick = { showMembersDialog = true },
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx()))
-                                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx()))
-                                                drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                            }
-                                        }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.GroupAdd,
-                                        contentDescription = "Add Member",
-                                        tint = CoralStart,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                    icon = Icons.Default.GroupAdd,
+                                    contentDescription = "Add Member",
+                                    size = 32.dp,
+                                    iconSize = 16.dp,
+                                    tint = CoralStart
+                                )
                             }
                         }
                     }
