@@ -153,29 +153,41 @@ fun FileScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // Files count pill
-                Box(
-                    modifier = Modifier
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.12f),
-                                topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(12.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = SurfaceRaised,
-                                cornerRadius = CornerRadius(12.dp.toPx())
-                            )
-                        }
-}
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "${localFiles?.size ?: "…"} files",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = Muted
+                    // Files count pill
+                    Box(
+                        modifier = Modifier
+                            .drawWithCache {
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = ShadowDark.copy(alpha = 0.12f),
+                                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = SurfaceRaised,
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${localFiles?.size ?: "…"} files",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Muted
+                        )
+                    }
+
+                    // Tactile Header Action Button
+                    SkeuoHeaderActionButton(
+                        text = "Upload",
+                        icon = Icons.Default.Add,
+                        onClick = { showUploadDialog = true }
                     )
                 }
             }
@@ -256,13 +268,6 @@ onDrawBehind {
             }
         }
 
-                // Exact Tactile Glass FAB
-        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).padding(bottom = 68.dp)) {
-            SkeuoTactileFab(
-                onClick = { showUploadDialog = true },
-                icon = Icons.Default.Add
-            )
-        }
 
         if (showUploadDialog) {
             UploadFileDialog(

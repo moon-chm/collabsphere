@@ -9,16 +9,24 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -609,6 +617,124 @@ fun SkeuoDebossedIconWell(
     )
 }
 
+/**
+ * Modern Tactile Skeuomorphic Header Action Button.
+ * Conforms to DESIGN.md:
+ * - Base: Linear gradient from CoralStart (#F0633D) to CoralEnd (#D6501F)
+ * - Corner Radii: Radius SM (12-14dp)
+ * - Lighting: Top edge rim light inset 0 1px 1px rgba(255, 255, 255, 0.4), bottom drop shadow
+ * - Typography: Ink white (#FFFFFF), FontWeight.SemiBold
+ * - Press feedback: instant spring scale (0.94) and haptic feedback
+ */
+@Composable
+fun SkeuoHeaderActionButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val haptics = LocalHapticFeedback.current
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "headerBtnScale"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .drawWithCache {
+                val cr = 12.dp.toPx()
+                val shadowOffsetY = if (isPressed) 1.5.dp.toPx() else 3.5.dp.toPx()
+                val shadowAlpha = if (isPressed) 0.18f else 0.35f
+
+                onDrawBehind {
+                    // Soft bottom-right ambient drop shadow
+                    drawRoundRect(
+                        color = CoralEnd.copy(alpha = shadowAlpha),
+                        topLeft = Offset(0f, shadowOffsetY),
+                        size = size,
+                        cornerRadius = CornerRadius(cr)
+                    )
+
+                    // Top-left specular halo
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.35f),
+                        topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
+                        size = size,
+                        cornerRadius = CornerRadius(cr)
+                    )
+
+                    // Tactile Primary Coral linear gradient
+                    drawRoundRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(CoralStart, CoralEnd),
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, size.height)
+                        ),
+                        cornerRadius = CornerRadius(cr)
+                    )
+
+                    // Top edge internal rim highlight
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.45f),
+                                Color.White.copy(alpha = 0.10f),
+                                Color.Transparent
+                            ),
+                            startY = 0f,
+                            endY = 12.dp.toPx()
+                        ),
+                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+                        cornerRadius = CornerRadius(cr),
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+                }
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.5.sp,
+                    letterSpacing = 0.1.sp
+                ),
+                color = Color.White
+            )
+        }
+    }
+}
 
 @Composable
 fun SkeuoTactileFab(

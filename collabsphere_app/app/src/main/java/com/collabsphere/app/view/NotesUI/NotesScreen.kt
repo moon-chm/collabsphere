@@ -94,29 +94,41 @@ fun NotesScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // Notes count pill
-                Box(
-                    modifier = Modifier
-                        .drawWithCache {
-                            onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.12f),
-                                topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(12.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = SurfaceRaised,
-                                cornerRadius = CornerRadius(12.dp.toPx())
-                            )
-                                                    }
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "${notes?.size ?: "…"} notes",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = Muted
+                    // Notes count pill
+                    Box(
+                        modifier = Modifier
+                            .drawWithCache {
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = ShadowDark.copy(alpha = 0.12f),
+                                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                                        size = Size(size.width, size.height),
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                    drawRoundRect(
+                                        color = SurfaceRaised,
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${notes?.size ?: "…"} notes",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = Muted
+                        )
+                    }
+
+                    // Tactile Header Action Button
+                    SkeuoHeaderActionButton(
+                        text = "New Note",
+                        icon = Icons.Default.Add,
+                        onClick = { showCreateDialog = true }
                     )
                 }
             }
@@ -166,13 +178,6 @@ fun NotesScreen(
             }
         }
 
-                // Exact Tactile Glass FAB
-        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).padding(bottom = 68.dp)) {
-            SkeuoTactileFab(
-                onClick = { showCreateDialog = true },
-                icon = Icons.Default.Add
-            )
-        }
 
         SnackbarHost(
             hostState = snackbarHostState,
