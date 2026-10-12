@@ -2045,7 +2045,6 @@ fun DMScreen(
                                             drawCircle(color = CoralStart.copy(alpha = shadowAlpha * sendAlpha), radius = size.minDimension / 2f, center = Offset(center.x, center.y + shadowOffset.toPx()))
                                             drawCircle(color = Color.White.copy(alpha = 0.30f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
                                             drawCircle(brush = Brush.radialGradient(colors = listOf(CoralStart.copy(alpha = sendAlpha), CoralEnd.copy(alpha = sendAlpha)), center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()), radius = size.minDimension / 2f))
-                                            drawCircle(color = Color.White.copy(alpha = 0.35f), radius = 7.dp.toPx(), center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx()))
                                             }
                                         }
                                         .clip(CircleShape)

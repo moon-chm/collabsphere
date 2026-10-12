@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -22,6 +24,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -305,83 +309,119 @@ fun SkeuoChannelItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateChannelDialog(
+fun CreateChannelBottomSheet(
     viewModel: ChannelViewModel,
     onDismiss: () -> Unit
 ) {
     val name by viewModel.channelName.collectAsStateWithLifecycle()
     val description by viewModel.description.collectAsStateWithLifecycle()
+    val isCreatingChannel by viewModel.isCreatingChannel.collectAsStateWithLifecycle()
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = SurfaceRaised,
+        scrimColor = Color.Black.copy(alpha = 0.45f),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Muted.copy(alpha = 0.4f))
+            )
+        },
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawWithCache {
-                    onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    // Specular hairline highlight hugging rounded contour
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.75f),
-                                Color.White.copy(alpha = 0.15f),
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = 24.dp.toPx()
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(24.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                                    }
-                }
-                .padding(24.dp)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Column(
+            // Header
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(IndigoStart, IndigoEnd)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tag,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Create channel",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            ),
+                            color = Ink
+                        )
+                        Text(
+                            text = "Channels are where your team communicates",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDismiss,
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Surface),
-                    contentAlignment = Alignment.Center
+                        .background(Surface)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Tag,
-                        contentDescription = null,
-                        tint = IndigoStart,
-                        modifier = Modifier.size(26.dp)
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Muted,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
+            }
 
+            // SECTION: CHANNEL DETAILS
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Create new channel",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
+                    text = "CHANNEL DETAILS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Muted
                 )
 
-                // Debossed Name Field
+                // Debossed Name Field with # prefix
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -390,65 +430,74 @@ fun CreateChannelDialog(
                         .clip(RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    BasicTextField(
-                        value = name,
-                        onValueChange = { viewModel.onChannelNamechange(it) },
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillMaxSize()
                             .padding(horizontal = 14.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
-                                if (name.isEmpty()) {
-                                    Text(
-                                        text = "Channel name (e.g. announcements)",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
-                                    )
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tag,
+                            contentDescription = null,
+                            tint = IndigoStart,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { 
+                                // Clean spaces into hyphens or keep clean channel name
+                                val formatted = it.lowercase().replace(" ", "-")
+                                viewModel.onChannelNamechange(formatted) 
+                            },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontWeight = FontWeight.SemiBold),
+                            cursorBrush = SolidColor(IndigoStart),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (name.isEmpty()) {
+                                        Text(
+                                            text = "e.g. announcements, general",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Ink.copy(alpha = 0.45f)
+                                        )
+                                    }
+                                    inner()
                                 }
-                                inner()
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 // Debossed Description Field
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(72.dp)
                         .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
                         .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.TopStart
                 ) {
                     BasicTextField(
                         value = description,
                         onValueChange = { viewModel.onChannelDescriptionChange(it) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        singleLine = true,
+                            .padding(14.dp),
+                        singleLine = false,
+                        maxLines = 3,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
+                        cursorBrush = SolidColor(IndigoStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                if (name.trim().isNotEmpty()) {
-                                    viewModel.onCreateChannel()
-                                    onDismiss()
-                                }
-                            }
-                        ),
                         decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
+                            Box(contentAlignment = Alignment.TopStart) {
                                 if (description.isEmpty()) {
                                     Text(
-                                        text = "Description (optional)",
+                                        text = "What is this channel about? (optional)",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
+                                        color = Ink.copy(alpha = 0.45f)
                                     )
                                 }
                                 inner()
@@ -456,69 +505,122 @@ fun CreateChannelDialog(
                         }
                     )
                 }
+            }
 
+            // INFO CARD: GUIDELINES
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Surface)
+                    .padding(12.dp)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = IndigoStart,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "All workspace members will automatically have access to this channel.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted
+                    )
+                }
+            }
 
-                    val canCreate = name.trim().isNotEmpty()
-                    val createAlpha = if (canCreate) 1f else 0.72f
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .drawWithCache {
-                                onDrawBehind {
+            Spacer(Modifier.height(4.dp))
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Surface)
+                        .clickable(enabled = !isCreatingChannel, onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Cancel",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = Muted
+                    )
+                }
+
+                val canCreate = name.trim().isNotEmpty() && !isCreatingChannel
+                val createAlpha = if (canCreate) 1f else 0.65f
+                Box(
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(48.dp)
+                        .drawWithCache {
+                            onDrawBehind {
                                 drawRoundRect(
-                                    color = CoralStart.copy(alpha = 0.25f * createAlpha),
-                                    topLeft = Offset(0f, 2.dp.toPx()),
+                                    color = IndigoStart.copy(alpha = 0.28f * createAlpha),
+                                    topLeft = Offset(0f, 3.dp.toPx()),
                                     size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
+                                    cornerRadius = CornerRadius(14.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            CoralStart.copy(alpha = createAlpha),
-                                            CoralEnd.copy(alpha = createAlpha)
+                                            IndigoStart.copy(alpha = createAlpha),
+                                            IndigoEnd.copy(alpha = createAlpha)
                                         ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
+                                    cornerRadius = CornerRadius(14.dp.toPx())
                                 )
-                                                            }
                             }
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                if (name.trim().isNotEmpty()) {
-                                    viewModel.onCreateChannel()
-                                    onDismiss()
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+                        }
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(enabled = canCreate) {
+                            if (canCreate) {
+                                viewModel.onCreateChannel()
+                                onDismiss()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCreatingChannel) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
                         Text(
-                            text = "Create",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            text = "Create Channel",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            ),
+                            color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
                         )
                     }
                 }
             }
         }
     }
+}
+
+// Backward compatibility alias
+@Composable
+fun CreateChannelDialog(
+    viewModel: ChannelViewModel,
+    onDismiss: () -> Unit
+) {
+    CreateChannelBottomSheet(viewModel = viewModel, onDismiss = onDismiss)
 }
 
 @Composable

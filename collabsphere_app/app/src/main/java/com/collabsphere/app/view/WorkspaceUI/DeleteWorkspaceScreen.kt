@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.FolderDelete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -91,7 +92,13 @@ fun DeleteWorkspaceScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {},
+                title = {
+                    Text(
+                        text = "Delete Workspace",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Destructive
+                    )
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -188,11 +195,6 @@ fun DeleteWorkspaceScreen(
                                         radius = size.minDimension / 2f
                                     )
                                 )
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.35f),
-                                    radius = 8.dp.toPx(),
-                                    center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
-                                )
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -222,7 +224,86 @@ fun DeleteWorkspaceScreen(
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Warning Info Card — lists what will be deleted
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawWithCache {
+                            onDrawBehind {
+                                // Bottom-right shadow
+                                drawRoundRect(
+                                    color = ShadowDark.copy(alpha = 0.18f),
+                                    topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
+                                    size = Size(size.width, size.height),
+                                    cornerRadius = CornerRadius(20.dp.toPx())
+                                )
+                                // Top-left highlight
+                                drawRoundRect(
+                                    color = ShadowLight.copy(alpha = 0.85f),
+                                    topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
+                                    size = Size(size.width, size.height),
+                                    cornerRadius = CornerRadius(20.dp.toPx())
+                                )
+                                drawRoundRect(
+                                    color = SurfaceRaised,
+                                    cornerRadius = CornerRadius(20.dp.toPx())
+                                )
+                                // 4dp destructive red left accent border
+                                drawRoundRect(
+                                    color = Destructive,
+                                    topLeft = Offset(0f, 8.dp.toPx()),
+                                    size = Size(4.dp.toPx(), size.height - 16.dp.toPx()),
+                                    cornerRadius = CornerRadius(2.dp.toPx())
+                                )
+                            }
+                        }
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "This will permanently delete:",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = Ink
+                        )
+                        listOf(
+                            "All messages and channels",
+                            "All files and attachments",
+                            "All tasks and assignments",
+                            "All workspace members"
+                        ).forEach { item ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Destructive,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = item,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Ink
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Make sure you have backed up any important data.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Tactile Form Card
                 Box(
@@ -238,7 +319,8 @@ fun DeleteWorkspaceScreen(
                     ) {
                         DeleteDebossedField(
                             value = name,
-                            onValueChange = { viewModel.onNameChange(it) },
+                            onValueChange = { },
+                            readOnly = true,
                             label = "Workspace name",
                             placeholder = "Workspace name",
                             leadingIcon = {
@@ -247,6 +329,14 @@ fun DeleteWorkspaceScreen(
                                     contentDescription = null,
                                     tint = Destructive,
                                     modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    tint = Muted,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         )
@@ -409,6 +499,7 @@ private fun DeleteDebossedField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
+    readOnly: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
     onImeAction: () -> Unit = {},
@@ -445,6 +536,7 @@ private fun DeleteDebossedField(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
+                    readOnly = readOnly,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),

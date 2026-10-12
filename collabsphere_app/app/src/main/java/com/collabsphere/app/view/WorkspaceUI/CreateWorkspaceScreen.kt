@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddBusiness
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
@@ -85,7 +86,13 @@ fun CreateWorkspaceScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {},
+                title = {
+                    Text(
+                        text = "Create Workspace",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Ink
+                    )
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -181,11 +188,6 @@ fun CreateWorkspaceScreen(
                                         center = Offset(center.x - 5.dp.toPx(), center.y - 5.dp.toPx()),
                                         radius = size.minDimension / 2f
                                     )
-                                )
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.35f),
-                                    radius = 8.dp.toPx(),
-                                    center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
                                 )
                                 }
                             },
@@ -287,6 +289,25 @@ fun CreateWorkspaceScreen(
                                 }
                             }
                         )
+
+                        // Info note below password
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = Muted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Password is required to join this workspace",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Muted
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(6.dp))
 

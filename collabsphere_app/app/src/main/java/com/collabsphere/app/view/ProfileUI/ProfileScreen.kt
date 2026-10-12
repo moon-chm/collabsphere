@@ -513,11 +513,6 @@ onDrawBehind {
                                                 radius = size.minDimension / 2f
                                             )
                                         )
-                                        drawCircle(
-                                            color = Color.White.copy(alpha = 0.35f),
-                                            radius = 12.dp.toPx(),
-                                            center = Offset(center.x - 14.dp.toPx(), center.y - 14.dp.toPx())
-                                        )
                                     }
 },
                                 contentAlignment = Alignment.Center
@@ -1323,67 +1318,7 @@ onDrawBehind {
                     }
                 }
 
-                // ── Danger zone ──────────────────────────────────────────────────
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.24f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                        }
-}
-                        .padding(20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "Danger zone",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Destructive
-                        )
-                        Text(
-                            text = "Deleting your account permanently removes your profile, messages, files, and workspace memberships. This can't be undone.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Muted
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { onOpenDeleteDialog() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = Destructive,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Delete account",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Destructive
-                            )
-                        }
-                    }
-                }
-
-                val isSubmissionReady = userName.isNotBlank() &&
+val isSubmissionReady = userName.isNotBlank() &&
                         (!changePasswordChecked || (currentPassword.isNotBlank() && newPassword.isNotBlank()))
 
                 // Tactile Update Button
@@ -1481,7 +1416,67 @@ onDrawBehind {
                     }
                 }
 
-                // Tactile Logout Button
+// ── Danger zone ──────────────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawWithCache {
+onDrawBehind {
+                            drawRoundRect(
+                                color = ShadowDark.copy(alpha = 0.24f),
+                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(
+                                color = ShadowLight.copy(alpha = 0.85f),
+                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
+                                size = Size(size.width, size.height),
+                                cornerRadius = CornerRadius(24.dp.toPx())
+                            )
+                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
+                        }
+}
+                        .padding(20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Danger zone",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Destructive
+                        )
+                        Text(
+                            text = "Deleting your account permanently removes your profile, messages, files, and workspace memberships. This can't be undone.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Muted
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onOpenDeleteDialog() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = Destructive,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Delete account",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Destructive
+                            )
+                        }
+                    }
+                }
+
+                                // Tactile Logout Button
                 var logoutPressed by remember { mutableStateOf(false) }
                 val logoutScale by animateFloatAsState(
                     targetValue = if (logoutPressed) 0.96f else 1f,

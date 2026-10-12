@@ -99,12 +99,6 @@ fun WorkspaceAction(
                                         radius = size.minDimension / 2f
                                     )
                                 )
-                                // Specular light highlight
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.38f),
-                                    radius = 10.dp.toPx(),
-                                    center = Offset(center.x - 12.dp.toPx(), center.y - 12.dp.toPx())
-                                )
                                 }
                             },
                         contentAlignment = Alignment.Center

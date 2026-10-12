@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AssignmentInd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -121,79 +122,18 @@ fun TaskScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (selectedViewMode == 0) "Kanban board" else "Team votes",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    // View Toggle Pills
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (selectedViewMode == 0) SurfaceRaised else Color.Transparent)
-                                .clickable { selectedViewMode = 0 }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "Board (${tasks.size})",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (selectedViewMode == 0) Ink else Muted
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (selectedViewMode == 1) SurfaceRaised else Color.Transparent)
-                                .clickable { selectedViewMode = 1 }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "Votes",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = if (selectedViewMode == 1) Ink else Muted
-                                )
-                                if (pendingProposals.isNotEmpty()) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clip(CircleShape)
-                                            .background(Amber),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "${pendingProposals.size}",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = if (selectedViewMode == 0) "Kanban board" else "Team votes",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
 
                 // Tactile Header Action Button
                 SkeuoHeaderActionButton(
@@ -201,6 +141,66 @@ fun TaskScreen(
                     icon = Icons.Default.Add,
                     onClick = { showCreateDialog = true }
                 )
+            }
+
+            // View Toggle Pills Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selectedViewMode == 0) SurfaceRaised else Color.Transparent)
+                        .clickable { selectedViewMode = 0 }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Board (${tasks.size})",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (selectedViewMode == 0) Ink else Muted
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selectedViewMode == 1) SurfaceRaised else Color.Transparent)
+                        .clickable { selectedViewMode = 1 }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Votes",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (selectedViewMode == 1) Ink else Muted
+                        )
+                        if (pendingProposals.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Amber),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${pendingProposals.size}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             if (selectedViewMode == 1) {
@@ -664,7 +664,7 @@ onDrawBehind {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateTaskDialog(
+fun CreateTaskBottomSheet(
     viewModel: TaskViewModel,
     members: List<UserEntity>,
     onDismiss: () -> Unit,
@@ -681,59 +681,106 @@ fun CreateTaskDialog(
     var dropdownExpanded by remember { mutableStateOf(false) }
     val selectedMemberName = members.find { it.id == assignedUserId }?.userName ?: "Unassigned"
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = SurfaceRaised,
+        scrimColor = Color.Black.copy(alpha = 0.45f),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Muted.copy(alpha = 0.4f))
+            )
+        },
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawWithCache {
-onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    // Specular hairline highlight hugging rounded contour
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.75f),
-                                Color.White.copy(alpha = 0.15f),
-                                Color.Transparent
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+                .imePadding()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            // Header: Icon + Title & Subtitle + Close button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(CoralStart, CoralEnd)
+                                )
                             ),
-                            startY = 0f,
-                            endY = 24.dp.toPx()
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(24.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Propose new task",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            ),
+                            color = Ink
+                        )
+                        Text(
+                            text = "Team proposal for voting & tracking",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Surface)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Muted,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-}
-                .padding(24.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            }
+
+            // SECTION: TASK DETAILS
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Propose new task",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
+                    text = "TASK DETAILS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Muted
                 )
 
                 // Debossed Name Field
@@ -752,16 +799,16 @@ onDrawBehind {
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp),
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontWeight = FontWeight.Medium),
                         cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (name.isEmpty()) {
                                     Text(
-                                        text = "Task name",
+                                        text = "What needs to be done?",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
+                                        color = Ink.copy(alpha = 0.45f)
                                     )
                                 }
                                 inner()
@@ -774,28 +821,29 @@ onDrawBehind {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(72.dp)
                         .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
                         .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.TopStart
                 ) {
                     BasicTextField(
                         value = description,
                         onValueChange = { viewModel.onTaskDescriptionChange(it) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        singleLine = true,
+                            .padding(14.dp),
+                        singleLine = false,
+                        maxLines = 3,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
                         cursorBrush = SolidColor(CoralStart),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
+                            Box(contentAlignment = Alignment.TopStart) {
                                 if (description.isEmpty()) {
                                     Text(
-                                        text = "Description (optional)",
+                                        text = "Add optional details or acceptance criteria...",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
+                                        color = Ink.copy(alpha = 0.45f)
                                     )
                                 }
                                 inner()
@@ -803,30 +851,78 @@ onDrawBehind {
                         }
                     )
                 }
+            }
+
+            // SECTION: PRIORITY & SCHEDULING
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "PRIORITY & SCHEDULING",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Muted
+                )
 
                 PrioritySelector(selected = priority, onSelect = viewModel::onPriorityChange)
 
                 DueDateSelector(dueDate = dueDate, onDueDateChange = viewModel::onDueDateChange)
+            }
 
-                LabelEditor(labels = labels, onLabelsChange = viewModel::onLabelsChange)
+            // SECTION: ASSIGN TO
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "ASSIGN TO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Muted
+                )
 
-                // Assignee selection row
-                ExposedDropdownMenuBox(
-                    expanded = dropdownExpanded,
-                    onExpandedChange = { dropdownExpanded = !dropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedMemberName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Assign member") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
+                Box {
+                    Box(
                         modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                    ExposedDropdownMenu(
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { dropdownExpanded = true }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = if (assignedUserId != null) CoralStart else Muted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = selectedMemberName,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (assignedUserId != null) FontWeight.SemiBold else FontWeight.Normal
+                                    ),
+                                    color = if (assignedUserId != null) Ink else Muted
+                                )
+                            }
+                            Text(
+                                text = "▼",
+                                fontSize = 10.sp,
+                                color = Muted
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
                         expanded = dropdownExpanded,
                         onDismissRequest = { dropdownExpanded = false },
                         modifier = Modifier.background(SurfaceRaised)
@@ -849,36 +945,58 @@ onDrawBehind {
                         }
                     }
                 }
+            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // SECTION: LABELS
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "LABELS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    ),
+                    color = Muted
+                )
+
+                LabelEditor(labels = labels, onLabelsChange = viewModel::onLabelsChange)
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Surface)
+                        .clickable(enabled = !isCreatingTask, onClick = onDismiss),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(enabled = !isCreatingTask, onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    }
+                    Text(
+                        text = "Cancel",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = Muted
+                    )
+                }
 
-                    val canCreate = name.trim().isNotEmpty() && !isCreatingTask
-                    val createAlpha = if (canCreate) 1f else 0.72f
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .drawWithCache {
-onDrawBehind {
+                val canCreate = name.trim().isNotEmpty() && !isCreatingTask
+                val createAlpha = if (canCreate) 1f else 0.65f
+                Box(
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(48.dp)
+                        .drawWithCache {
+                            onDrawBehind {
                                 drawRoundRect(
-                                    color = CoralStart.copy(alpha = 0.25f * createAlpha),
-                                    topLeft = Offset(0f, 2.dp.toPx()),
+                                    color = CoralStart.copy(alpha = 0.28f * createAlpha),
+                                    topLeft = Offset(0f, 3.dp.toPx()),
                                     size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
+                                    cornerRadius = CornerRadius(14.dp.toPx())
                                 )
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
@@ -889,59 +1007,77 @@ onDrawBehind {
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
                                     ),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
+                                    cornerRadius = CornerRadius(14.dp.toPx())
                                 )
                             }
-}
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(enabled = canCreate) {
-                                if (canCreate) {
-                                    if (taskVoteViewModel != null) {
-                                        taskVoteViewModel.submitCreateProposal(
-                                            workspaceId = viewModel.loggedWorkspaceId,
-                                            taskName = name.trim(),
-                                            taskDescription = description.trim(),
-                                            assignedToUserId = assignedUserId,
-                                            priority = priority.name,
-                                            dueDate = dueDate,
-                                            labels = labels
-                                        ) { success ->
-                                            if (success) {
-                                                AppToast.show("Task proposal submitted for team vote")
-                                                viewModel.onTaskNameChange("")
-                                                viewModel.onTaskDescriptionChange("")
-                                                viewModel.onAssigneeChange(null)
-                                                viewModel.onDueDateChange(null)
-                                                viewModel.onPriorityChange(com.collabsphere.app.model.task.TaskPriority.MEDIUM)
-                                                viewModel.onLabelsChange(emptyList())
-                                                onDismiss()
-                                            }
-                                        }
-                                    } else {
-                                        viewModel.onCreateTask(onCreated = onDismiss)
-                                    }
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isCreatingTask) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = "Propose",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
-                            )
                         }
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(enabled = canCreate) {
+                            if (canCreate) {
+                                if (taskVoteViewModel != null) {
+                                    taskVoteViewModel.submitCreateProposal(
+                                        workspaceId = viewModel.loggedWorkspaceId,
+                                        taskName = name.trim(),
+                                        taskDescription = description.trim(),
+                                        assignedToUserId = assignedUserId,
+                                        priority = priority.name,
+                                        dueDate = dueDate,
+                                        labels = labels
+                                    ) { success ->
+                                        if (success) {
+                                            AppToast.show("Task proposal submitted for team vote")
+                                            viewModel.onTaskNameChange("")
+                                            viewModel.onTaskDescriptionChange("")
+                                            viewModel.onAssigneeChange(null)
+                                            viewModel.onDueDateChange(null)
+                                            viewModel.onPriorityChange(com.collabsphere.app.model.task.TaskPriority.MEDIUM)
+                                            viewModel.onLabelsChange(emptyList())
+                                            onDismiss()
+                                        }
+                                    }
+                                } else {
+                                    viewModel.onCreateTask(onCreated = onDismiss)
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isCreatingTask) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "Propose Task",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            ),
+                            color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
+                        )
                     }
                 }
             }
         }
     }
+}
+
+// Backward compatibility alias
+@Composable
+fun CreateTaskDialog(
+    viewModel: TaskViewModel,
+    members: List<UserEntity>,
+    onDismiss: () -> Unit,
+    taskVoteViewModel: TaskVoteViewModel? = null
+) {
+    CreateTaskBottomSheet(
+        viewModel = viewModel,
+        members = members,
+        onDismiss = onDismiss,
+        taskVoteViewModel = taskVoteViewModel
+    )
 }
 
 @Composable

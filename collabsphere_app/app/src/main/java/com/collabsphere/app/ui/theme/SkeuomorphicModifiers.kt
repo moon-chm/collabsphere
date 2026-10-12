@@ -737,7 +737,9 @@ fun SkeuoHeaderActionButton(
                     fontSize = 12.5.sp,
                     letterSpacing = 0.1.sp
                 ),
-                color = Color.White
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
@@ -842,24 +844,6 @@ fun SkeuoTactileFab(
                         style = Stroke(width = 1.dp.toPx())
                     )
                     
-                    drawContext.canvas.save()
-                    val clipPath = androidx.compose.ui.graphics.Path().apply {
-                        addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height / 2f, CornerRadius(cr, cr)))
-                    }
-                    drawContext.canvas.clipPath(clipPath)
-                    
-                    val sheenBrush = Brush.verticalGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.35f), Color.Transparent),
-                        startY = 0f,
-                        endY = size.height / 2f
-                    )
-                    drawRoundRect(
-                        brush = sheenBrush,
-                        size = size,
-                        cornerRadius = CornerRadius(cr)
-                    )
-                    drawContext.canvas.restore()
-
                     if (isPressed) {
                         drawIntoCanvas { canvas ->
                             canvas.save()

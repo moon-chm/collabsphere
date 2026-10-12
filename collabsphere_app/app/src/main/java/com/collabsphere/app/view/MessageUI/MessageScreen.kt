@@ -529,12 +529,6 @@ fun MessageScreen(
                                         radius = size.minDimension / 2f
                                     )
                                 )
-                                // Specular spot
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.35f),
-                                    radius = 7.dp.toPx(),
-                                    center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx())
-                                )
                                                             }
                             }
                             .clip(CircleShape)
