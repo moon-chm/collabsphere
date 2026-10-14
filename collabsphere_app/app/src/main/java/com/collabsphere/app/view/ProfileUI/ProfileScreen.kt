@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,7 +85,8 @@ fun ProfileRoute(
     onProfileUpdated: (String) -> Unit,
     onAvatarUpdated: (String) -> Unit = {},
     onNavigateToBlockedUsers: () -> Unit = {},
-    onLogoutComplete: () -> Unit
+    onLogoutComplete: () -> Unit,
+    initialTab: ProfileTab = ProfileTab.PROFILE
 ) {
     val updatedName by viewModel.updatedUserName.collectAsState()
     val currentPassword by viewModel.currentPassword.collectAsState()
@@ -204,7 +206,8 @@ fun ProfileRoute(
         onNavigateToBlockedUsers = onNavigateToBlockedUsers,
         careerContent = {
             CareerSection(userId = viewModel.loggedInUserId, snackbarHostState = snackbarHostState)
-        }
+        },
+        initialTab = initialTab
     )
 }
 
@@ -266,9 +269,11 @@ fun ProfileScreen(
     onProfileVisibilityChange: (String) -> Unit,
     onSavePrivacySettings: () -> Unit,
     onNavigateToBlockedUsers: () -> Unit,
-    /** Career progression and achievements, shown between the profile header and the email card. */
-    careerContent: @Composable () -> Unit = {}
+    /** Career progression and achievements (the Career tab). */
+    careerContent: @Composable () -> Unit = {},
+    initialTab: ProfileTab = ProfileTab.PROFILE
 ) {
+    var selectedTab by rememberSaveable { mutableStateOf(initialTab) }
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
 
@@ -706,6 +711,9 @@ onDrawBehind {
                     }
                 }
 
+                ProfileTabRow(selected = selectedTab, onSelect = { selectedTab = it })
+
+                if (selectedTab == ProfileTab.PROFILE) {
                 // Tactile Edit Card
                 Box(
                     modifier = Modifier
@@ -1066,8 +1074,11 @@ onDrawBehind {
                     }
                 }
 
-                careerContent()
+                }
 
+                if (selectedTab == ProfileTab.CAREER) careerContent()
+
+                if (selectedTab == ProfileTab.SETTINGS) {
                 // ── Email card ──────────────────────────────────────────────────
                 Box(
                     modifier = Modifier
@@ -1325,6 +1336,9 @@ onDrawBehind {
                     }
                 }
 
+                }
+
+                if (selectedTab == ProfileTab.PROFILE) {
 val isSubmissionReady = userName.isNotBlank() &&
                         (!changePasswordChecked || (currentPassword.isNotBlank() && newPassword.isNotBlank()))
 
@@ -1423,6 +1437,9 @@ onDrawBehind {
                     }
                 }
 
+                }
+
+                if (selectedTab == ProfileTab.SETTINGS) {
 // ── Danger zone ──────────────────────────────────────────────────
                 Box(
                     modifier = Modifier
@@ -1552,6 +1569,7 @@ onDrawBehind {
                             color = Destructive
                         )
                     }
+                }
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))

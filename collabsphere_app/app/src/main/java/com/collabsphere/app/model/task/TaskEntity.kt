@@ -9,8 +9,15 @@ import com.collabsphere.app.dto.task.ChecklistItem
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.workspace.WorkspaceEntity
 
-enum class TaskStatus {
-    TO_DO, IN_PROGRESS, DONE
+/** [remote] is the server's spelling; Room keeps storing the enum name, so local data is unchanged. */
+enum class TaskStatus(val remote: String) {
+    TO_DO("TODO"), IN_PROGRESS("IN_PROGRESS"), DONE("DONE");
+
+    companion object {
+        /** Accepts the server value or a legacy enum name (older queued sync work stored names). */
+        fun fromRemote(value: String?): TaskStatus =
+            entries.firstOrNull { it.remote == value || it.name == value } ?: TO_DO
+    }
 }
 
 enum class TaskPriority {

@@ -83,7 +83,9 @@ class ProfileScreenEdgeCaseTest {
             }
         }
 
-        // Click the log out button
+        // Log out lives in the Settings tab; the Profile tab is shown first.
+        compose.onNodeWithText("Log out").assertDoesNotExist()
+        compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Log out").performClick()
 
         // Verify view model method is called

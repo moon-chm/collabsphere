@@ -28,7 +28,7 @@ internal fun Route.tasksRoutes() {
         post {
             try {
                 val actingUserId = call.authenticatedUserId()
-                val request = call.receive<TaskRequest>()
+                val request = call.receive<TaskRequest>().withCanonicalStatus()
 
                 if (request.taskName.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Task name cannot be blank")
                 if (request.taskName.length > 255) return@post call.respond(HttpStatusCode.BadRequest, "Task name too long")
@@ -218,7 +218,7 @@ internal fun Route.tasksRoutes() {
                 ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing or invalid taskId")
             val actingUserId = call.authenticatedUserId()
             val request = try {
-                call.receive<TaskRequest>()
+                call.receive<TaskRequest>().withCanonicalStatus()
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.BadRequest, "Invalid request body")
@@ -460,3 +460,10 @@ internal fun Route.tasksRoutes() {
 
 /** A task request rejected for a reason the client can fix (reported as 400). */
 private class TaskValidationException(message: String) : Exception(message)
+
+/**
+ * Android builds before this fix sent the enum name "TO_DO" instead of "TODO", so moving a task back
+ * to To Do was rejected. Accept that spelling and store the canonical value, so installed apps work.
+ */
+private fun TaskRequest.withCanonicalStatus(): TaskRequest =
+    if (status == "TO_DO") copy(status = "TODO") else this

@@ -323,8 +323,8 @@ fun AppNavigation(
                     onNotificationClick = { notification ->
                         val workspaceId = notification.workspaceId
                         if (notification.type == "LEVEL_UP" || notification.type == "BADGE_UNLOCKED") {
-                            // Career progression lives on the profile screen.
-                            navController.navigate("profile")
+                            // Career progression lives on the profile screen's Career tab.
+                            navController.navigate("profile?tab=career")
                         } else if (workspaceId != null) {
                             val wsName = dashboardViewModel.workspaces.value
                                 ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
@@ -359,7 +359,11 @@ fun AppNavigation(
                 )
             }
 
-            composable("profile") {
+            composable(
+                route = "profile?tab={tab}",
+                arguments = listOf(navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null })
+            ) { profileEntry ->
+                val profileInitialTab = com.collabsphere.app.view.ProfileUI.ProfileTab.fromArg(profileEntry.arguments?.getString("tab"))
                 val userPreferences = koinInject<com.collabsphere.app.UserPreferences>()
                 val sessionManager = koinInject<com.collabsphere.app.SessionManager>()
                 val userRepo = koinInject<UserRepo>()
@@ -397,7 +401,8 @@ fun AppNavigation(
                         // (FCM unregister, WorkManager, DB, in-memory state).
                         // dashboardViewModel.logout() ran the same sequence a second time.
                         loginViewModel.logout()
-                    }
+                    },
+                    initialTab = profileInitialTab
                 )
             }
 

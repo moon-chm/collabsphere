@@ -69,7 +69,8 @@ class TaskSyncWorker(
             val workspaceIdParam = inputData.getInt("WORKSPACE_ID", 0)
             val taskName = inputData.getString("TASK_NAME") ?: ""
             val taskDescription = inputData.getString("TASK_DESCRIPTION") ?: ""
-            val status = inputData.getString("STATUS") ?: TaskStatus.TO_DO.name
+            // Normalised to the server spelling; also repairs work queued by older builds that stored "TO_DO".
+            val status = TaskStatus.fromRemote(inputData.getString("STATUS")).remote
 
             if (workspaceIdParam == 0) return@withContext Result.failure()
 
@@ -95,7 +96,7 @@ class TaskSyncWorker(
 
             if (actionType == "UPDATE") {
                 apiService.updateTask(taskId, request)
-                if (status == TaskStatus.DONE.name) com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
+                if (status == TaskStatus.DONE.remote) com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
             } else {
                 val remoteResponse = apiService.createTask(createdByUserId, request)
                 if (taskId != remoteResponse.id) {

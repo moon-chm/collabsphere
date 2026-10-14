@@ -20,6 +20,11 @@ dependencies {
     val exposed_version = "0.50.0"
 
     implementation(platform("io.ktor:ktor-bom:$ktor_version"))
+    // Security patch pins for transitive dependencies (same major/minor lines as resolved before):
+    // Netty via Ktor, Jackson via the Google client libraries, Micrometer via Ktor metrics.
+    implementation(platform("io.netty:netty-bom:4.2.19.Final"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.21.7"))
+    implementation(platform("io.micrometer:micrometer-bom:1.16.7"))
     implementation("io.ktor:ktor-server-websockets-jvm:${ktor_version}")
     implementation(ktorLibs.server.config.yaml)
     implementation(ktorLibs.server.core)
@@ -29,7 +34,7 @@ dependencies {
     implementation("io.ktor:ktor-server-content-negotiation")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
 
-    implementation("org.postgresql:postgresql:42.7.3")
+    implementation("org.postgresql:postgresql:42.7.14")
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
@@ -38,8 +43,8 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jwt:${ktor_version}")
     implementation("io.ktor:ktor-server-status-pages:${ktor_version}")
     implementation("at.favre.lib:bcrypt:0.10.2")
-    implementation("com.google.firebase:firebase-admin:9.2.0")
-    implementation("com.sun.mail:jakarta.mail:2.0.1")
+    implementation("com.google.firebase:firebase-admin:9.11.0")
+    implementation("com.sun.mail:jakarta.mail:2.0.2")
     implementation("io.ktor:ktor-client-core:${ktor_version}")
     implementation("io.ktor:ktor-client-cio:${ktor_version}")
     implementation("io.ktor:ktor-client-content-negotiation:${ktor_version}")
@@ -51,7 +56,8 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging:${ktor_version}")
     // Micrometer metrics exposed as Prometheus scrape endpoint
     implementation("io.ktor:ktor-server-metrics-micrometer:${ktor_version}")
-    implementation("io.micrometer:micrometer-registry-prometheus:1.12.5")
+    // The pre-1.13 Prometheus registry API (io.micrometer.prometheus), versioned by the micrometer BOM above.
+    implementation("io.micrometer:micrometer-registry-prometheus-simpleclient")
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
     implementation("io.ktor:ktor-server-rate-limit:${ktor_version}")

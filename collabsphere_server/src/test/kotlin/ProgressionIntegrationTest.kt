@@ -146,6 +146,20 @@ class ProgressionIntegrationTest {
     }
 
     @Test
+    fun `older apps can move a task back to to-do with the legacy status spelling`() = testApplication {
+        application { module() }
+        val creator = user()
+        val assignee = user()
+        val ws = workspace(creator, assignee)
+        val task = client.createTask(creator, ws, assignee)
+        assertEquals(HttpStatusCode.OK, client.setStatus(assignee, task, ws, assignee, "IN_PROGRESS").status)
+
+        val response = client.setStatus(assignee, task, ws, assignee, "TO_DO")
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        assertEquals("TODO", transaction { TasksTable.selectAll().where { TasksTable.id eq task }.single()[TasksTable.status] })
+    }
+
+    @Test
     fun `concurrent duplicate completions award once`() = testApplication {
         application { module() }
         val creator = user()
