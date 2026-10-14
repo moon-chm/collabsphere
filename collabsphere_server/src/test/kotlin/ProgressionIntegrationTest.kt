@@ -438,6 +438,49 @@ class ProgressionIntegrationTest {
     }
 
     @Test
+    fun `a repository linked in several workspaces notifies each person once per event`() {
+        val owner = user()
+        val wsA = workspace(owner)
+        val wsB = workspace(owner)
+        val githubRepoId = 8_000_000_000L + owner
+        val repositoryRows = transaction {
+            val connection = GitHubConnectionsTable.insert {
+                it[userId] = owner
+                it[githubUserId] = 81_000L + owner
+                it[githubUsername] = "owner"
+                it[installationId] = 1L
+            }[GitHubConnectionsTable.id]
+            listOf(wsA, wsB).map { ws ->
+                GitHubRepositoriesTable.insert {
+                    it[connectionId] = connection
+                    it[workspaceId] = ws
+                    it[GitHubRepositoriesTable.githubRepoId] = githubRepoId
+                    it[GitHubRepositoriesTable.owner] = "acme"
+                    it[name] = "app"
+                    it[fullName] = "acme/app"
+                    it[isPrivate] = true
+                    it[htmlUrl] = "https://github.com/acme/app"
+                    it[defaultBranch] = "main"
+                }[GitHubRepositoriesTable.id]
+            }
+        }
+        // What the webhook service produces for one check_suite delivery: one activity per linked row.
+        val activities = repositoryRows.map { row ->
+            com.collabsphere.util.GitHubCheckSuiteActivity(
+                repositoryId = row, headSha = "abc1234def", status = "completed",
+                conclusion = "failure", headBranch = "main", url = "https://github.com/acme/app/runs/1"
+            )
+        }
+        kotlinx.coroutines.runBlocking { plugins.processGitHubActivities(activities) }
+
+        assertEquals(1L, transaction {
+            NotificationsTable.selectAll().where {
+                (NotificationsTable.recipientId eq owner) and (NotificationsTable.type eq "GITHUB_CI")
+            }.count()
+        })
+    }
+
+    @Test
     fun `an approving review earns sp only once the pull request merges`() {
         val owner = user()
         val author = user()

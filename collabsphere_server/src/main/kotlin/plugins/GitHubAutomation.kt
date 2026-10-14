@@ -174,7 +174,19 @@ private fun ResultRow.toLinkedRepo() = LinkedRepo(
     notifyChannelId = this[GitHubRepositoriesTable.notifyChannelId]
 )
 
-suspend fun processGitHubActivities(activities: List<GitHubActivity>) {
+/**
+ * Who has already been notified while processing one webhook. A repository linked to several
+ * workspaces yields one activity per workspace; each workspace still gets its channel post, but a
+ * person in several of those workspaces gets one notification, not one per workspace. Scoped to a
+ * single delivery, so a genuine repeat (e.g. CI failing again on a re-run) is still announced.
+ */
+private class GitHubNotificationDedupe : kotlin.coroutines.AbstractCoroutineContextElement(Key) {
+    companion object Key : kotlin.coroutines.CoroutineContext.Key<GitHubNotificationDedupe>
+    private val notified = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun firstTime(key: String): Boolean = notified.add(key)
+}
+
+suspend fun processGitHubActivities(activities: List<GitHubActivity>) = kotlinx.coroutines.withContext(GitHubNotificationDedupe()) {
     for (activity in activities) {
         try {
             val repo = dbQuery {
@@ -479,7 +491,9 @@ private suspend fun notifyWorkspaceMembers(
             .map { it[com.collabsphere.model.WorkspaceMembersTable.userId] }
     }
     
+    val dedupe = kotlinx.coroutines.currentCoroutineContext()[GitHubNotificationDedupe]
     for (userId in members) {
+        if (dedupe != null && !dedupe.firstTime("$userId|$type|$title|$fullBody")) continue
         createAndPushNotification(
             recipientId = userId,
             actorId = null,
