@@ -61,3 +61,13 @@ To execute Compose tests, start an Android emulator or connect a test device, th
 ```powershell
 .\gradlew :app:connectedDebugAndroidTest
 ```
+
+## Developer scripts
+
+Manual helper tools live in `scripts/`. Run them from this `collabsphere_server` directory, because they read `local.properties` and `client_secret*.json` from the current working directory:
+
+```powershell
+python scripts/get_gmail_token.py        # mint Gmail API OAuth credentials
+python scripts/check_email_services.py   # check configured Gmail API / SMTP credentials
+k6 run scripts/load_test.js              # load test against the deployed server
+```

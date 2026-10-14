@@ -5,7 +5,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Centralized design tokens for Modern Tactile Skeuomorphism in CollabSphere.
- * Defined from the mechanical sub-grid scale specified in DESIGN.md.
+ * Defined from the mechanical sub-grid scale specified in docs/DESIGN.md.
  */
 object SkeuoTokens {
     // Corner Radii scale

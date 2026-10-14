@@ -68,7 +68,6 @@ dependencies {
 
     // ── Jetpack Glance (home screen widgets with Compose syntax) ──
     implementation("androidx.glance:glance-appwidget:$glance_ver")
-    implementation("androidx.glance:glance-material3:$glance_ver")
     val ktor_version = "3.1.0"
     val work_version = "2.10.2"
 
@@ -85,12 +84,10 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:$work_version")
 
     implementation("io.ktor:ktor-client-core:${ktor_version}")
-    implementation("io.ktor:ktor-client-android:${ktor_version}")
     implementation("io.ktor:ktor-client-okhttp:${ktor_version}")
     implementation("io.ktor:ktor-client-websockets:${ktor_version}")
     implementation("io.ktor:ktor-client-content-negotiation:${ktor_version}")
     implementation("io.ktor:ktor-serialization-kotlinx-json:${ktor_version}")
-    implementation("io.ktor:ktor-client-logging:${ktor_version}")
 
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.compose.material:material-icons-extended")

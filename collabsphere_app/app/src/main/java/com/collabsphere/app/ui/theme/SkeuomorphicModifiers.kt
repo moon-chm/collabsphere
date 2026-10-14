@@ -626,7 +626,7 @@ fun SkeuoDebossedIconWell(
 
 /**
  * Modern Tactile Skeuomorphic Header Action Button.
- * Conforms to DESIGN.md:
+ * Conforms to docs/DESIGN.md:
  * - Base: Linear gradient from CoralStart (#F0633D) to CoralEnd (#D6501F)
  * - Corner Radii: Radius SM (12-14dp)
  * - Lighting: Top edge rim light inset 0 1px 1px rgba(255, 255, 255, 0.4), bottom drop shadow
