@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -74,6 +75,14 @@ sealed interface EvidenceState {
     data object Loading : EvidenceState
     data class Loaded(val familyKey: String, val events: List<BadgeEvidenceResponse>) : EvidenceState
     data object Failed : EvidenceState
+}
+
+sealed interface GitHubIdentityState {
+    data object Unknown : GitHubIdentityState
+    data object Loading : GitHubIdentityState
+    data class Linked(val login: String?) : GitHubIdentityState
+    data object NotLinked : GitHubIdentityState
+    data object Failed : GitHubIdentityState
 }
 
 class ProgressionViewModel(
@@ -163,6 +172,45 @@ class ProgressionViewModel(
         _evidence.value = EvidenceState.Idle
     }
 
+    private val _gitHubIdentity = MutableStateFlow<GitHubIdentityState>(GitHubIdentityState.Unknown)
+    val gitHubIdentity: StateFlow<GitHubIdentityState> = _gitHubIdentity.asStateFlow()
+
+    /** One-shot UI effects: a URL to open in the browser, or a message to show. */
+    private val _effects = kotlinx.coroutines.channels.Channel<GitHubLinkEffect>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val effects: kotlinx.coroutines.flow.Flow<GitHubLinkEffect> = _effects.receiveAsFlow()
+
+    fun loadGitHubIdentity() {
+        if (_gitHubIdentity.value is GitHubIdentityState.Loading) return
+        _gitHubIdentity.value = GitHubIdentityState.Loading
+        viewModelScope.launch {
+            _gitHubIdentity.value = repo.gitHubIdentity().fold(
+                onSuccess = { if (it.linked) GitHubIdentityState.Linked(it.login) else GitHubIdentityState.NotLinked },
+                onFailure = { GitHubIdentityState.Failed }
+            )
+        }
+    }
+
+    fun startGitHubLink() {
+        viewModelScope.launch {
+            repo.gitHubLinkUrl().fold(
+                onSuccess = { _effects.send(GitHubLinkEffect.OpenUrl(it)) },
+                onFailure = { _effects.send(GitHubLinkEffect.Message("GitHub linking isn't available right now.")) }
+            )
+        }
+    }
+
+    fun unlinkGitHub() {
+        viewModelScope.launch {
+            repo.unlinkGitHub().fold(
+                onSuccess = {
+                    _gitHubIdentity.value = GitHubIdentityState.NotLinked
+                    _effects.send(GitHubLinkEffect.Message("GitHub unlinked. Points you already earned are kept."))
+                },
+                onFailure = { _effects.send(GitHubLinkEffect.Message("Couldn't unlink GitHub. Please try again.")) }
+            )
+        }
+    }
+
     companion object {
         /** Joins definitions with progress; families without server progress yet show as locked at zero. */
         fun buildBadges(families: List<BadgeFamilyDto>, progress: List<BadgeProgressEntity>): List<BadgeUi> {
@@ -186,4 +234,9 @@ class ProgressionViewModel(
             }
         }
     }
+}
+
+sealed interface GitHubLinkEffect {
+    data class OpenUrl(val url: String) : GitHubLinkEffect
+    data class Message(val text: String) : GitHubLinkEffect
 }

@@ -64,7 +64,17 @@ private suspend fun processNextWebhookBatch() {
         try {
             val activities = GitHubWebhookService.handleWebhookEvent(event.eventType, event.payload)
             processGitHubActivities(activities)
+            // Career rewards are idempotent per activity, but kept out of the delivery's own outcome:
+            // a reward failure must not re-run the activity posts above on retry.
+            val rewardNotifications = try {
+                dbQuery { plugins.progression.GitHubRewards.apply(event.eventType, event.payload) }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                logger.error("[GitHub] Career rewards failed for delivery ${event.deliveryId}; safe to replay", e)
+                emptyList()
+            }
             dbQuery { completeWebhook(event) }
+            plugins.progression.publishProgressionNotifications(rewardNotifications)
         } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[GitHub] Failed to process webhook delivery ${event.deliveryId}", e)

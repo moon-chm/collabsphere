@@ -363,6 +363,191 @@ class ProgressionIntegrationTest {
         assertEquals(listOf("BRONZE"), unlockedTiers(u, "SPHERE_EXPLORER"))
     }
 
+    // ── GitHub rewards (phase 2) ──────────────────────────────────────────────────
+
+    /** A workspace whose owner has a GitHub App connection and which links one repository. */
+    private fun githubWorkspace(owner: Int, ownerGithubId: Long, vararg members: Int): Pair<Int, Long> {
+        val ws = workspace(owner, *members)
+        val repoId = 7_000_000_000L + (Math.random() * 1_000_000_000).toLong()
+        transaction {
+            val connection = GitHubConnectionsTable.insert {
+                it[userId] = owner
+                it[githubUserId] = ownerGithubId
+                it[githubUsername] = "owner$ownerGithubId"
+                it[installationId] = 1L
+            }[GitHubConnectionsTable.id]
+            GitHubRepositoriesTable.insert {
+                it[connectionId] = connection
+                it[workspaceId] = ws
+                it[githubRepoId] = repoId
+                it[GitHubRepositoriesTable.owner] = "acme"
+                it[name] = "app"
+                it[fullName] = "acme/app"
+                it[isPrivate] = true
+                it[htmlUrl] = "https://github.com/acme/app"
+                it[defaultBranch] = "main"
+            }
+        }
+        return ws to repoId
+    }
+
+    private fun linkGitHub(userId: Int, githubId: Long) = transaction {
+        GitHubIdentityLinks.link(userId, githubId, "dev$githubId")
+    }
+
+    private fun ghUser(id: Long) = """{"id":$id,"login":"dev$id","type":"User"}"""
+
+    private fun mergedPr(repoId: Long, number: Int, authorGithubId: Long, mergerGithubId: Long) =
+        """{"action":"closed","repository":{"id":$repoId},"pull_request":{"number":$number,"merged":true,
+        "user":${ghUser(authorGithubId)},"merged_by":${ghUser(mergerGithubId)},"additions":5,"deletions":1,"labels":[],
+        "merged_at":"2026-10-01T10:00:00Z"}}"""
+
+    private fun approval(repoId: Long, number: Int, reviewerGithubId: Long, authorGithubId: Long) =
+        """{"action":"submitted","repository":{"id":$repoId},"review":{"state":"approved","user":${ghUser(reviewerGithubId)},
+        "submitted_at":"2026-10-01T09:00:00Z"},"pull_request":{"number":$number,"user":${ghUser(authorGithubId)},"merged_at":null}}"""
+
+    @Test
+    fun `a merged pull request rewards its linked author once across webhook retries`() {
+        val owner = user()
+        val author = user()
+        val (_, repoId) = githubWorkspace(owner, ownerGithubId = 51_000 + owner.toLong(), author)
+        val authorGithubId = 61_000L + author
+        assertEquals(IdentityLinkResult.LINKED, linkGitHub(author, authorGithubId))
+
+        val payload = mergedPr(repoId, 1, authorGithubId, mergerGithubId = 51_000 + owner.toLong())
+        repeat(3) { transaction { GitHubRewards.apply("pull_request", payload) } }
+
+        assertEquals(30, totalSp(author))
+        assertEquals(1, counter(author, BadgeCounters.ACCEPTED_CODE_CONTRIBUTIONS))
+        assertEquals(1, counter(owner, BadgeCounters.PRS_MERGED_AS_MAINTAINER), "the owner merged a teammate's PR")
+        assertEquals(0, totalSp(owner), "merging earns badge progress, not SP")
+    }
+
+    @Test
+    fun `an approving review earns sp only once the pull request merges`() {
+        val owner = user()
+        val author = user()
+        val reviewer = user()
+        val (_, repoId) = githubWorkspace(owner, ownerGithubId = 52_000 + owner.toLong(), author, reviewer)
+        val authorGithubId = 62_000L + author
+        val reviewerGithubId = 63_000L + reviewer
+        linkGitHub(author, authorGithubId)
+        linkGitHub(reviewer, reviewerGithubId)
+
+        transaction { GitHubRewards.apply("pull_request_review", approval(repoId, 2, reviewerGithubId, authorGithubId)) }
+        assertEquals(0, totalSp(reviewer), "an approval of unmerged work earns nothing yet")
+
+        transaction { GitHubRewards.apply("pull_request", mergedPr(repoId, 2, authorGithubId, authorGithubId)) }
+        assertEquals(15, totalSp(reviewer))
+        assertEquals(1, counter(reviewer, BadgeCounters.COLLABORATIVE_ACTIVITIES))
+        assertEquals(30, totalSp(author))
+        transaction { GitHubPrApprovalsTable.deleteWhere { GitHubPrApprovalsTable.githubRepoId eq repoId } }
+    }
+
+    @Test
+    fun `unlinked accounts and non-members earn nothing from github`() {
+        val owner = user()
+        val outsider = user()
+        val member = user()
+        val (_, repoId) = githubWorkspace(owner, ownerGithubId = 53_000 + owner.toLong(), member)
+        linkGitHub(outsider, 64_000L + outsider) // linked, but not a member of the workspace
+
+        transaction { GitHubRewards.apply("pull_request", mergedPr(repoId, 3, 64_000L + outsider, 99_999_999)) }
+        transaction { GitHubRewards.apply("pull_request", mergedPr(repoId, 4, 65_000L + member, 99_999_999)) } // member, unlinked
+        assertEquals(0, totalSp(outsider))
+        assertEquals(0, totalSp(member))
+    }
+
+    @Test
+    fun `a github account can be linked to only one collabsphere user`() {
+        val first = user()
+        val second = user()
+        val owner = user()
+        githubWorkspace(owner, ownerGithubId = 66_000L + owner)
+        assertEquals(IdentityLinkResult.LINKED, linkGitHub(first, 67_000L + first))
+        assertEquals(IdentityLinkResult.ACCOUNT_IN_USE, linkGitHub(second, 67_000L + first), "linked by another member")
+        assertEquals(IdentityLinkResult.ACCOUNT_IN_USE, linkGitHub(second, 66_000L + owner), "an owner's App connection")
+    }
+
+    @Test
+    fun `the identity api reports and removes the link`() = testApplication {
+        application { module() }
+        val u = user()
+        val auth: HttpRequestBuilder.() -> Unit = { bearerAuth(token(u)) }
+        assertTrue(client.get("/api/user/github/identity", auth).bodyAsText().contains("\"linked\":false"))
+        linkGitHub(u, 68_000L + u)
+        val linked = client.get("/api/user/github/identity", auth).bodyAsText()
+        assertTrue(linked.contains("\"linked\":true") && linked.contains("dev${68_000L + u}"), linked)
+        assertEquals(HttpStatusCode.OK, client.delete("/api/user/github/link", auth).status)
+        assertTrue(client.get("/api/user/github/identity", auth).bodyAsText().contains("\"linked\":false"))
+    }
+
+    // ── Helpful marks (phase 3) ───────────────────────────────────────────────────
+
+    private fun message(ws: Int, author: Int): Int = transaction {
+        val channel = ChannelsTable.selectAll().where { ChannelsTable.workspaceId eq ws }.firstOrNull()?.get(ChannelsTable.id)
+            ?: ChannelsTable.insert {
+                it[channelName] = "general"
+                it[workspaceId] = ws
+                it[description] = ""
+            }[ChannelsTable.id]
+        MessageTable.insert {
+            it[userId] = author
+            it[workspaceId] = ws
+            it[channelId] = channel
+            it[userName] = "author"
+            it[content] = "Here's how to fix the flaky build"
+            it[status] = "SENT"
+        }[MessageTable.id]
+    }
+
+    private fun mark(messageId: Int, marker: Int) = transaction { HelpfulMarks.mark(messageId, marker) }.status
+
+    @Test
+    fun `helpful marks count messages once and recognisers once, and earn no sp`() {
+        val author = user()
+        val first = user()
+        val second = user()
+        val ws = workspace(author, first, second)
+        val m1 = message(ws, author)
+        val m2 = message(ws, author)
+
+        assertEquals(HelpfulMarkStatus.MARKED, mark(m1, first))
+        assertEquals(HelpfulMarkStatus.ALREADY_MARKED, mark(m1, first))
+        assertEquals(HelpfulMarkStatus.MARKED, mark(m1, second))
+        assertEquals(HelpfulMarkStatus.MARKED, mark(m2, first))
+
+        assertEquals(2, counter(author, BadgeCounters.HELPFUL_MESSAGES), "two distinct messages")
+        assertEquals(2, counter(author, BadgeCounters.HELPFUL_RECOGNIZERS), "two distinct teammates")
+        assertEquals(0, totalSp(author), "recognition is badge progress only")
+    }
+
+    @Test
+    fun `helpful marks reject self-marking, outsiders and over-marking`() {
+        val author = user()
+        val marker = user()
+        val outsider = user()
+        val ws = workspace(author, marker)
+        assertEquals(HelpfulMarkStatus.OWN_MESSAGE, mark(message(ws, author), author))
+        assertEquals(HelpfulMarkStatus.NOT_MEMBER, mark(message(ws, author), outsider))
+        assertEquals(HelpfulMarkStatus.NOT_FOUND, mark(Int.MAX_VALUE, marker))
+
+        repeat(HelpfulMarks.DAILY_LIMIT_PER_MARKER) { assertEquals(HelpfulMarkStatus.MARKED, mark(message(ws, author), marker)) }
+        assertEquals(HelpfulMarkStatus.DAILY_LIMIT, mark(message(ws, author), marker))
+    }
+
+    @Test
+    fun `the helpful route maps outcomes to http statuses`() = testApplication {
+        application { module() }
+        val author = user()
+        val marker = user()
+        val ws = workspace(author, marker)
+        val m = message(ws, author)
+        assertEquals(HttpStatusCode.OK, client.post("/api/message/$m/helpful") { bearerAuth(token(marker)) }.status)
+        assertTrue(client.post("/api/message/$m/helpful") { bearerAuth(token(marker)) }.bodyAsText().contains("\"alreadyMarked\":true"))
+        assertEquals(HttpStatusCode.BadRequest, client.post("/api/message/$m/helpful") { bearerAuth(token(author)) }.status)
+    }
+
     @Test
     fun `corrections are audited, totals reconcile with the ledger and catalog changes recalculate levels`() {
         val u = user()

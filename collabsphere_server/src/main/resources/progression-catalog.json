@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "levels": [
     { "level": 1, "title": "Graduate Trainee", "requiredSp": 0 },
     { "level": 2, "title": "Junior Developer", "requiredSp": 100 },
@@ -29,10 +29,13 @@
     { "key": "TASK_SELF_COMPLETED", "sp": 20, "dailyCap": 3, "description": "Complete a task you created for yourself (limited per day)" },
     { "key": "NOTE_APPROVED", "sp": 5, "dailyCap": 5, "description": "Have a substantial note pinned by a teammate" },
     { "key": "PR_MERGED", "sp": 30, "description": "Author a pull request that gets merged" },
+    { "key": "PR_MERGED_AS_MAINTAINER", "sp": 0, "description": "Merge a teammate's pull request (badge progress only)" },
     { "key": "ISSUE_RESOLVED", "sp": 25, "description": "Close someone else's issue as completed" },
     { "key": "REVIEW_ACCEPTED", "sp": 15, "description": "Approve a teammate's pull request that gets merged" },
     { "key": "RELEASE_PUBLISHED", "sp": 50, "description": "Publish a release" },
-    { "key": "MILESTONE_COMPLETED", "sp": 50, "description": "Close a project milestone" }
+    { "key": "MILESTONE_COMPLETED", "sp": 50, "description": "Close a project milestone" },
+    { "key": "MESSAGE_MARKED_HELPFUL", "sp": 0, "description": "A teammate marked your message helpful (badge progress only)" },
+    { "key": "PEER_RECOGNITION", "sp": 0, "description": "A new teammate recognised your help (badge progress only)" }
   ],
   "policy": {
     "complexPriority": "HIGH",
@@ -45,7 +48,7 @@
     {
       "key": "CODECRAFT", "name": "CodeCraft", "theme": "Developer Excellence",
       "requirement": "Author pull requests that get merged",
-      "counter": "ACCEPTED_CODE_CONTRIBUTIONS", "bronze": 5, "silver": 25, "gold": 100, "available": false
+      "counter": "ACCEPTED_CODE_CONTRIBUTIONS", "bronze": 5, "silver": 25, "gold": 100, "available": true
     },
     {
       "key": "DEADLINE_ACE", "name": "Deadline Ace", "theme": "On-Time Delivery",
@@ -70,7 +73,7 @@
     {
       "key": "BUG_BUSTER", "name": "Bug Buster", "theme": "Issue Resolution",
       "requirement": "Close teammates' GitHub issues as completed",
-      "counter": "ISSUES_RESOLVED", "bronze": 5, "silver": 25, "gold": 100, "available": false
+      "counter": "ISSUES_RESOLVED", "bronze": 5, "silver": 25, "gold": 100, "available": true
     },
     {
       "key": "KNOWLEDGE_ARCHITECT", "name": "Knowledge Architect", "theme": "Documentation",
@@ -80,7 +83,7 @@
     {
       "key": "MILESTONE_MAVERICK", "name": "Milestone Maverick", "theme": "Project Delivery",
       "requirement": "Close GitHub project milestones",
-      "counter": "MILESTONES_COMPLETED", "bronze": 1, "silver": 5, "gold": 20, "available": false
+      "counter": "MILESTONES_COMPLETED", "bronze": 1, "silver": 5, "gold": 20, "available": true
     },
     {
       "key": "GUARDIAN", "name": "Guardian", "theme": "Quality and Reliability",
@@ -90,22 +93,22 @@
     {
       "key": "MERGE_MASTER", "name": "Merge Master", "theme": "GitHub Integration",
       "requirement": "Merge teammates' pull requests as a maintainer",
-      "counter": "PRS_MERGED_AS_MAINTAINER", "bronze": 5, "silver": 25, "gold": 100, "available": false
+      "counter": "PRS_MERGED_AS_MAINTAINER", "bronze": 5, "silver": 25, "gold": 100, "available": true
     },
     {
       "key": "BRIDGE_BUILDER", "name": "Bridge Builder", "theme": "Communication",
       "requirement": "Write messages that teammates mark as helpful",
-      "counter": "HELPFUL_MESSAGES", "bronze": 5, "silver": 25, "gold": 75, "available": false
+      "counter": "HELPFUL_MESSAGES", "bronze": 5, "silver": 25, "gold": 75, "available": true
     },
     {
       "key": "MENTOR_SPARK", "name": "Mentor Spark", "theme": "Helping Others",
       "requirement": "Be recognised as helpful by different teammates",
-      "counter": "HELPFUL_RECOGNIZERS", "bronze": 3, "silver": 15, "gold": 40, "available": false
+      "counter": "HELPFUL_RECOGNIZERS", "bronze": 3, "silver": 15, "gold": 40, "available": true
     },
     {
       "key": "LAUNCH_COMMANDER", "name": "Launch Commander", "theme": "Project Releases",
       "requirement": "Publish GitHub releases",
-      "counter": "RELEASES_PUBLISHED", "bronze": 1, "silver": 5, "gold": 15, "available": false
+      "counter": "RELEASES_PUBLISHED", "bronze": 1, "silver": 5, "gold": 15, "available": true
     },
     {
       "key": "SPHERE_EXPLORER", "name": "Sphere Explorer", "theme": "Workspace Participation",

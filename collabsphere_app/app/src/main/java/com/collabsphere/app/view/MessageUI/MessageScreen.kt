@@ -81,6 +81,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import org.koin.compose.koinInject
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.automirrored.filled.Reply
 import com.collabsphere.app.viewmodel.message.MessageViewModel
@@ -868,6 +869,23 @@ fun MessageScreen(
                                                             Icons.Default.PushPin,
                                                             contentDescription = null,
                                                             tint = CoralStart
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                            if (message.id > 0 && !isOwnMessage) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Mark helpful", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        viewModel.markHelpful(message)
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            Icons.Default.ThumbUp,
+                                                            contentDescription = null,
+                                                            tint = MintGreen
                                                         )
                                                     }
                                                 )

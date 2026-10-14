@@ -333,6 +333,30 @@ internal fun Route.messagesRoutes() {
             }
         }
 
+        // Peer recognition (career badges). Idempotent: marking the same message again is a no-op.
+        post("/{messageId}/helpful") {
+            val messageIdParam = call.parameters["messageId"]?.toIntOrNull()
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid messageId")
+            val actingUserId = call.authenticatedUserId()
+            val outcome = dbQuery { plugins.progression.HelpfulMarks.mark(messageIdParam, actingUserId) }
+            when (outcome.status) {
+                plugins.progression.HelpfulMarkStatus.MARKED -> {
+                    call.respond(HttpStatusCode.OK, dto.HelpfulMarkResponse(alreadyMarked = false))
+                    plugins.progression.publishProgressionNotifications(outcome.notifications)
+                }
+                plugins.progression.HelpfulMarkStatus.ALREADY_MARKED ->
+                    call.respond(HttpStatusCode.OK, dto.HelpfulMarkResponse(alreadyMarked = true))
+                plugins.progression.HelpfulMarkStatus.OWN_MESSAGE ->
+                    call.respond(HttpStatusCode.BadRequest, "You can't mark your own message as helpful")
+                plugins.progression.HelpfulMarkStatus.NOT_MEMBER ->
+                    call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                plugins.progression.HelpfulMarkStatus.NOT_FOUND ->
+                    call.respond(HttpStatusCode.NotFound, "Message not found")
+                plugins.progression.HelpfulMarkStatus.DAILY_LIMIT ->
+                    call.respond(HttpStatusCode.TooManyRequests, "You've marked many messages helpful today; try again tomorrow")
+            }
+        }
+
         post("/{messageId}/pin") {
             try {
                 val messageIdParam = call.parameters["messageId"]?.toIntOrNull()

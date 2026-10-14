@@ -253,6 +253,32 @@ private suspend fun ApplicationCall.redirectGitHubResult(workspaceId: Int?, erro
     respondRedirect("collabsphere://github-auth-success?$params")
 }
 
+/**
+ * Finishes a member's identity-only GitHub link. The user token proves which GitHub account
+ * authorised the app; it is used once to read the account id and then dropped (not stored, not
+ * revoked — revoking would also cut off an owner's App connection for the same account).
+ */
+private suspend fun ApplicationCall.completeGitHubIdentityLink(userId: Int, code: String?, error: String?) {
+    fun result(params: String) = "collabsphere://github-identity?$params"
+    if (error != null || code == null) {
+        respondRedirect(result("error=${(error ?: "invalid_request").encodeURLQueryComponent()}"))
+        return
+    }
+    val token = GitHubAuthService.exchangeCodeForUserToken(code)?.access_token
+    val githubUser = token?.let { GitHubService.getAuthenticatedUser(it) }
+    if (githubUser == null) {
+        respondRedirect(result("error=token_exchange_failed"))
+        return
+    }
+    val linked = dbQuery { plugins.progression.GitHubIdentityLinks.link(userId, githubUser.id, githubUser.login) }
+    respondRedirect(
+        when (linked) {
+            plugins.progression.IdentityLinkResult.LINKED -> result("status=linked&login=${githubUser.login.encodeURLQueryComponent()}")
+            plugins.progression.IdentityLinkResult.ACCOUNT_IN_USE -> result("error=github_account_in_use")
+        }
+    )
+}
+
 private suspend fun installationRepositories(ownerId: Int): List<GitHubRepository>? {
     val connection = dbQuery {
         findConnection(ownerId)?.let {
@@ -287,6 +313,14 @@ fun Application.configureGitHubRoutes() {
             get("/callback") {
                 val code = call.request.queryParameters["code"]
                 val rawState = call.request.queryParameters["state"]
+
+                // Member identity link (career rewards): verified by GitHub here, token not stored.
+                val identityUserId = rawState?.let { JwtConfig.verifyGitHubIdentityState(it) }
+                if (identityUserId != null) {
+                    call.completeGitHubIdentityLink(identityUserId, code, call.request.queryParameters["error"])
+                    return@get
+                }
+
                 val state = rawState?.let { JwtConfig.verifyGitHubState(it) }
 
                 val error = call.request.queryParameters["error"]

@@ -82,6 +82,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="collabsphere" android:host="github-auth-success" />
             </intent-filter>
+
+            <!-- Deep link for the identity-only GitHub link (career rewards) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="collabsphere" android:host="github-identity" />
+            </intent-filter>
         </activity>
 
         <!-- uCrop: full-screen in-app photo crop activity -->

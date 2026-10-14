@@ -124,7 +124,10 @@ object DatabaseFactory {
                 UserBadgeCountersTable,
                 UserBadgeUnlocksTable,
                 UserActivityDaysTable,
-                UserContributionWorkspacesTable
+                UserContributionWorkspacesTable,
+                UserGitHubIdentitiesTable,
+                GitHubPrApprovalsTable,
+                MessageHelpfulMarksTable
             )
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()

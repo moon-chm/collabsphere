@@ -3,6 +3,8 @@ package com.collabsphere.app.remote.progression
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.progression.BadgeEvidenceResponse
 import com.collabsphere.app.dto.progression.BadgeProgressResponse
+import com.collabsphere.app.dto.progression.GitHubIdentityResponse
+import com.collabsphere.app.dto.progression.GitHubLinkUrlResponse
 import com.collabsphere.app.dto.progression.LedgerPageResponse
 import com.collabsphere.app.dto.progression.ProgressionCatalogDto
 import com.collabsphere.app.dto.progression.ProgressionSummaryResponse
@@ -10,6 +12,7 @@ import com.collabsphere.app.dto.progression.TimeZoneRequest
 import com.collabsphere.app.remote.requireSuccess
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -48,6 +51,17 @@ class ProgressionApiService(private val client: HttpClient) {
             if (beforeId != null) parameter("beforeId", beforeId)
             parameter("limit", limit)
         }.requireSuccess().body()
+
+    suspend fun getGitHubIdentity(): GitHubIdentityResponse =
+        client.get("${AppConfig.BASE_URL}/api/user/github/identity").requireSuccess().body()
+
+    /** A GitHub sign-in URL; GitHub verifies the account and the server records only its id and login. */
+    suspend fun getGitHubLinkUrl(): String =
+        client.get("${AppConfig.BASE_URL}/api/user/github/link-url").requireSuccess().body<GitHubLinkUrlResponse>().url
+
+    suspend fun unlinkGitHub() {
+        client.delete("${AppConfig.BASE_URL}/api/user/github/link").requireSuccess()
+    }
 
     suspend fun updateTimeZone(zoneId: String) {
         client.put("${AppConfig.BASE_URL}/api/user/timezone") {

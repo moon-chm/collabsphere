@@ -66,6 +66,13 @@ class MessageApiService(private val client: HttpClient) {
         }
     }
 
+    /** Peer recognition for a teammate's message. Returns true when it was already marked by this user. */
+    suspend fun markHelpful(messageId: Int): Boolean =
+        client.post("$baseUrl/$messageId/helpful")
+            .requireSuccess()
+            .body<com.collabsphere.app.dto.progression.HelpfulMarkResponse>()
+            .alreadyMarked
+
     suspend fun getPinned(workspaceId: Int, channelId: Int): List<MessageSyncDto> {
         return client.get("$baseUrl/pinned/$workspaceId/$channelId").body()
     }

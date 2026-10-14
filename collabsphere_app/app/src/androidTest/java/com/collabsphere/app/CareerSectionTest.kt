@@ -84,4 +84,19 @@ class CareerSectionTest {
         compose.onNodeWithContentDescription("Bug Buster, locked, coming soon").performClick()
         compose.runOnIdle { assertTrue(clicked == "BUG_BUSTER") }
     }
+
+    @Test
+    fun gitHubCardOffersLinkingAndShowsTheLinkedAccount() {
+        var linkClicked = false
+        compose.setContent {
+            CollabSphereTheme(darkTheme = false) {
+                com.collabsphere.app.view.ProfileUI.GitHubLinkCard(
+                    state = com.collabsphere.app.viewmodel.progression.GitHubIdentityState.NotLinked,
+                    onLink = { linkClicked = true }, onUnlink = {}, onRetry = {}
+                )
+            }
+        }
+        compose.onNodeWithText("Link GitHub").performClick()
+        compose.runOnIdle { assertTrue(linkClicked) }
+    }
 }

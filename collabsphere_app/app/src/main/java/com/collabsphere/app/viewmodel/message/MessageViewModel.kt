@@ -149,6 +149,26 @@ class MessageViewModel(
         }
     }
 
+    fun markHelpful(message: MessageEntity) {
+        if (message.id <= 0) return
+        viewModelScope.launch {
+            repo.markHelpful(message.id)
+                .onSuccess { already ->
+                    _uiMessages.tryEmit(if (already) "You already marked this helpful" else "Marked as helpful")
+                }
+                .onFailure { e ->
+                    val status = (e as? com.collabsphere.app.remote.ApiStatusException)?.statusCode
+                    _uiMessages.tryEmit(
+                        when (status) {
+                            429 -> "You've marked many messages helpful today. Try again tomorrow."
+                            400 -> "You can't mark your own message as helpful."
+                            else -> "Couldn't mark the message. Check your connection."
+                        }
+                    )
+                }
+        }
+    }
+
     fun beginEdit(originalText: String) {
         if (!isEditingMessage) {
             draftBeforeEdit = _messageContent.value

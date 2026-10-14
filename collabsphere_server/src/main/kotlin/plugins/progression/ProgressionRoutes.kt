@@ -63,6 +63,27 @@ internal fun Route.progressionRoutes() {
         }
     }
 
+    // Identity-only GitHub link: lets the server credit this user's merged PRs, reviews, issues,
+    // releases and milestones. The account is verified by GitHub in the OAuth callback, never here.
+    route("/api/user/github") {
+        get("/identity") {
+            val userId = call.authenticatedUserId()
+            call.respond(HttpStatusCode.OK, dbReadQuery { GitHubIdentityLinks.status(userId) })
+        }
+        get("/link-url") {
+            val userId = call.authenticatedUserId()
+            val url = com.collabsphere.util.GitHubAuthService.authorizeUrl(
+                com.collabsphere.util.JwtConfig.generateGitHubIdentityState(userId)
+            ) ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, "GitHub sign-in is not configured")
+            call.respond(HttpStatusCode.OK, mapOf("url" to url))
+        }
+        delete("/link") {
+            val userId = call.authenticatedUserId()
+            dbQuery { GitHubIdentityLinks.unlink(userId) }
+            call.respond(HttpStatusCode.OK, true)
+        }
+    }
+
     // The device's zone decides which calendar day an activity counts toward (streaks, daily caps).
     put("/api/user/timezone") {
         val userId = call.authenticatedUserId()

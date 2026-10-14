@@ -55,7 +55,9 @@ class ProgressionCatalogTest {
         val counters = catalog.badges.map { it.counter }.toSet()
         assertEquals(15, counters.size, "each family has its own counter")
         listOf(RuleKeys.TASK_COMPLETED, RuleKeys.TASK_COMPLETED_COMPLEX, RuleKeys.TASK_RELIABILITY,
-            RuleKeys.TASK_SELF_COMPLETED, RuleKeys.NOTE_APPROVED).forEach { catalog.rule(it) }
+            RuleKeys.TASK_SELF_COMPLETED, RuleKeys.NOTE_APPROVED, RuleKeys.PR_MERGED, RuleKeys.PR_MERGED_AS_MAINTAINER,
+            RuleKeys.REVIEW_ACCEPTED, RuleKeys.ISSUE_RESOLVED, RuleKeys.RELEASE_PUBLISHED, RuleKeys.MILESTONE_COMPLETED,
+            RuleKeys.MESSAGE_MARKED_HELPFUL, RuleKeys.PEER_RECOGNITION).forEach { catalog.rule(it) }
     }
 
     @Test

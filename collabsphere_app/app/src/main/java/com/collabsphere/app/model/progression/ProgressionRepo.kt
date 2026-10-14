@@ -145,6 +145,18 @@ class ProgressionRepo(
         runCatchingNonCancellation { api.getEvidence(familyKey) }
     }
 
+    suspend fun gitHubIdentity(): Result<com.collabsphere.app.dto.progression.GitHubIdentityResponse> = withContext(Dispatchers.IO) {
+        runCatchingNonCancellation { api.getGitHubIdentity() }
+    }
+
+    suspend fun gitHubLinkUrl(): Result<String> = withContext(Dispatchers.IO) {
+        runCatchingNonCancellation { api.getGitHubLinkUrl() }
+    }
+
+    suspend fun unlinkGitHub(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatchingNonCancellation { api.unlinkGitHub() }
+    }
+
     /**
      * The first successful sync on a device establishes what counts as "already seen", so progress
      * earned before this device installed the feature is not replayed as a wall of celebrations.

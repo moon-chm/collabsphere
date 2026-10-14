@@ -97,3 +97,13 @@ data class TimeZoneRequest(val timeZone: String)
 
 @Serializable
 data class PublicBadge(val familyKey: String, val tier: String)
+
+/** Whether the user has a verified GitHub identity (used to credit their GitHub contributions). */
+@Serializable
+data class GitHubIdentityResponse(val linked: Boolean, val login: String? = null)
+
+@Serializable
+data class GitHubLinkUrlResponse(val url: String)
+
+@Serializable
+data class HelpfulMarkResponse(val alreadyMarked: Boolean)

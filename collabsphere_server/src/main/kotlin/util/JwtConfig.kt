@@ -55,6 +55,29 @@ object JwtConfig {
         .withExpiresAt(Date(System.currentTimeMillis() + githubStateValidityMs))
         .sign(algorithm)
 
+    // Member identity linking uses its own audience, so a link state can never be accepted by the
+    // workspace-connect flow (or vice versa).
+    private const val GITHUB_IDENTITY_AUDIENCE = "collabsphere-github-identity"
+
+    private val githubIdentityVerifier = JWT.require(algorithm)
+        .withIssuer(issuer)
+        .withAudience(GITHUB_IDENTITY_AUDIENCE)
+        .build()
+
+    fun generateGitHubIdentityState(userId: Int): String = JWT.create()
+        .withIssuer(issuer)
+        .withAudience(GITHUB_IDENTITY_AUDIENCE)
+        .withClaim("userId", userId)
+        .withExpiresAt(Date(System.currentTimeMillis() + githubStateValidityMs))
+        .sign(algorithm)
+
+    fun verifyGitHubIdentityState(token: String): Int? = try {
+        githubIdentityVerifier.verify(token).getClaim("userId").asInt()
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        null
+    }
+
     fun verifyGitHubState(token: String): Pair<Int, Int>? = try {
         val decoded = githubStateVerifier.verify(token)
         val userId = decoded.getClaim("userId").asInt()

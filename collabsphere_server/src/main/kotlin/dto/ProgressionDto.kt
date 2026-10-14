@@ -76,6 +76,16 @@ data class BadgeEvidenceResponse(
 @Serializable
 data class TimeZoneRequest(val timeZone: String)
 
+@Serializable
+data class HelpfulMarkResponse(val alreadyMarked: Boolean)
+
+/** Whether the user has a verified GitHub identity, used to credit their GitHub contributions. */
+@Serializable
+data class GitHubIdentityResponse(
+    val linked: Boolean,
+    val login: String? = null
+)
+
 /** Earned badges shown on a public profile: family and highest tier only, never the evidence. */
 @Serializable
 data class PublicBadge(

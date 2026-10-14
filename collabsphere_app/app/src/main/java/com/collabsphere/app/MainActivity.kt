@@ -95,11 +95,13 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         extractNotificationDeepLink(intent)
         GitHubAuthEvents.publish(intent.data)
+        com.collabsphere.app.model.progression.GitHubIdentityEvents.publish(intent.data)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         extractNotificationDeepLink(intent)
+        if (savedInstanceState == null) com.collabsphere.app.model.progression.GitHubIdentityEvents.publish(intent?.data)
         if (savedInstanceState == null && GitHubAuthEvents.publish(intent?.data)) {
             GitHubAuthEvents.result.value?.workspaceId?.let { workspaceId ->
                 notificationDeepLink = NotificationDeepLink(

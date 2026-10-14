@@ -857,3 +857,40 @@ object UserContributionWorkspacesTable : Table("user_contribution_workspaces") {
 
     override val primaryKey = PrimaryKey(userId, workspaceId)
 }
+
+/**
+ * A member's verified GitHub identity (identity-only OAuth: no repository access, no stored token).
+ * Rewards attribute GitHub activity by the numeric user id, which, unlike a login, cannot be renamed
+ * or claimed by someone else. One GitHub account can belong to only one CollabSphere user.
+ */
+object UserGitHubIdentitiesTable : Table("user_github_identities") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val githubUserId = long("github_user_id").uniqueIndex()
+    val githubLogin = varchar("github_login", 255)
+    val verifiedAt = long("verified_at")
+
+    override val primaryKey = PrimaryKey(userId)
+}
+
+/** Approving reviews, remembered until the pull request merges: only reviews of accepted work earn SP. */
+object GitHubPrApprovalsTable : Table("github_pr_approvals") {
+    val githubRepoId = long("github_repo_id")
+    val prNumber = integer("pr_number")
+    val reviewerGithubId = long("reviewer_github_id")
+    val approvedAt = long("approved_at")
+
+    override val primaryKey = PrimaryKey(githubRepoId, prNumber, reviewerGithubId)
+}
+
+/** "Helpful" marks teammates put on channel messages — the peer-recognition signal for communication badges. */
+object MessageHelpfulMarksTable : Table("message_helpful_marks") {
+    val messageId = integer("message_id").references(MessageTable.id, onDelete = ReferenceOption.CASCADE)
+    val markerId = integer("marker_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(messageId, markerId)
+
+    init {
+        index(false, markerId, createdAt)
+    }
+}

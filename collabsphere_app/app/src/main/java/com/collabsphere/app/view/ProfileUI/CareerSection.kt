@@ -88,6 +88,10 @@ import com.collabsphere.app.viewmodel.progression.BadgeTierUi
 import com.collabsphere.app.viewmodel.progression.BadgeUi
 import com.collabsphere.app.viewmodel.progression.CareerUiState
 import com.collabsphere.app.viewmodel.progression.EvidenceState
+import com.collabsphere.app.viewmodel.progression.GitHubIdentityState
+import com.collabsphere.app.viewmodel.progression.GitHubLinkEffect
+import com.collabsphere.app.model.progression.GitHubIdentityEvents
+import com.collabsphere.app.view.openInBrowser
 import com.collabsphere.app.viewmodel.progression.HistoryState
 import com.collabsphere.app.viewmodel.progression.ProgressionViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -141,6 +145,15 @@ private fun badgeIcon(familyKey: String): ImageVector = when (familyKey) {
 private fun describeActivity(eventType: String?, referenceType: String?, referenceId: String?): String = when (eventType) {
     "TASK_COMPLETED" -> "Completed task #$referenceId"
     "NOTE_APPROVED" -> "Note #$referenceId pinned by a teammate"
+    // GitHub references are "<repo id>#<number>"; the number is what people recognise.
+    "GITHUB_PR_AUTHORED" -> "Merged pull request #${referenceId?.substringAfter('#')}"
+    "GITHUB_PR_MERGED_BY" -> "Merged a teammate's pull request #${referenceId?.substringAfter('#')}"
+    "GITHUB_REVIEW_APPROVED" -> "Approved pull request #${referenceId?.substringAfter('#')}"
+    "GITHUB_ISSUE_RESOLVED" -> "Resolved issue #${referenceId?.substringAfter('#')}"
+    "GITHUB_RELEASE_PUBLISHED" -> "Released $referenceId"
+    "GITHUB_MILESTONE_COMPLETED" -> "Completed milestone $referenceId"
+    "MESSAGE_MARKED_HELPFUL" -> "Message #$referenceId marked helpful"
+    "PEER_RECOGNITION" -> "Recognised by a new teammate (message #$referenceId)"
     null -> "Adjustment"
     else -> "${referenceType?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Activity"} #$referenceId"
 }
@@ -170,7 +183,29 @@ fun CareerSection(userId: Int, snackbarHostState: SnackbarHostState) {
     var showHistory by rememberSaveable { mutableStateOf(false) }
     var selectedBadgeKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(userId) { viewModel.refresh(force = true) }
+    val gitHubIdentity by viewModel.gitHubIdentity.collectAsState()
+    val identityResult by GitHubIdentityEvents.result.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(userId) {
+        viewModel.refresh(force = true)
+        viewModel.loadGitHubIdentity()
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                is GitHubLinkEffect.OpenUrl -> openInBrowser(context, effect.url)
+                is GitHubLinkEffect.Message -> snackbarHostState.showSnackbar(effect.text)
+            }
+        }
+    }
+    // The OAuth redirect lands in MainActivity; report its outcome here once.
+    LaunchedEffect(identityResult) {
+        val result = identityResult ?: return@LaunchedEffect
+        GitHubIdentityEvents.consume()
+        viewModel.loadGitHubIdentity()
+        snackbarHostState.showSnackbar(GitHubIdentityEvents.message(result))
+    }
 
     // One celebration at a time; acknowledged only after it was actually shown, so leaving the screen
     // mid-snackbar shows it again later instead of losing it, and replays never repeat it.
@@ -198,6 +233,12 @@ fun CareerSection(userId: Int, snackbarHostState: SnackbarHostState) {
                 selectedBadgeKey = badge.family.key
                 if (badge.family.counter !in DERIVED_COUNTERS) viewModel.loadEvidence(badge.family.key)
             }
+        )
+        GitHubLinkCard(
+            state = gitHubIdentity,
+            onLink = viewModel::startGitHubLink,
+            onUnlink = viewModel::unlinkGitHub,
+            onRetry = viewModel::loadGitHubIdentity
         )
     }
 
@@ -762,5 +803,62 @@ private fun EvidenceRow(event: BadgeEvidenceResponse) {
             modifier = Modifier.weight(1f)
         )
         Text(text = formatDate(event.occurredAt), style = MaterialTheme.typography.labelSmall, color = Muted)
+    }
+}
+
+/**
+ * Identity-only GitHub link: lets merged pull requests, reviews, issues, releases and milestones count
+ * toward the user's career. GitHub verifies the account; no repository access is requested here.
+ */
+@Composable
+internal fun GitHubLinkCard(
+    state: GitHubIdentityState,
+    onLink: () -> Unit,
+    onUnlink: () -> Unit,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .skeuoFloatingCard(cornerRadius = 20.dp)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.Code, contentDescription = null, tint = Ink, modifier = Modifier.size(20.dp))
+            Text(
+                text = "GitHub contributions",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = Ink,
+                modifier = Modifier.weight(1f).semantics { heading() }
+            )
+        }
+        when (state) {
+            GitHubIdentityState.Unknown, GitHubIdentityState.Loading -> Text(
+                text = "Checking your GitHub link…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Muted
+            )
+            GitHubIdentityState.Failed -> {
+                Text("Couldn't check your GitHub link.", style = MaterialTheme.typography.bodyMedium, color = Muted)
+                TextButton(onClick = onRetry) { Text("Retry", color = CoralStart, fontWeight = FontWeight.Bold) }
+            }
+            is GitHubIdentityState.Linked -> {
+                Text(
+                    text = "Linked as @${state.login ?: "GitHub"}. Merged pull requests, approved reviews, resolved issues, releases and milestones in your workspaces' repositories earn Sphere Points.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted
+                )
+                TextButton(onClick = onUnlink) { Text("Unlink GitHub", color = Destructive, fontWeight = FontWeight.SemiBold) }
+            }
+            GitHubIdentityState.NotLinked -> {
+                Text(
+                    text = "Link your GitHub account so your merged work in your workspaces' repositories counts toward your career.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted
+                )
+                TextButton(onClick = onLink) { Text("Link GitHub", color = CoralStart, fontWeight = FontWeight.Bold) }
+            }
+        }
     }
 }

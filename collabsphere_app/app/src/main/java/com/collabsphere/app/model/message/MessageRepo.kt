@@ -257,6 +257,17 @@ class MessageRepo(
         runCatching { apiService.getReadStates(workspaceId, channelId) }
     }
 
+    /** Marks a teammate's message helpful; the server rejects self-marks and enforces a daily limit. */
+    suspend fun markHelpful(messageId: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            Result.success(apiService.markHelpful(messageId))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun setPinned(messageId: Int, pinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             apiService.setPinned(messageId, pinned)
