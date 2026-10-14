@@ -23,6 +23,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -525,7 +526,7 @@ class RoutesEndToEndTest {
         val t1 = client.post("/api/tasks") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":0,"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, t1.status)
 
@@ -533,7 +534,7 @@ class RoutesEndToEndTest {
         val t2 = client.post("/api/tasks") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":0,"taskName":"$longName","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"$longName","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, t2.status)
 
@@ -541,7 +542,7 @@ class RoutesEndToEndTest {
         val t3 = client.post("/api/tasks") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"INVALID","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"INVALID","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, t3.status)
 
@@ -549,7 +550,7 @@ class RoutesEndToEndTest {
         val t4 = client.post("/api/tasks") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":99999,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":99999,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, t4.status)
 
@@ -557,7 +558,7 @@ class RoutesEndToEndTest {
         val t5 = client.post("/api/tasks") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":0,"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"valid","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.Created, t5.status)
         val taskId = Json.decodeFromString<dto.TaskResponse>(t5.bodyAsText()).id
@@ -566,7 +567,7 @@ class RoutesEndToEndTest {
         val t6 = client.put("/api/tasks/$taskId") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody("""{"id":$taskId,"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
+            setBody("""{"taskName":"  ","taskDescription":"test","workspaceId":$ws,"assignedToUserId":null,"status":"TODO","priority":"HIGH","dueDate":null,"checklist":[],"labels":[]}""")
         }
         assertEquals(HttpStatusCode.BadRequest, t6.status)
         @Test
@@ -760,4 +761,190 @@ class RoutesEndToEndTest {
             }
         }
     }
+
+    @Test
+    fun `failed logins are capped per account even when every guess claims a new client ip`() = testApplication {
+        application { module() }
+        val (_, email) = verifiedUser()
+        fun body(password: String) = """{"email":"$email","password":"$password"}"""
+
+        // Ten guesses, each from a different spoofed X-Forwarded-For, stay within the per-IP limiter.
+        val statuses = (1..LoginThrottleLimit).map { i ->
+            client.post("/api/login") {
+                header("X-Forwarded-For", "203.0.113.$i")
+                contentType(ContentType.Application.Json)
+                setBody(body("wrong-password-$i"))
+            }.status
+        }
+        assertTrue(statuses.all { it == HttpStatusCode.Unauthorized }, "statuses=$statuses")
+
+        val afterCap = client.post("/api/login") {
+            header("X-Forwarded-For", "203.0.113.200")
+            contentType(ContentType.Application.Json)
+            setBody(body("password123"))
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, afterCap.status, "even the right password waits out the window")
+    }
+
+    @Test
+    fun `the client-supplied Forwarded header cannot mint fresh rate-limit buckets`() = testApplication {
+        application { module() }
+        // No proxy in front of the server sets RFC 7239 `Forwarded`, so varying it must not change the key.
+        val statuses = (1..11).map { i ->
+            client.post("/api/auth/forgot-password") {
+                header(HttpHeaders.Forwarded, "for=198.51.100.$i")
+                contentType(ContentType.Application.Json)
+                setBody("""{"email":"nobody-${UUID.randomUUID()}@example.com"}""")
+            }.status
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, statuses.last(), "statuses=$statuses")
+    }
+
+    @Test
+    fun `oversized json bodies are refused on auth and authenticated routes`() = testApplication {
+        application { module() }
+        val (me, _) = verifiedUser()
+        val token = com.collabsphere.util.JwtConfig.generateToken(me)
+        val ws = workspaceWith(me)
+
+        val bigLogin = client.post("/api/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"a@example.com","password":"${"p".repeat(20 * 1024)}"}""")
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, bigLogin.status)
+
+        val bigNote = client.post("/api/notes") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"userId":$me,"workspaceId":$ws,"notesName":"n","description":"${"d".repeat(2 * 1024 * 1024)}"}""")
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, bigNote.status)
+
+        // GitHub routes live in their own routing block with its own authenticate node.
+        val bigGitHub = client.post("/api/workspace/$ws/github/unfurl") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"urls":["${"u".repeat(2 * 1024 * 1024)}"]}""")
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, bigGitHub.status)
+    }
+
+    @Test
+    fun `task create reports malformed bodies accurately`() = testApplication {
+        application { module() }
+        val (me, _) = verifiedUser()
+        val token = com.collabsphere.util.JwtConfig.generateToken(me)
+        val ws = workspaceWith(me)
+
+        val malformed = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"taskName":"x","workspaceId":$ws""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, malformed.status)
+        assertEquals("Malformed request body", malformed.bodyAsText())
+
+        val nonMemberAssignee = client.post("/api/tasks") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"taskName":"x","taskDescription":"","workspaceId":$ws,"assignedToUserId":2147483000,"status":"TODO"}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, nonMemberAssignee.status)
+        assertEquals("Assignee is not a member of the workspace", nonMemberAssignee.bodyAsText())
+    }
+
+    @Test
+    fun `notes and files are deleted only by their author or a workspace moderator`() = testApplication {
+        application { module() }
+        val owner = verifiedUser().first
+        val author = verifiedUser().first
+        val member = verifiedUser().first
+        val admin = verifiedUser().first
+        val ws = workspaceWith(owner, author, member, admin)
+        transaction {
+            WorkspaceMembersTable.update({
+                (WorkspaceMembersTable.workspaceId eq ws) and (WorkspaceMembersTable.userId eq admin)
+            }) { it[role] = "ADMIN" }
+        }
+        val tokens = listOf(owner, author, member, admin).associateWith { com.collabsphere.util.JwtConfig.generateToken(it) }
+
+        suspend fun createNote(): Int {
+            val created = client.post("/api/notes") {
+                bearerAuth(tokens.getValue(author))
+                contentType(ContentType.Application.Json)
+                setBody("""{"userId":$author,"workspaceId":$ws,"notesName":"n","description":"d"}""")
+            }
+            assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+            return json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        }
+        suspend fun deleteNote(noteId: Int, as_: Int) = client.delete("/api/notes/$noteId") { bearerAuth(tokens.getValue(as_)) }.status
+
+        val note = createNote()
+        assertEquals(HttpStatusCode.Forbidden, deleteNote(note, member))
+        assertEquals(HttpStatusCode.OK, deleteNote(note, author))
+        assertEquals(HttpStatusCode.OK, deleteNote(createNote(), admin))
+        assertEquals(HttpStatusCode.OK, deleteNote(createNote(), owner))
+
+        val keys = mutableListOf<String>()
+        suspend fun uploadFile(): Long {
+            val upload = client.submitFormWithBinaryData("/api/file", formData {
+                append("workspaceId", ws.toString())
+                append("userName", "e2e")
+                append("file", "owned content".toByteArray(), Headers.build {
+                    append(HttpHeaders.ContentDisposition, "filename=\"owned.txt\"")
+                    append(HttpHeaders.ContentType, "text/plain")
+                })
+            }) { bearerAuth(tokens.getValue(author)) }
+            val body = json.parseToJsonElement(upload.bodyAsText()).jsonObject
+            assertEquals(HttpStatusCode.Created, upload.status)
+            keys += body["url"]!!.jsonPrimitive.content.substringAfter("/api/file/download/")
+            return body["id"]!!.jsonPrimitive.content.toLong()
+        }
+        suspend fun deleteFile(fileId: Long, as_: Int) = client.delete("/api/file/$fileId") { bearerAuth(tokens.getValue(as_)) }.status
+
+        try {
+            val file = uploadFile()
+            assertEquals(HttpStatusCode.Forbidden, deleteFile(file, member))
+            assertEquals(HttpStatusCode.OK, deleteFile(file, author))
+            assertEquals(HttpStatusCode.OK, deleteFile(uploadFile(), admin))
+        } finally {
+            keys.forEach { File(System.getenv("UPLOAD_DIR") ?: "local_files_upload", it).delete() }
+        }
+    }
+
+    @Test
+    fun `voting on an expired proposal persists its EXPIRED status`() = testApplication {
+        application { module() }
+        val proposer = verifiedUser().first
+        val voter = verifiedUser().first
+        val ws = workspaceWith(proposer, voter)
+        val created = client.post("/api/task-votes/proposals") {
+            bearerAuth(com.collabsphere.util.JwtConfig.generateToken(proposer))
+            contentType(ContentType.Application.Json)
+            setBody("""{"workspaceId":$ws,"type":"CREATE","taskName":"expiring-${UUID.randomUUID()}"}""")
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        val proposalId = json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        transaction {
+            com.collabsphere.model.TaskVoteProposalsTable.update({ com.collabsphere.model.TaskVoteProposalsTable.id eq proposalId }) {
+                it[deadline] = System.currentTimeMillis() - 1_000
+            }
+        }
+
+        val vote = client.post("/api/task-votes/$proposalId/vote") {
+            bearerAuth(com.collabsphere.util.JwtConfig.generateToken(voter))
+            contentType(ContentType.Application.Json)
+            setBody("""{"vote":"APPROVE"}""")
+        }
+
+        assertEquals(HttpStatusCode.Conflict, vote.status)
+        val status = transaction {
+            com.collabsphere.model.TaskVoteProposalsTable.selectAll()
+                .where { com.collabsphere.model.TaskVoteProposalsTable.id eq proposalId }
+                .single()[com.collabsphere.model.TaskVoteProposalsTable.status]
+        }
+        assertEquals("EXPIRED", status, "the EXPIRED update must survive the 409 response")
+    }
+
+    private val LoginThrottleLimit = plugins.LoginThrottle.MAX_FAILURES
 }

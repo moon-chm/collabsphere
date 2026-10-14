@@ -41,4 +41,17 @@ class PasswordHasherTest {
         assertTrue(PasswordHasher.isHashed(malformed))
         assertFalse(PasswordHasher.matches("password123", malformed))
     }
+
+    @Test
+    fun `async variants agree with the blocking ones and leave the calling thread`() = kotlinx.coroutines.runBlocking {
+        val caller = Thread.currentThread()
+        var hashingThread: Thread? = null
+        val hashed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Unconfined) {
+            PasswordHasher.hashAsync("password123").also { hashingThread = Thread.currentThread() }
+        }
+        assertTrue(PasswordHasher.matches("password123", hashed))
+        assertTrue(PasswordHasher.matchesAsync("password123", hashed))
+        assertFalse(PasswordHasher.matchesAsync("wrongpassword", hashed))
+        assertNotEquals(caller, hashingThread, "bcrypt must run on its own pool, not the caller's thread")
+    }
 }

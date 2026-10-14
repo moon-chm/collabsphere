@@ -345,6 +345,7 @@ fun Application.configureRouting() {
         }
 
         rateLimit(RateLimitName("auth")) {
+            install(JsonBodyLimit) { maxBytes = AUTH_JSON_BODY_LIMIT_BYTES }
             post("/api/login") {
             try {
                 val request = call.receive<LoginRequest>()
@@ -356,10 +357,20 @@ fun Application.configureRouting() {
                         .singleOrNull()
                 }
 
-                if (userRow == null || !PasswordHasher.matches(request.password, userRow[UsersTable.password])) {
+                if (userRow == null) {
                     call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
                     return@post
                 }
+                if (LoginThrottle.isLocked(trimmedEmail)) {
+                    call.respond(HttpStatusCode.TooManyRequests, "Too many failed login attempts. Try again later.")
+                    return@post
+                }
+                if (!PasswordHasher.matchesAsync(request.password, userRow[UsersTable.password])) {
+                    LoginThrottle.recordFailure(trimmedEmail)
+                    call.respond(HttpStatusCode.Unauthorized, "Invalid credentials")
+                    return@post
+                }
+                LoginThrottle.clear(trimmedEmail)
 
                 // Strict Login Gate: Unverified users cannot log in
                 if (!userRow[UsersTable.isEmailVerified]) {
@@ -375,9 +386,10 @@ fun Application.configureRouting() {
                 }
 
                 if (!PasswordHasher.isHashed(userRow[UsersTable.password])) {
+                    val upgradedHash = PasswordHasher.hashAsync(request.password)
                     dbQuery {
                         UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) { stmt ->
-                            stmt[password] = PasswordHasher.hash(request.password)
+                            stmt[password] = upgradedHash
                         }
                     }
                 }
@@ -427,11 +439,13 @@ fun Application.configureRouting() {
                     return@post
                 }
 
+                // Hashed before the transaction so bcrypt never holds a pooled DB connection.
+                val passwordHash = PasswordHasher.hashAsync(request.password)
                 val generatedId = dbQuery {
                     val insertStatement = UsersTable.insert {
                         it[email] = trimmedEmail
                         it[username] = trimmedUsername
-                        it[password] = PasswordHasher.hash(request.password)
+                        it[password] = passwordHash
                         it[isEmailVerified] = false
                     }
                     insertStatement[UsersTable.id]
@@ -763,6 +777,7 @@ fun Application.configureRouting() {
         }
 
         authenticate("auth-jwt") {
+            install(JsonBodyLimit)
 
             // â”€â”€ Register this device for push notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Backward-compatible: existing clients send {"fcmToken": "..."}.

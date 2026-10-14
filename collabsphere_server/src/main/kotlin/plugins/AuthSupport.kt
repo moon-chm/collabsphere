@@ -57,6 +57,10 @@ internal fun Throwable.isUniqueViolation(): Boolean {
     return false
 }
 
+/** Postgres foreign_key_violation — a referenced row (workspace, user) does not exist. */
+internal fun Throwable.isForeignKeyViolation(): Boolean =
+    generateSequence(this) { it.cause }.any { (it as? java.sql.SQLException)?.sqlState == "23503" }
+
 /**
  * JWTs are stateless, so a password change/reset or account deletion would otherwise leave every
  * previously issued token valid for its full 30-day lifetime. Each token carries the user's
@@ -84,5 +88,40 @@ internal object TokenVersions {
 
     fun invalidate(userId: Int) {
         cache.remove(userId)
+    }
+}
+
+/**
+ * Per-account cap on failed logins. The per-IP auth rate limit depends on a trustworthy client IP,
+ * which a spoofed X-Forwarded-For can defeat; this bounds password guessing against one account
+ * no matter how many IPs the guesses appear to come from. Only failures against existing accounts
+ * are recorded, so the map is bounded by the user count rather than by attacker-chosen emails.
+ * JVM-local: with several instances each enforces its own window.
+ */
+internal object LoginThrottle {
+    const val MAX_FAILURES = 10
+    const val WINDOW_MS = 15 * 60 * 1000L
+
+    private data class Window(val startedAt: Long, val failures: Int)
+    private val windows = ConcurrentHashMap<String, Window>()
+
+    fun isLocked(email: String, now: Long = System.currentTimeMillis()): Boolean {
+        val window = windows[email] ?: return false
+        if (now - window.startedAt >= WINDOW_MS) {
+            windows.remove(email, window)
+            return false
+        }
+        return window.failures >= MAX_FAILURES
+    }
+
+    fun recordFailure(email: String, now: Long = System.currentTimeMillis()) {
+        windows.compute(email) { _, current ->
+            if (current == null || now - current.startedAt >= WINDOW_MS) Window(now, 1)
+            else current.copy(failures = current.failures + 1)
+        }
+    }
+
+    fun clear(email: String) {
+        windows.remove(email)
     }
 }

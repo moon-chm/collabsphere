@@ -57,6 +57,15 @@ internal fun Route.filesRoutes() {
                     call.respond(HttpStatusCode.ServiceUnavailable, "Durable file storage is not configured")
                     return@post
                 }
+                // Resolved before anything is stored, so a misconfigured server leaves no orphaned upload.
+                val publicBaseUrl = StoragePolicy.publicBaseUrl(
+                    requestScheme = call.request.headers["X-Forwarded-Proto"] ?: "http",
+                    requestHost = call.request.headers["Host"] ?: "127.0.0.1:8080"
+                ) ?: run {
+                    logger.error("[FileUpload] Set PUBLIC_BASE_URL (or run on Render) to build download links")
+                    call.respond(HttpStatusCode.ServiceUnavailable, "File downloads are not configured")
+                    return@post
+                }
                 if (call.declaredBodyExceeds(MAX_UPLOAD_BYTES)) throw UploadTooLargeException(MAX_UPLOAD_BYTES)
                 val multipart = call.receiveMultipart()
                 var workspaceId: Int? = null
@@ -207,9 +216,7 @@ internal fun Route.filesRoutes() {
                     physicalFile.absolutePath
                 }
 
-                val scheme = call.request.headers["X-Forwarded-Proto"] ?: "http"
-                val host = call.request.headers["Host"] ?: "127.0.0.1:8080"
-                val generatedUrl = "$scheme://$host/api/file/download/$uniqueFileName"
+                val generatedUrl = "$publicBaseUrl/api/file/download/$uniqueFileName"
                 val currentTimeMil = System.currentTimeMillis()
 
                 val insertedId = try {
@@ -438,7 +445,10 @@ internal fun Route.filesRoutes() {
                 val (updatedRows, fileLocation) = dbQuery {
                     val fileRow = LocalFilesTable.selectAll().where { LocalFilesTable.id eq fileIdParam }.singleOrNull()
                         ?: return@dbQuery -1 to null
-                    if (!isMember(actingUserId, fileRow[LocalFilesTable.workspaceId])) {
+                    // Same rule as channels: the uploader, or a workspace owner/admin.
+                    val role = workspaceRole(actingUserId, fileRow[LocalFilesTable.workspaceId])
+                        ?: return@dbQuery -2 to null
+                    if (fileRow[LocalFilesTable.userId] != actingUserId && !WorkspaceRoles.canModerate(role)) {
                         return@dbQuery -2 to null
                     }
                     val updated = LocalFilesTable.update({ LocalFilesTable.id eq fileIdParam }) {

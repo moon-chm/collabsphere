@@ -1,6 +1,7 @@
 package plugins
 
 import com.collabsphere.dto.*
+import dto.WorkspaceRoles
 import com.collabsphere.model.*
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -152,7 +153,11 @@ internal fun Route.notesRoutes() {
                 val updatedRows = dbQuery {
                     val existingNote = NotesTable.selectAll().where { NotesTable.id eq noteIdParam }.singleOrNull()
                         ?: return@dbQuery -1
-                    if (!isMember(actingUserId, existingNote[NotesTable.workspaceId])) return@dbQuery -2
+                    // Same rule as channels: the note's author, or a workspace owner/admin.
+                    val role = workspaceRole(actingUserId, existingNote[NotesTable.workspaceId]) ?: return@dbQuery -2
+                    if (existingNote[NotesTable.userIdNotes] != actingUserId && !WorkspaceRoles.canModerate(role)) {
+                        return@dbQuery -2
+                    }
                     NotesTable.update({ NotesTable.id eq noteIdParam }) {
                         it[NotesTable.isDeleted] = true
                         it[NotesTable.updatedAt] = System.currentTimeMillis()

@@ -36,7 +36,7 @@ internal fun Route.tasksRoutes() {
                 val newTask = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) return@dbQuery null
                     if (request.assignedToUserId != null && !isMember(request.assignedToUserId, request.workspaceId)) {
-                        throw IllegalArgumentException("Assignee is not a member of the workspace")
+                        throw TaskValidationException("Assignee is not a member of the workspace")
                     }
 
                     // Idempotency: WorkManager retries re-send same key — return existing row
@@ -118,7 +118,22 @@ internal fun Route.tasksRoutes() {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Foreign key violation: Verify workspaceId and userIds exist.")
+                // The app's sync worker drops a create on 4xx and retries it on 5xx, so only genuine
+                // client errors may be reported as 4xx; anything unexpected must stay retryable.
+                when {
+                    // The 201 already went out; this was the follow-up notification.
+                    call.response.isCommitted -> logger.error("[Tasks] Post-create notification failed", e)
+                    e is TaskValidationException -> call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid task")
+                    e.causedByPayloadTooLarge() -> call.respond(HttpStatusCode.PayloadTooLarge, "Request body too large")
+                    e is io.ktor.server.plugins.UnsupportedMediaTypeException ->
+                        call.respond(HttpStatusCode.UnsupportedMediaType, "Expected a JSON body")
+                    e is io.ktor.server.plugins.BadRequestException -> call.respond(HttpStatusCode.BadRequest, "Malformed request body")
+                    e.isForeignKeyViolation() -> call.respond(HttpStatusCode.BadRequest, "Unknown workspace or user")
+                    else -> {
+                        logger.error("[Tasks] Failed to create task", e)
+                        call.respond(HttpStatusCode.InternalServerError, "Failed to create task")
+                    }
+                }
             }
         }
 
@@ -378,3 +393,6 @@ internal fun Route.tasksRoutes() {
         }
     }
 }
+
+/** A task request rejected for a reason the client can fix (reported as 400). */
+private class TaskValidationException(message: String) : Exception(message)

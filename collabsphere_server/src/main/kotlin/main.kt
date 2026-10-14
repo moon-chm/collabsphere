@@ -4,6 +4,7 @@ import plugins.WebSocketBroker
 import plugins.configureRouting
 import plugins.configureGitHubRoutes
 import plugins.startTaskReminderScheduler
+import plugins.causedByPayloadTooLarge
 import com.collabsphere.util.JwtConfig
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -77,8 +78,23 @@ fun Application.module() {
     }
 
     // ── Forwarded Headers (Proxy Support) ──────────────────────────────────
-    install(XForwardedHeaders)
-    install(ForwardedHeaders)
+    // The client IP feeds the auth rate limiter, so it must come only from entries our own proxies
+    // add. Render's proxy appends to X-Forwarded-For instead of replacing it, so the leftmost entries
+    // are whatever the client sent. TRUSTED_PROXY_HOPS is the number of entries appended by trusted
+    // proxies; the client IP is the leftmost of those. Unset keeps the old first-entry behaviour
+    // (spoofable), so set it once the deployment's hop count is verified. The RFC 7239 `Forwarded`
+    // header is not used: no proxy in front of this server sets it, so it is entirely client-controlled.
+    val trustedProxyHops = System.getenv("TRUSTED_PROXY_HOPS")?.toIntOrNull()?.takeIf { it > 0 }
+    install(XForwardedHeaders) {
+        when (trustedProxyHops) {
+            null -> Unit
+            1 -> useLastProxy()
+            else -> skipLastProxies(trustedProxyHops - 1)
+        }
+    }
+    if (trustedProxyHops == null && System.getenv("APP_ENV") == "production") {
+        log.warn("TRUSTED_PROXY_HOPS is not set: the auth rate limiter keys on a client-supplied X-Forwarded-For entry")
+    }
 
     // ── Observability: Structured access logging ──────────────────────────────
     install(CallLogging) {
@@ -128,6 +144,11 @@ fun Application.module() {
     // from ever reaching a client.
     install(StatusPages) {
         exception<Throwable> { call, cause ->
+            // A JSON body cut off by JsonBodyLimit surfaces here wrapped by the deserializer.
+            if (cause.causedByPayloadTooLarge()) {
+                call.respond(HttpStatusCode.PayloadTooLarge, "Request body too large")
+                return@exception
+            }
             call.application.environment.log.error("Unhandled exception caught by StatusPages", cause)
             call.respond(HttpStatusCode.InternalServerError, "Internal server error")
         }

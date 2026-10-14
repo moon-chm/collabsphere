@@ -238,6 +238,8 @@ internal fun Route.workspaceRoutes() {
                     return@post call.respond(HttpStatusCode.BadRequest, "Invalid workspace fields")
                 }
 
+                // Hashed before the transaction so bcrypt never runs while holding the advisory lock.
+                val workspacePasswordHash = PasswordHasher.hashAsync(request.workspacePassword)
                 val response = dbQuery {
                     request.clientRequestId?.let { requestId ->
                         TransactionManager.current().exec(
@@ -275,7 +277,7 @@ internal fun Route.workspaceRoutes() {
                         it[userId] = actingUserId
                         it[workspaceName] = request.workspaceName
                         it[workspaceOwner] = request.workspaceOwner
-                        it[workspacePassword] = PasswordHasher.hash(request.workspacePassword)
+                        it[workspacePassword] = workspacePasswordHash
                         it[clientRequestId] = request.clientRequestId
                         it[isDeleted] = false
                         it[updatedAt] = System.currentTimeMillis()

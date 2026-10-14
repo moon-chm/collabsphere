@@ -307,7 +307,9 @@ internal fun Route.taskVotesRoutes() {
 
                 val now = System.currentTimeMillis()
 
+                var expiredNow = false
                 val resolution = dbQuery {
+                    expiredNow = false // dbQuery may re-run this block after a serialization retry
                     // Row lock: concurrent voters must see each other's counts, otherwise a vote is
                     // lost or two voters both cross the threshold and the task is created twice.
                     val proposal = TaskVoteProposalsTable.selectAll()
@@ -333,7 +335,9 @@ internal fun Route.taskVotesRoutes() {
                             it[resolvedAt] = now
                             it[updatedAt] = now
                         }
-                        throw IllegalStateException("Proposal has expired")
+                        // Return instead of throwing: an exception would roll the EXPIRED update back.
+                        expiredNow = true
+                        return@dbQuery null
                     }
 
                     // Check duplicate vote
@@ -440,6 +444,9 @@ internal fun Route.taskVotesRoutes() {
                     )
                 }
 
+                if (expiredNow) {
+                    return@post call.respond(HttpStatusCode.Conflict, "Proposal has expired")
+                }
                 if (resolution == null) {
                     return@post call.respond(HttpStatusCode.NotFound, "Proposal not found")
                 }

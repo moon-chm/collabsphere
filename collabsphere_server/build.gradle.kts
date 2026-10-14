@@ -123,6 +123,9 @@ tasks.named<Test>("test") {
     environment("GITHUB_PRIVATE_KEY_BASE64", "")
     environment("GITHUB_WEBHOOK_SECRET", "")
     environment("GITHUB_TOKEN_SECRET", "")
+    environment("PUBLIC_BASE_URL", "")
+    environment("RENDER_EXTERNAL_URL", "")
+    environment("TRUSTED_PROXY_HOPS", "")
     environment("UPLOAD_DIR", layout.buildDirectory.dir("unit-test-uploads").get().asFile.absolutePath)
     environment("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS", "YES")
 }
@@ -161,11 +164,14 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
         require(System.getenv("COLLABSPHERE_ALLOW_TEST_DB") == "YES") {
             "Set COLLABSPHERE_ALLOW_TEST_DB=YES only after confirming TEST_DATABASE_URL is disposable."
         }
+        // Set from the validated value: Test.environment() does not resolve a Provider, so passing
+        // one handed the test JVM its toString() instead of the URL.
+        environment("DATABASE_URL", selectedUrl)
     }
 
     // The test process sees only the explicit test database. Provider configuration is blanked
     // so application tests can exercise their fallback behavior without sending real messages.
-    environment("DATABASE_URL", testDatabaseUrl.orElse(""))
+    environment("DATABASE_URL", "")
     environment("JDBC_DATABASE_URL", "")
     environment("DATABASE_READ_URL", "")
     environment("JDBC_DATABASE_READ_URL", "")
@@ -198,6 +204,9 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
     environment("GITHUB_PRIVATE_KEY_BASE64", "")
     environment("GITHUB_WEBHOOK_SECRET", "")
     environment("GITHUB_TOKEN_SECRET", "")
+    environment("PUBLIC_BASE_URL", "")
+    environment("RENDER_EXTERNAL_URL", "")
+    environment("TRUSTED_PROXY_HOPS", "")
     environment("COLLABSPHERE_DISABLE_EXTERNAL_PROVIDERS", "YES")
     environment("UPLOAD_DIR", layout.buildDirectory.dir("integration-test-uploads").get().asFile.absolutePath)
     environment("COLLABSPHERE_SAFE_TEST_MODE", "")

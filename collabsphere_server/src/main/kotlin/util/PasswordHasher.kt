@@ -1,6 +1,8 @@
 package com.collabsphere.util
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object PasswordHasher {
     private const val COST = 12
@@ -26,4 +28,22 @@ object PasswordHasher {
         } else {
             stored == plain
         }
+
+    /**
+     * bcrypt at cost 12 is ~250ms of CPU by design. Request handlers use these variants so the work
+     * never runs on a request-handling thread, and the bounded pool keeps a burst of logins from
+     * occupying every core while other requests wait.
+     *
+     * Never call them inside dbQuery/dbReadQuery: switching dispatchers inside an Exposed suspended
+     * transaction closes its connection ("Connection is closed"). Hash before the transaction, or
+     * use the blocking variants there (those blocks already run on the IO dispatcher).
+     */
+    private val bcryptDispatcher = Dispatchers.Default.limitedParallelism(
+        (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    )
+
+    suspend fun hashAsync(plain: String): String = withContext(bcryptDispatcher) { hash(plain) }
+
+    suspend fun matchesAsync(plain: String, stored: String): Boolean =
+        withContext(bcryptDispatcher) { matches(plain, stored) }
 }

@@ -422,6 +422,7 @@ fun Application.configureGitHubRoutes() {
         }
 
         authenticate("auth-jwt") {
+            install(JsonBodyLimit)
             route("/api/workspace/{workspaceId}/github") {
 
                 get("/install-url") {

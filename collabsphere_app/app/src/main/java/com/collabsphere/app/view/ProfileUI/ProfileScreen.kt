@@ -335,8 +335,9 @@ fun ProfileScreen(
                 val destUri = Uri.fromFile(destFile)
 
                 // Coral accent colors matching the app's skeuomorphic theme
+                // uCrop 2.2.11+ is edge-to-edge: the toolbar color also fills the status bar area,
+                // and the separate status-bar color option no longer exists.
                 val toolbarColor = AndroidColor.parseColor("#E8784A")   // CoralStart
-                val statusBarColor = AndroidColor.parseColor("#C95E30") // CoralEnd
                 val activeCtrlColor = AndroidColor.parseColor("#E8784A")
 
                 val cropIntent = UCrop.of(sourceUri, destUri)
@@ -348,7 +349,6 @@ fun ProfileScreen(
                             setShowCropGrid(false)              // Clean view, no grid lines
                             setShowCropFrame(false)             // Circle frame only
                             setToolbarColor(toolbarColor)
-                            setStatusBarColor(statusBarColor)
                             setActiveControlsWidgetColor(activeCtrlColor)
                             setToolbarWidgetColor(AndroidColor.WHITE)
                             setToolbarTitle("Adjust your photo")

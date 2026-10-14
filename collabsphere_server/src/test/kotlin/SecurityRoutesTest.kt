@@ -143,7 +143,9 @@ class SecurityRoutesTest {
             PasswordResetTable.insert {
                 it[PasswordResetTable.email] = email
                 it[PasswordResetTable.otp] = otp
-                it[PasswordResetTable.expiresAt] = System.currentTimeMillis() + 60_000L
+                // A code just issued: the server dates issuance as expiresAt - OTP_TTL_MS, so a shorter
+                // expiry would model a code issued long ago, already outside the resend cooldown.
+                it[PasswordResetTable.expiresAt] = System.currentTimeMillis() + plugins.AuthRules.OTP_TTL_MS
             }
         }
 
@@ -270,8 +272,11 @@ class SecurityRoutesTest {
             val response = client.post("/api/user/block/$target") { bearerAuth(jwt) }
             assertEquals(HttpStatusCode.OK, response.status)
         }
-        val profile = client.get("/api/user/$target") { bearerAuth(JwtConfig.generateToken(target)) }
-        assertEquals(HttpStatusCode.NotFound, profile.status)
+        // "Both ways": neither side of the block can see the other's profile (a self-view is always allowed).
+        val blockerViewsTarget = client.get("/api/user/$target") { bearerAuth(jwt) }
+        assertEquals(HttpStatusCode.NotFound, blockerViewsTarget.status)
+        val targetViewsBlocker = client.get("/api/user/$blocker") { bearerAuth(JwtConfig.generateToken(target)) }
+        assertEquals(HttpStatusCode.NotFound, targetViewsBlocker.status)
     }
 
     @Test
@@ -419,12 +424,22 @@ class SecurityRoutesTest {
             setBody("""{"token":"654321"}""")
         }
         assertEquals(HttpStatusCode.Gone, expired.status)
+        assertTrue(transaction {
+            UserVerificationTable.selectAll().where { UserVerificationTable.userId eq user }
+                .single()[UserVerificationTable.consumed]
+        }, "An expired code must be burned on first use")
+
+        // Like every code route, expiry is checked first, so a replay keeps reporting the code as
+        // expired; what matters is that it is still refused.
         val replay = client.post("/api/user/verify-email/confirm") {
             bearerAuth(jwt)
             contentType(ContentType.Application.Json)
             setBody("""{"token":"654321"}""")
         }
-        assertEquals(HttpStatusCode.BadRequest, replay.status)
+        assertEquals(HttpStatusCode.Gone, replay.status)
+        assertNotEquals("sec-test@example.com", transaction {
+            UsersTable.selectAll().where { UsersTable.id eq user }.single()[UsersTable.email]
+        }, "A replayed expired code must not change the email")
     }
 
     @Test
