@@ -117,7 +117,14 @@ object DatabaseFactory {
                 GitHubCodeReferencesTable,
                 GitHubCodeCacheTable,
                 TaskVoteProposalsTable,
-                TaskVotesTable
+                TaskVotesTable,
+                ContributionEventsTable,
+                SpLedgerTable,
+                UserProgressionTable,
+                UserBadgeCountersTable,
+                UserBadgeUnlocksTable,
+                UserActivityDaysTable,
+                UserContributionWorkspacesTable
             )
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()
@@ -154,6 +161,16 @@ object DatabaseFactory {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             logger.error("[DatabaseFactory] Could not create unique index on lower(users.pending_email)", e)
+        }
+        // An invalid progression catalog fails startup here rather than at the first reward.
+        val progressionCatalog = plugins.progression.ProgressionCatalogs.current
+        try {
+            transaction(writeDatabase) {
+                plugins.progression.ProgressionService.reconcileAndMigrate(progressionCatalog)
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            logger.error("[DatabaseFactory] Career progression reconciliation failed; totals are re-checked next boot", e)
         }
         initialized = true
     }

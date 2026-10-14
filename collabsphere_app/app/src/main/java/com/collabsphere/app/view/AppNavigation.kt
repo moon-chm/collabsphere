@@ -322,7 +322,10 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onNotificationClick = { notification ->
                         val workspaceId = notification.workspaceId
-                        if (workspaceId != null) {
+                        if (notification.type == "LEVEL_UP" || notification.type == "BADGE_UNLOCKED") {
+                            // Career progression lives on the profile screen.
+                            navController.navigate("profile")
+                        } else if (workspaceId != null) {
                             val wsName = dashboardViewModel.workspaces.value
                                 ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
                             val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())

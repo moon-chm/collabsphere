@@ -70,6 +70,8 @@ class MyApplication : Application(), ImageLoaderFactory {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 isAppForeground = true
+                // Pick up Sphere Points earned elsewhere (e.g. a note a teammate pinned).
+                com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
             }
 
             override fun onStop(owner: LifecycleOwner) {
@@ -83,6 +85,8 @@ class MyApplication : Application(), ImageLoaderFactory {
             workManagerFactory()
             modules(appModules)
         }
+
+        get<com.collabsphere.app.model.progression.ProgressionRepo>().startAutoRefresh()
 
         val userPreferences: UserPreferences = get()
         // On startup: run the one-time migration from plaintext DataStore → EncryptedSharedPreferences,

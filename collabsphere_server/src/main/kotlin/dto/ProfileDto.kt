@@ -31,7 +31,11 @@ data class PublicProfileResponse(
     val bio: String?,
     val statusMessage: String?,
     val isOnline: Boolean?,         // null when target has showOnlineStatus = false
-    val lastSeen: Long?             // null when target has showLastSeen = false
+    val lastSeen: Long?,            // null when target has showLastSeen = false
+    // Career progression: designation and earned badge tiers only, never the evidence behind them.
+    val careerLevel: Int? = null,
+    val careerTitle: String? = null,
+    val badges: List<dto.PublicBadge> = emptyList()
 )
 
 // ── Privacy settings update ───────────────────────────────────────────────────

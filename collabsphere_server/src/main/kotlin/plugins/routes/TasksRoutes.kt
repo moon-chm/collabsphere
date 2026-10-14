@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.slf4j.LoggerFactory
+import plugins.progression.*
 
 private val logger = LoggerFactory.getLogger("TasksRoutes")
 
@@ -75,8 +76,16 @@ internal fun Route.tasksRoutes() {
                         it[TasksTable.checklist] = TaskExtras.encodeChecklist(newChecklist)
                         it[TasksTable.labels] = TaskExtras.encodeLabels(newLabels)
                         it[TasksTable.isDeleted] = false
-                        it[TasksTable.updatedAt] = System.currentTimeMillis()
+                        val now = System.currentTimeMillis()
+                        it[TasksTable.updatedAt] = now
                         it[TasksTable.idempotencyKey] = request.idempotencyKey
+                        // Provenance for reward rules: the creator set these at creation time.
+                        it[TasksTable.prioritySetBy] = actingUserId
+                        if (newDueDate != null) {
+                            it[TasksTable.dueDateSetBy] = actingUserId
+                            it[TasksTable.dueDateSetAt] = now
+                        }
+                        if (request.status == RewardPolicy.DONE) it[TasksTable.completedAt] = now
                     }[TasksTable.id]
 
                     TaskResponse(
@@ -221,7 +230,9 @@ internal fun Route.tasksRoutes() {
             if (request.status !in listOf("TODO", "IN_PROGRESS", "DONE")) return@put call.respond(HttpStatusCode.BadRequest, "Invalid status")
 
             var previousStatus: String? = null
+            var progression: RecordResult? = null
             val updateResult = dbQuery {
+                progression = null // dbQuery may re-run this block after a serialization retry
                 val existingTask = TasksTable.selectAll().where { TasksTable.id eq taskId }.singleOrNull()
                     ?: return@dbQuery -1
                 previousStatus = existingTask[TasksTable.status]
@@ -259,6 +270,12 @@ internal fun Route.tasksRoutes() {
                     actingUserId != existingTask[TasksTable.createdByUserId]
                 ) return@dbQuery -3
 
+                val now = System.currentTimeMillis()
+                val dueDateChanged = nextDueDate != currentDueDate
+                val priorityChanged = nextPriority != currentPriority
+                val enteringDone = request.status == RewardPolicy.DONE && existingTask[TasksTable.status] != RewardPolicy.DONE
+                val leavingDone = request.status != RewardPolicy.DONE && existingTask[TasksTable.status] == RewardPolicy.DONE
+
                 TasksTable.update({ TasksTable.id eq taskId }) {
                     it[TasksTable.taskName] = request.taskName
                     it[TasksTable.taskDescription] = request.taskDescription
@@ -269,8 +286,54 @@ internal fun Route.tasksRoutes() {
                     it[TasksTable.priority] = nextPriority
                     it[TasksTable.checklist] = TaskExtras.encodeChecklist(nextChecklist)
                     it[TasksTable.labels] = TaskExtras.encodeLabels(nextLabels)
-                    if (nextDueDate != currentDueDate) it[TasksTable.reminderSentAt] = null
-                    it[TasksTable.updatedAt] = System.currentTimeMillis()
+                    if (dueDateChanged) {
+                        it[TasksTable.reminderSentAt] = null
+                        it[TasksTable.dueDateSetBy] = actingUserId
+                        it[TasksTable.dueDateSetAt] = now
+                    }
+                    if (priorityChanged) it[TasksTable.prioritySetBy] = actingUserId
+                    if (enteringDone) it[TasksTable.completedAt] = now
+                    if (leavingDone) it[TasksTable.completedAt] = null
+                    it[TasksTable.updatedAt] = now
+                }
+
+                // Career progression: rewarded in this transaction, so it commits with the completion.
+                if (enteringDone) {
+                    val decision = RewardPolicy.taskCompletion(
+                        TaskCompletionFacts(
+                            actorId = actingUserId,
+                            assigneeId = request.assignedToUserId,
+                            createdById = existingTask[TasksTable.createdByUserId],
+                            isDeleted = existingTask[TasksTable.isDeleted],
+                            previousStatus = existingTask[TasksTable.status],
+                            newStatus = request.status,
+                            priority = nextPriority,
+                            prioritySetBy = if (priorityChanged) actingUserId else existingTask[TasksTable.prioritySetBy],
+                            checklistSize = nextChecklist.size,
+                            labels = nextLabels,
+                            dueDate = nextDueDate,
+                            dueDateSetBy = if (dueDateChanged) actingUserId else existingTask[TasksTable.dueDateSetBy],
+                            dueDateSetAt = if (dueDateChanged) now else existingTask[TasksTable.dueDateSetAt],
+                            completedAt = now,
+                            teamApproved = ProgressionService.isTeamApprovedTask(taskId)
+                        ),
+                        ProgressionCatalogs.current.policy
+                    )
+                    if (decision != null) {
+                        progression = ProgressionService.record(
+                            ContributionEvent(
+                                idempotencyKey = "task-complete:$taskId",
+                                userId = actingUserId,
+                                eventType = "TASK_COMPLETED",
+                                source = "TASKS",
+                                referenceType = "TASK",
+                                referenceId = taskId.toString(),
+                                workspaceId = request.workspaceId,
+                                occurredAt = now,
+                                decision = decision
+                            )
+                        )
+                    }
                 }
             }
 
@@ -304,6 +367,7 @@ internal fun Route.tasksRoutes() {
                 call.respond(HttpStatusCode.InternalServerError, "Failed to retrieve updated task")
             } else {
                 call.respond(HttpStatusCode.OK, updatedTask)
+                progression?.let { publishProgressionNotifications(it.notifications) }
                 syncLinkedIssuesWithTask(updatedTask.id, previousStatus, updatedTask.status)
                 call.application.launch {
                     try {

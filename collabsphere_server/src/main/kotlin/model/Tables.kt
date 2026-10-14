@@ -29,6 +29,9 @@ object UsersTable : Table("users") {
     val tokenVersion = integer("token_version").default(0)
     // Requested-but-unverified new email. `email` only changes once the user proves they own this one.
     val pendingEmail = varchar("pending_email", 255).nullable()
+    // IANA zone reported by the user's device; decides which calendar day an activity counts toward
+    // for streaks and daily caps. Null means UTC.
+    val timeZone = varchar("time_zone", 64).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -195,6 +198,8 @@ object NotesTable : Table("notes") {
     val notesName = varchar("notes_name", 255)
     val notesDescription = text("description")
     val isPinned = bool("is_pinned").default(false)
+    // Who pinned it; a pin by someone other than the author is the note-approval signal.
+    val pinnedByUserId = integer("pinned_by_user_id").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created note so a WorkManager retry after a lost (but
@@ -224,6 +229,13 @@ object TasksTable : Table("task") {
     val checklist = text("checklist").nullable()
     val labels = text("labels").nullable()
     val reminderSentAt = long("reminder_sent_at").nullable()
+    // Server-stamped when the task enters DONE; cleared if it leaves DONE.
+    val completedAt = long("completed_at").nullable()
+    // Who last set the due date / priority, and when. Reward rules use these so an assignee cannot
+    // grant themselves on-time or complexity credit by editing their own task. Null on older rows.
+    val dueDateSetBy = integer("due_date_set_by").nullable()
+    val dueDateSetAt = long("due_date_set_at").nullable()
+    val prioritySetBy = integer("priority_set_by").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created task so a WorkManager retry after a lost (but
@@ -741,4 +753,107 @@ object TaskVotesTable : Table("task_votes") {
     val votedAt = long("voted_at").clientDefault { System.currentTimeMillis() }
 
     override val primaryKey = PrimaryKey(proposalId, userId)
+}
+
+// ── Career progression ────────────────────────────────────────────────────────
+// Definitions (levels, rule values, badge tiers) live in progression-catalog.json; these tables
+// hold only per-user state. The ledger is the source of truth for SP; user_progression.total_sp is
+// a running total updated in the same transaction and reconciled against the ledger at boot.
+
+/** One row per rewarded (or cap-limited) activity. The idempotency key makes every activity count once. */
+object ContributionEventsTable : Table("contribution_events") {
+    val id = long("id").autoIncrement()
+    val idempotencyKey = varchar("idempotency_key", 200).uniqueIndex()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val eventType = varchar("event_type", 40)
+    val sourceSystem = varchar("source", 20)
+    val referenceType = varchar("reference_type", 30)
+    val referenceId = varchar("reference_id", 100)
+    val workspaceId = integer("workspace_id").nullable()
+    val occurredAt = long("occurred_at")
+    val receivedAt = long("received_at")
+    /** Epoch day in the user's time zone at processing time; fixed once written. */
+    val activityDay = long("activity_day")
+    val status = varchar("status", 20) // REWARDED | CAPPED
+    val ruleKey = varchar("rule_key", 40).nullable()
+    /** Comma-separated badge counters this event advanced (the evidence trail for badge details). */
+    val counters = text("counters").default("")
+    val policyVersion = integer("policy_version")
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, userId, ruleKey, activityDay)
+        index(false, userId, id)
+    }
+}
+
+/** Immutable SP movements. Awards reference their event; corrections are new rows, never edits. */
+object SpLedgerTable : Table("sp_ledger") {
+    val id = long("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val eventId = long("event_id").references(ContributionEventsTable.id).nullable().uniqueIndex()
+    val kind = varchar("kind", 20) // AWARD | CORRECTION
+    val ruleKey = varchar("rule_key", 40).nullable()
+    val amount = integer("amount")
+    val reason = varchar("reason", 255).nullable()
+    /** For corrections: who applied it. */
+    val actorId = integer("actor_id").nullable()
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, userId, id)
+    }
+}
+
+object UserProgressionTable : Table("user_progression") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val totalSp = long("total_sp").default(0L)
+    val level = integer("level").default(1)
+    val catalogVersion = integer("catalog_version").default(0)
+    val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+
+    override val primaryKey = PrimaryKey(userId)
+}
+
+object UserBadgeCountersTable : Table("user_badge_counters") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val counter = varchar("counter", 40)
+    val value = long("value").default(0L)
+
+    override val primaryKey = PrimaryKey(userId, counter)
+}
+
+object UserBadgeUnlocksTable : Table("user_badge_unlocks") {
+    val id = long("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val familyKey = varchar("family_key", 40)
+    val tier = varchar("tier", 10)
+    val unlockedAt = long("unlocked_at")
+    val evidenceEventId = long("evidence_event_id").references(ContributionEventsTable.id).nullable()
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        uniqueIndex(userId, familyKey, tier)
+    }
+}
+
+/** Days (epoch day, user's zone) with at least one rewarded activity — the streak source. */
+object UserActivityDaysTable : Table("user_activity_days") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val day = long("day")
+
+    override val primaryKey = PrimaryKey(userId, day)
+}
+
+/** Workspaces a user has earned in; history is kept even if the workspace is later deleted. */
+object UserContributionWorkspacesTable : Table("user_contribution_workspaces") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val workspaceId = integer("workspace_id")
+    val firstEventId = long("first_event_id")
+
+    override val primaryKey = PrimaryKey(userId, workspaceId)
 }

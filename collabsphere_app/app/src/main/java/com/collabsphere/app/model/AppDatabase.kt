@@ -38,9 +38,12 @@ import com.collabsphere.app.model.vote.TaskVoteProposalEntity
         FileEntity::class,
         DmEntity::class,
         DmReactionEntity::class,
-        TaskVoteProposalEntity::class
+        TaskVoteProposalEntity::class,
+        com.collabsphere.app.model.progression.ProgressionSummaryEntity::class,
+        com.collabsphere.app.model.progression.ProgressionCatalogEntity::class,
+        com.collabsphere.app.model.progression.BadgeProgressEntity::class
     ],
-    version = 45,
+    version = 46,
     exportSchema = false
 )
 @TypeConverters(TaskListConverters::class)
@@ -56,6 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dmDao(): DmDao
     abstract fun dmReactionDao(): DmReactionDao
     abstract fun taskVoteDao(): TaskVoteDao
+    abstract fun progressionDao(): com.collabsphere.app.model.progression.ProgressionDao
 
     companion object {
         /**
@@ -177,6 +181,60 @@ abstract class AppDatabase : RoomDatabase() {
                 """.trimIndent())
                 database.execSQL("CREATE INDEX IF NOT EXISTS `index_task_vote_proposal_workspaceId` ON `task_vote_proposal` (`workspaceId`)")
                 database.execSQL("CREATE INDEX IF NOT EXISTS `index_task_vote_proposal_status` ON `task_vote_proposal` (`status`)")
+            }
+        }
+
+        /**
+         * Migration 45 → 46: offline cache for career progression (summary, catalog, badge progress).
+         * Server-authoritative data only — nothing here can grant SP or badges locally.
+         */
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `progression_summary` (
+                        `userId` INTEGER NOT NULL,
+                        `totalSp` INTEGER NOT NULL,
+                        `level` INTEGER NOT NULL,
+                        `maxLevel` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `levelRequiredSp` INTEGER NOT NULL,
+                        `nextLevel` INTEGER,
+                        `nextTitle` TEXT,
+                        `nextLevelRequiredSp` INTEGER,
+                        `spIntoLevel` INTEGER NOT NULL,
+                        `spSpanToNext` INTEGER NOT NULL,
+                        `isMaxLevel` INTEGER NOT NULL,
+                        `currentStreakDays` INTEGER NOT NULL,
+                        `bestStreakDays` INTEGER NOT NULL,
+                        `lastLedgerId` INTEGER NOT NULL,
+                        `fetchedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`)
+                    )
+                """.trimIndent())
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `progression_catalog` (
+                        `id` INTEGER NOT NULL,
+                        `version` INTEGER NOT NULL,
+                        `etag` TEXT,
+                        `json` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `badge_progress` (
+                        `userId` INTEGER NOT NULL,
+                        `familyKey` TEXT NOT NULL,
+                        `available` INTEGER NOT NULL,
+                        `counterValue` INTEGER NOT NULL,
+                        `bronzeUnlockedAt` INTEGER,
+                        `silverUnlockedAt` INTEGER,
+                        `goldUnlockedAt` INTEGER,
+                        `nextTier` TEXT,
+                        `nextThreshold` INTEGER,
+                        `sortOrder` INTEGER NOT NULL,
+                        PRIMARY KEY(`userId`, `familyKey`)
+                    )
+                """.trimIndent())
             }
         }
     }

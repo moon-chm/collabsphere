@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "levels": [
+    { "level": 1, "title": "Graduate Trainee", "requiredSp": 0 },
+    { "level": 2, "title": "Junior Developer", "requiredSp": 100 },
+    { "level": 3, "title": "Associate Software Engineer", "requiredSp": 250 },
+    { "level": 4, "title": "Software Engineer I", "requiredSp": 500 },
+    { "level": 5, "title": "Software Engineer II", "requiredSp": 800 },
+    { "level": 6, "title": "Senior Software Engineer", "requiredSp": 1200 },
+    { "level": 7, "title": "Technical Specialist", "requiredSp": 1700 },
+    { "level": 8, "title": "Lead Software Engineer", "requiredSp": 2300 },
+    { "level": 9, "title": "Staff Software Engineer", "requiredSp": 3000 },
+    { "level": 10, "title": "Principal Software Engineer", "requiredSp": 3800 },
+    { "level": 11, "title": "Engineering Manager", "requiredSp": 4700 },
+    { "level": 12, "title": "Senior Engineering Manager", "requiredSp": 5700 },
+    { "level": 13, "title": "Director of Engineering", "requiredSp": 6800 },
+    { "level": 14, "title": "Senior Director of Engineering", "requiredSp": 8000 },
+    { "level": 15, "title": "Vice President of Engineering", "requiredSp": 9500 },
+    { "level": 16, "title": "Senior Vice President of Engineering", "requiredSp": 11200 },
+    { "level": 17, "title": "Chief Technology Officer", "requiredSp": 13000 },
+    { "level": 18, "title": "Chief Technology & Product Officer", "requiredSp": 15000 },
+    { "level": 19, "title": "Chief Innovation Officer", "requiredSp": 17500 },
+    { "level": 20, "title": "Legendary Industry Fellow", "requiredSp": 20000 }
+  ],
+  "rules": [
+    { "key": "TASK_COMPLETED", "sp": 20, "description": "Complete a task assigned by a teammate or approved by team vote" },
+    { "key": "TASK_COMPLETED_COMPLEX", "sp": 40, "description": "Complete a high-priority task with a checklist, prioritised by a teammate" },
+    { "key": "TASK_RELIABILITY", "sp": 20, "description": "Complete a bug, fix, test or reliability task assigned by a teammate" },
+    { "key": "TASK_SELF_COMPLETED", "sp": 20, "dailyCap": 3, "description": "Complete a task you created for yourself (limited per day)" },
+    { "key": "NOTE_APPROVED", "sp": 5, "dailyCap": 5, "description": "Have a substantial note pinned by a teammate" },
+    { "key": "PR_MERGED", "sp": 30, "description": "Author a pull request that gets merged" },
+    { "key": "ISSUE_RESOLVED", "sp": 25, "description": "Close someone else's issue as completed" },
+    { "key": "REVIEW_ACCEPTED", "sp": 15, "description": "Approve a teammate's pull request that gets merged" },
+    { "key": "RELEASE_PUBLISHED", "sp": 50, "description": "Publish a release" },
+    { "key": "MILESTONE_COMPLETED", "sp": 50, "description": "Close a project milestone" }
+  ],
+  "policy": {
+    "complexPriority": "HIGH",
+    "complexMinChecklistItems": 3,
+    "reliabilityLabels": ["bug", "bugfix", "fix", "hotfix", "regression", "reliability", "test", "tests", "testing", "quality"],
+    "onTimeSelfSetMinLeadMs": 86400000,
+    "noteMinLength": 50
+  },
+  "badges": [
+    {
+      "key": "CODECRAFT", "name": "CodeCraft", "theme": "Developer Excellence",
+      "requirement": "Author pull requests that get merged",
+      "counter": "ACCEPTED_CODE_CONTRIBUTIONS", "bronze": 5, "silver": 25, "gold": 100, "available": false
+    },
+    {
+      "key": "DEADLINE_ACE", "name": "Deadline Ace", "theme": "On-Time Delivery",
+      "requirement": "Complete tasks at or before their due date",
+      "counter": "ON_TIME_COMPLETIONS", "bronze": 5, "silver": 25, "gold": 100, "available": true
+    },
+    {
+      "key": "SYNERGY_STAR", "name": "Synergy Star", "theme": "Team Collaboration",
+      "requirement": "Complete tasks a teammate created for you, and approve teammates' merged pull requests",
+      "counter": "COLLABORATIVE_ACTIVITIES", "bronze": 5, "silver": 25, "gold": 75, "available": true
+    },
+    {
+      "key": "TASK_TITAN", "name": "Task Titan", "theme": "Task Completion",
+      "requirement": "Complete tasks",
+      "counter": "TASKS_COMPLETED", "bronze": 10, "silver": 50, "gold": 200, "available": true
+    },
+    {
+      "key": "MOMENTUM_KEEPER", "name": "Momentum Keeper", "theme": "Consistency",
+      "requirement": "Earn Sphere Points on consecutive days",
+      "counter": "STREAK_DAYS", "bronze": 3, "silver": 7, "gold": 30, "available": true
+    },
+    {
+      "key": "BUG_BUSTER", "name": "Bug Buster", "theme": "Issue Resolution",
+      "requirement": "Close teammates' GitHub issues as completed",
+      "counter": "ISSUES_RESOLVED", "bronze": 5, "silver": 25, "gold": 100, "available": false
+    },
+    {
+      "key": "KNOWLEDGE_ARCHITECT", "name": "Knowledge Architect", "theme": "Documentation",
+      "requirement": "Write substantial notes that a teammate pins",
+      "counter": "KNOWLEDGE_CONTRIBUTIONS", "bronze": 5, "silver": 20, "gold": 60, "available": true
+    },
+    {
+      "key": "MILESTONE_MAVERICK", "name": "Milestone Maverick", "theme": "Project Delivery",
+      "requirement": "Close GitHub project milestones",
+      "counter": "MILESTONES_COMPLETED", "bronze": 1, "silver": 5, "gold": 20, "available": false
+    },
+    {
+      "key": "GUARDIAN", "name": "Guardian", "theme": "Quality and Reliability",
+      "requirement": "Complete bug, fix, test or reliability tasks a teammate assigned",
+      "counter": "QUALITY_IMPROVEMENTS", "bronze": 5, "silver": 20, "gold": 50, "available": true
+    },
+    {
+      "key": "MERGE_MASTER", "name": "Merge Master", "theme": "GitHub Integration",
+      "requirement": "Merge teammates' pull requests as a maintainer",
+      "counter": "PRS_MERGED_AS_MAINTAINER", "bronze": 5, "silver": 25, "gold": 100, "available": false
+    },
+    {
+      "key": "BRIDGE_BUILDER", "name": "Bridge Builder", "theme": "Communication",
+      "requirement": "Write messages that teammates mark as helpful",
+      "counter": "HELPFUL_MESSAGES", "bronze": 5, "silver": 25, "gold": 75, "available": false
+    },
+    {
+      "key": "MENTOR_SPARK", "name": "Mentor Spark", "theme": "Helping Others",
+      "requirement": "Be recognised as helpful by different teammates",
+      "counter": "HELPFUL_RECOGNIZERS", "bronze": 3, "silver": 15, "gold": 40, "available": false
+    },
+    {
+      "key": "LAUNCH_COMMANDER", "name": "Launch Commander", "theme": "Project Releases",
+      "requirement": "Publish GitHub releases",
+      "counter": "RELEASES_PUBLISHED", "bronze": 1, "silver": 5, "gold": 15, "available": false
+    },
+    {
+      "key": "SPHERE_EXPLORER", "name": "Sphere Explorer", "theme": "Workspace Participation",
+      "requirement": "Earn Sphere Points in different workspaces",
+      "counter": "DISTINCT_WORKSPACES", "bronze": 2, "silver": 5, "gold": 10, "available": true
+    },
+    {
+      "key": "SPHERE_LEGEND", "name": "Sphere Legend", "theme": "All-Round Contributor",
+      "requirement": "Earn different badge families",
+      "counter": "DISTINCT_BADGE_FAMILIES", "bronze": 3, "silver": 7, "gold": 12, "available": true
+    }
+  ]
+}

@@ -201,7 +201,10 @@ fun ProfileRoute(
         onShowLastSeenToggleChange = viewModel::onShowLastSeenChanged,
         onProfileVisibilityChange = viewModel::onProfileVisibilityChanged,
         onSavePrivacySettings = { viewModel.onSavePrivacySettings() },
-        onNavigateToBlockedUsers = onNavigateToBlockedUsers
+        onNavigateToBlockedUsers = onNavigateToBlockedUsers,
+        careerContent = {
+            CareerSection(userId = viewModel.loggedInUserId, snackbarHostState = snackbarHostState)
+        }
     )
 }
 
@@ -262,7 +265,9 @@ fun ProfileScreen(
     onShowLastSeenToggleChange: (Boolean) -> Unit,
     onProfileVisibilityChange: (String) -> Unit,
     onSavePrivacySettings: () -> Unit,
-    onNavigateToBlockedUsers: () -> Unit
+    onNavigateToBlockedUsers: () -> Unit,
+    /** Career progression and achievements, shown between the profile header and the email card. */
+    careerContent: @Composable () -> Unit = {}
 ) {
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
@@ -1060,6 +1065,8 @@ onDrawBehind {
                         }
                     }
                 }
+
+                careerContent()
 
                 // ── Email card ──────────────────────────────────────────────────
                 Box(

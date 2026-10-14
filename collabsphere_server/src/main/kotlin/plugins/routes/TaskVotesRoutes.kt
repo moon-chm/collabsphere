@@ -164,6 +164,11 @@ internal fun Route.taskVotesRoutes() {
                                 it[labels] = TaskExtras.encodeLabels(normalizedLabels)
                                 it[isDeleted] = false
                                 it[updatedAt] = now
+                                it[prioritySetBy] = actingUserId
+                                if (normalizedDueDate != null) {
+                                    it[dueDateSetBy] = actingUserId
+                                    it[dueDateSetAt] = now
+                                }
                             }[TasksTable.id]
                         } else if (request.type == "DELETE") {
                             TasksTable.update({ TasksTable.id eq request.taskId!! }) {
@@ -385,6 +390,12 @@ internal fun Route.taskVotesRoutes() {
                                 it[labels] = proposal[TaskVoteProposalsTable.labels]
                                 it[isDeleted] = false
                                 it[updatedAt] = now
+                                // The team approved the proposal's due date and priority as written.
+                                it[prioritySetBy] = proposal[TaskVoteProposalsTable.proposerId]
+                                if (proposal[TaskVoteProposalsTable.dueDate] != null) {
+                                    it[dueDateSetBy] = proposal[TaskVoteProposalsTable.proposerId]
+                                    it[dueDateSetAt] = now
+                                }
                             }[TasksTable.id]
                         } else if (proposal[TaskVoteProposalsTable.type] == "DELETE") {
                             val targetTaskId = proposal[TaskVoteProposalsTable.taskId]

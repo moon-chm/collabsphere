@@ -19,7 +19,11 @@ data class PublicProfileResponse(
     val bio: String? = null,
     val statusMessage: String? = null,
     val isOnline: Boolean? = null,
-    val lastSeen: Long? = null
+    val lastSeen: Long? = null,
+    // Career progression: designation and earned badge tiers only (never the evidence behind them).
+    val careerLevel: Int? = null,
+    val careerTitle: String? = null,
+    val badges: List<com.collabsphere.app.dto.progression.PublicBadge> = emptyList()
 )
 
 @Serializable

@@ -95,6 +95,7 @@ class TaskSyncWorker(
 
             if (actionType == "UPDATE") {
                 apiService.updateTask(taskId, request)
+                if (status == TaskStatus.DONE.name) com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
             } else {
                 val remoteResponse = apiService.createTask(createdByUserId, request)
                 if (taskId != remoteResponse.id) {

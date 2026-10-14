@@ -273,6 +273,8 @@ class TaskRepo(
                 labels = task.labels
             )
             apiService.updateTask(taskId = task.id, request = request)
+            // A completion may have earned Sphere Points; the server decides, the app just re-reads.
+            if (task.status == TaskStatus.DONE) com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
             Result.success(TaskSyncOutcome.CONFIRMED)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Source
+import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -183,6 +185,8 @@ private fun iconFor(type: String): ImageVector = when (type) {
     "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE" -> Icons.AutoMirrored.Filled.Assignment
     "WORKSPACE_INVITE" -> Icons.Default.GroupAdd
     "GITHUB_PR", "GITHUB_ISSUE", "GITHUB_CI", "GITHUB_RELEASE" -> Icons.Default.Source
+    "LEVEL_UP" -> Icons.Default.WorkspacePremium
+    "BADGE_UNLOCKED" -> Icons.Default.EmojiEvents
     else -> Icons.AutoMirrored.Filled.Chat
 }
 

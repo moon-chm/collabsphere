@@ -145,6 +145,7 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
         includeTestsMatching("plugins.DeltaSyncIntegrationTest")
         includeTestsMatching("plugins.DmHistoryIntegrationTest")
         includeTestsMatching("plugins.WebhookQueueIntegrationTest")
+        includeTestsMatching("ProgressionIntegrationTest")
     }
 
     doFirst {

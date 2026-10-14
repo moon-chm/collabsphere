@@ -12,6 +12,7 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.slf4j.LoggerFactory
+import plugins.progression.*
 
 private val logger = LoggerFactory.getLogger("NotesRoutes")
 
@@ -82,19 +83,52 @@ internal fun Route.notesRoutes() {
                     ?: return@post call.respond(HttpStatusCode.BadRequest, false)
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<PinRequest>()
+                var progression: RecordResult? = null
                 val updated = dbQuery {
+                    progression = null // dbQuery may re-run this block after a serialization retry
                     val note = NotesTable.selectAll()
                         .where { (NotesTable.id eq noteIdParam) and (NotesTable.isDeleted eq false) }
                         .singleOrNull() ?: return@dbQuery -1
                     if (!isMember(actingUserId, note[NotesTable.workspaceId])) return@dbQuery -2
-                    NotesTable.update({ NotesTable.id eq noteIdParam }) {
+                    val now = System.currentTimeMillis()
+                    val changed = NotesTable.update({ NotesTable.id eq noteIdParam }) {
                         it[NotesTable.isPinned] = request.pinned
-                        it[NotesTable.updatedAt] = System.currentTimeMillis()
+                        it[NotesTable.pinnedByUserId] = if (request.pinned) actingUserId else null
+                        it[NotesTable.updatedAt] = now
                     }
+                    // A teammate pinning a substantial note is the documentation-approval signal; it
+                    // rewards the author once per note (unpinning later does not take it back).
+                    val decision = RewardPolicy.noteApproval(
+                        authorId = note[NotesTable.userIdNotes],
+                        pinnerId = actingUserId,
+                        pinned = request.pinned,
+                        isDeleted = note[NotesTable.isDeleted],
+                        description = note[NotesTable.notesDescription],
+                        policy = ProgressionCatalogs.current.policy
+                    )
+                    if (decision != null) {
+                        progression = ProgressionService.record(
+                            ContributionEvent(
+                                idempotencyKey = "note-approved:$noteIdParam",
+                                userId = note[NotesTable.userIdNotes],
+                                eventType = "NOTE_APPROVED",
+                                source = "NOTES",
+                                referenceType = "NOTE",
+                                referenceId = noteIdParam.toString(),
+                                workspaceId = note[NotesTable.workspaceId],
+                                occurredAt = now,
+                                decision = decision
+                            )
+                        )
+                    }
+                    changed
                 }
                 when {
                     updated == -2 -> call.respond(HttpStatusCode.Forbidden, false)
-                    updated > 0  -> call.respond(HttpStatusCode.OK, true)
+                    updated > 0  -> {
+                        call.respond(HttpStatusCode.OK, true)
+                        progression?.let { publishProgressionNotifications(it.notifications) }
+                    }
                     else         -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {

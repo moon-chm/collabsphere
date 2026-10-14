@@ -31,6 +31,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import com.collabsphere.DatabaseFactory
+import plugins.progression.progressionRoutes
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -1328,6 +1329,7 @@ fun Application.configureRouting() {
                                 if (!sharesWorkspace) return@dbQuery null
                             }
                             val isOnlineNow = WebSocketBroker.isUserConnected(targetId.toLong())
+                            val (careerLevel, careerBadges) = plugins.progression.ProgressionQueries.publicSummary(targetId)
                             PublicProfileResponse(
                                 id = row[UsersTable.id],
                                 username = row[UsersTable.username],
@@ -1336,7 +1338,10 @@ fun Application.configureRouting() {
                                 bio = row[UsersTable.bio],
                                 statusMessage = row[UsersTable.statusMessage],
                                 isOnline = if (row[UsersTable.showOnlineStatus]) isOnlineNow else null,
-                                lastSeen = if (row[UsersTable.showLastSeen]) row[UsersTable.lastSeen] else null
+                                lastSeen = if (row[UsersTable.showLastSeen]) row[UsersTable.lastSeen] else null,
+                                careerLevel = careerLevel.level,
+                                careerTitle = careerLevel.title,
+                                badges = careerBadges
                             )
                         }
                     }
@@ -1508,6 +1513,11 @@ fun Application.configureRouting() {
 
             // â”€â”€ Notes â”€â”€ extracted to plugins/routes/NotesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             notesRoutes()
+
+            // Career progression (read-only for clients) — extracted to plugins/progression/
+            rateLimit(RateLimitName("api")) {
+                progressionRoutes()
+            }
 
 
             // â”€â”€ Messages â”€â”€ extracted to plugins/routes/MessagesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€

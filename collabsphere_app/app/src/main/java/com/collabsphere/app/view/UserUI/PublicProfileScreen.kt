@@ -169,6 +169,16 @@ fun PublicProfileScreen(
                             color = Ink
                         )
 
+                        if (p.careerTitle != null && p.careerLevel != null) {
+                            val badgeSuffix = if (p.badges.isEmpty()) "" else " · ${p.badges.size} badge${if (p.badges.size == 1) "" else "s"}"
+                            Text(
+                                text = "${p.careerTitle} · Level ${p.careerLevel}$badgeSuffix",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = CoralStart,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
                         if (!p.statusMessage.isNullOrBlank()) {
                             Text(p.statusMessage!!, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = TextAlign.Center)
                         }
