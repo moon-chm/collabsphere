@@ -27,7 +27,7 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM Registration Token generated: $token")
+        Log.d(TAG, "New FCM registration token generated")
         serviceScope.launch {
             try {
                 userPreferences.saveFcmToken(token)

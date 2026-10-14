@@ -91,8 +91,13 @@ val databaseModule = module {
     single { get<AppDatabase>().taskVoteDao() }
 }
 
+private val backendHost = io.ktor.http.Url(com.collabsphere.app.AppConfig.BASE_URL).host
+
 val DynamicTokenPlugin = io.ktor.client.plugins.api.createClientPlugin("DynamicTokenPlugin") {
     onRequest { request, _ ->
+        // Only our own backend gets the session token: some requests use server-supplied absolute
+        // URLs (e.g. file downloads), and those must never carry it to another host.
+        if (request.url.host != backendHost) return@onRequest
         AuthTokenHolder.token?.let {
             request.headers.append(io.ktor.http.HttpHeaders.Authorization, "Bearer $it")
         }

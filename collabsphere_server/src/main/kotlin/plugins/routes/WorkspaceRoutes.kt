@@ -514,7 +514,8 @@ internal fun Route.workspaceRoutes() {
                 call.respond(HttpStatusCode.Created, insertedInvitation)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Failed to send invitation: ${e.message}")
+                logger.error("[Workspace] Failed to send invitation", e)
+                call.respond(HttpStatusCode.BadRequest, "Failed to send invitation")
             }
         }
 
@@ -765,7 +766,8 @@ internal fun Route.workspaceRoutes() {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Failed to join workspace: ${e.message}")
+                logger.error("[Workspace] Failed to join workspace", e)
+                call.respond(HttpStatusCode.BadRequest, "Failed to join workspace")
             }
         }
 

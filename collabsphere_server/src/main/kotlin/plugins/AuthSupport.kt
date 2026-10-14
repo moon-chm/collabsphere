@@ -40,7 +40,7 @@ internal object AuthRules {
     }
 
     /** Cryptographically secure 6-digit code — kotlin.random is predictable and must not mint secrets. */
-    fun generateOtp(): String = String.format("%06d", secureRandom.nextInt(1_000_000))
+    fun generateOtp(): String = String.format(java.util.Locale.ROOT, "%06d", secureRandom.nextInt(1_000_000))
 
     /** True when a code issued at (expiresAt - TTL) is still inside the resend cooldown. */
     fun inResendCooldown(existingExpiresAt: Long?, now: Long = System.currentTimeMillis()): Boolean =

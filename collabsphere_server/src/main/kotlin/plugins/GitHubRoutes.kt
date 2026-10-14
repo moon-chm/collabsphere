@@ -38,6 +38,8 @@ import com.collabsphere.util.SyncTrigger
 import com.collabsphere.util.GitHubWebhookService
 import com.collabsphere.util.JwtConfig
 import io.ktor.http.*
+import io.ktor.utils.io.readRemaining
+import kotlinx.io.readByteArray
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -375,11 +377,18 @@ fun Application.configureGitHubRoutes() {
         }
 
         post("/webhook/github") {
-            if ((call.request.header(HttpHeaders.ContentLength)?.toLongOrNull() ?: 0L) > 5 * 1024 * 1024) {
+            val maxWebhookBytes = 5L * 1024 * 1024
+            if ((call.request.header(HttpHeaders.ContentLength)?.toLongOrNull() ?: 0L) > maxWebhookBytes) {
                 call.respond(HttpStatusCode.PayloadTooLarge, "Payload too large")
                 return@post
             }
-            val payload = call.receive<ByteArray>()
+            // Chunked bodies declare no length, so read at most one byte past the cap and refuse
+            // anything longer instead of buffering an unbounded body from this unauthenticated route.
+            val payload = call.receiveChannel().readRemaining(maxWebhookBytes + 1).readByteArray()
+            if (payload.size > maxWebhookBytes) {
+                call.respond(HttpStatusCode.PayloadTooLarge, "Payload too large")
+                return@post
+            }
             val signature = call.request.header("X-Hub-Signature-256")
             val eventType = call.request.header("X-GitHub-Event")
             val deliveryId = call.request.header("X-GitHub-Delivery")

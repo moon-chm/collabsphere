@@ -321,10 +321,8 @@ fun Application.configureRouting() {
             call.respond(HttpStatusCode.OK)
         }
 
-        get("/health") {
-            call.respondText("OK", ContentType.Text.Plain, HttpStatusCode.OK)
-        }
-
+        // GET /health is the DB/Redis-aware check registered in Application.module(); a second GET
+        // handler here was unreachable because the first registered handler answers.
         head("/health") {
             call.respond(HttpStatusCode.OK)
         }
@@ -692,8 +690,11 @@ fun Application.configureRouting() {
                 }
 
                 val resetResult = dbQuery {
+                    // Row lock serializes concurrent guesses against the same code; without it every
+                    // parallel request reads the same `attempts` value and the attempt cap is bypassed.
                     val resetRow = PasswordResetTable.selectAll()
                         .where { PasswordResetTable.email eq trimmedEmail }
+                        .forUpdate()
                         .singleOrNull() ?: return@dbQuery "INVALID"
                     val now = System.currentTimeMillis()
                     if (resetRow[PasswordResetTable.expiresAt] <= now) {
@@ -722,7 +723,8 @@ fun Application.configureRouting() {
                         return@dbQuery "INVALID"
                     }
 
-                    val userRow = UsersTable.selectAll().where { UsersTable.email eq trimmedEmail }.singleOrNull()
+                    // Same case-insensitive match forgot-password used when it issued this code.
+                    val userRow = UsersTable.selectAll().where { UsersTable.email.lowerCase() eq trimmedEmail }.singleOrNull()
                         ?: return@dbQuery "USER_NOT_FOUND"
 
                     // Mark the matching, still-live code consumed before changing credentials. A
@@ -1579,7 +1581,12 @@ fun Application.configureRouting() {
 
                                     if (dmDto.action == "SEND_MESSAGE") {
                                         // Only the authenticated connection owner may send as themselves.
-                                        val requestedDto = dmDto.copy(senderId = userIdParam.toInt())
+                                        // Media must come from our own upload endpoint (as channel messages already
+                                        // require) — an arbitrary URL would make the recipient's device fetch it.
+                                        val requestedDto = dmDto.copy(
+                                            senderId = userIdParam.toInt(),
+                                            mediaUrl = dmDto.mediaUrl?.takeIf { com.collabsphere.util.CloudinaryService.isCloudinaryUrl(it) }
+                                        )
                                         val savedMessageDto = dbQuery {
                                             lockUserPair(requestedDto.senderId, requestedDto.receiverId)
                                             val rejection = DmRules.sendRejection(
@@ -1732,10 +1739,17 @@ fun Application.configureRouting() {
                                             recipients.forEach { sendToChannelCapableUser(it.toLong(), typingJson) }
                                         }
                                     } else if (dmDto.action == "TYPING_START" || dmDto.action == "TYPING_STOP") {
-                                        // Forward typing status in real time to the intended chat partner
-                                        val typingPayload = dmDto.copy(senderId = userIdParam.toInt())
-                                        val typingJson = Json.encodeToString(DmDto.serializer(), typingPayload)
-                                        sendToUser(dmDto.receiverId.toLong(), typingJson)
+                                        // Forward typing status in real time to the intended chat partner, but only
+                                        // between members of the same workspace (membership lookups are cached).
+                                        val canNotify = dbQuery {
+                                            isMember(userIdParam.toInt(), dmDto.workspaceId) &&
+                                                isMember(dmDto.receiverId, dmDto.workspaceId)
+                                        }
+                                        if (canNotify) {
+                                            val typingPayload = dmDto.copy(senderId = userIdParam.toInt())
+                                            val typingJson = Json.encodeToString(DmDto.serializer(), typingPayload)
+                                            sendToUser(dmDto.receiverId.toLong(), typingJson)
+                                        }
                                     } else if (dmDto.action == "REACT_MESSAGE" || dmDto.action == "UNREACT_MESSAGE") {
                                         val messageId = dmDto.id ?: 0
                                         val emoji = dmDto.emoji ?: ""

@@ -15,6 +15,8 @@ import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -658,5 +660,104 @@ class RoutesEndToEndTest {
             ))
         }
         assertEquals(HttpStatusCode.UnsupportedMediaType, req2.status)
+    }
+
+    /** Verified user inserted directly, so the auth rate limiter only sees the requests under test. */
+    private fun verifiedUser(): Pair<Int, String> {
+        val email = "e2e-${UUID.randomUUID()}@example.com"
+        createdEmails += email
+        val id = transaction {
+            UsersTable.insert {
+                it[UsersTable.email] = email
+                it[username] = "e2e"
+                it[password] = PasswordHasher.hash("password123")
+                it[isEmailVerified] = true
+            }[UsersTable.id]
+        }
+        createdUserIds += id
+        return id to email
+    }
+
+    @Test
+    fun `concurrent votes are counted once and approve a create proposal exactly once`() = testApplication {
+        application { module() }
+        val users = List(5) { verifiedUser().first }
+        val tokens = users.associateWith { com.collabsphere.util.JwtConfig.generateToken(it) }
+        val workspaceId = workspaceWith(*users.toIntArray())
+        val taskName = "vote-race-${UUID.randomUUID()}"
+
+        val created = client.post("/api/task-votes/proposals") {
+            bearerAuth(tokens.getValue(users[0]))
+            contentType(ContentType.Application.Json)
+            setBody("""{"workspaceId":$workspaceId,"type":"CREATE","taskName":"$taskName"}""")
+        }
+        assertEquals(HttpStatusCode.Created, created.status)
+        val proposalId = json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+
+        // 5 members -> threshold 3; the proposer's automatic vote is the first approval.
+        val statuses = kotlinx.coroutines.coroutineScope {
+            users.drop(1).map { voter ->
+                async {
+                    client.post("/api/task-votes/$proposalId/vote") {
+                        bearerAuth(tokens.getValue(voter))
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"vote":"APPROVE"}""")
+                    }.status
+                }
+            }.awaitAll()
+        }
+
+        assertEquals(2, statuses.count { it == HttpStatusCode.OK }, "statuses=$statuses")
+        assertEquals(2, statuses.count { it == HttpStatusCode.Conflict }, "statuses=$statuses")
+        val (approveCount, taskCount) = transaction {
+            val proposal = com.collabsphere.model.TaskVoteProposalsTable.selectAll()
+                .where { com.collabsphere.model.TaskVoteProposalsTable.id eq proposalId }.single()
+            proposal[com.collabsphere.model.TaskVoteProposalsTable.approveCount] to
+                com.collabsphere.model.TasksTable.selectAll()
+                    .where { com.collabsphere.model.TasksTable.taskName eq taskName }.count()
+        }
+        assertEquals(3, approveCount)
+        assertEquals(1L, taskCount)
+    }
+
+    @Test
+    fun `concurrent wrong reset codes cannot exceed the attempt cap`() = testApplication {
+        application { module() }
+        val (_, email) = verifiedUser()
+        transaction {
+            com.collabsphere.model.PasswordResetTable.insert {
+                it[com.collabsphere.model.PasswordResetTable.email] = email
+                it[otp] = "123456"
+                it[expiresAt] = System.currentTimeMillis() + 15 * 60 * 1000L
+            }
+        }
+        try {
+            fun body(code: String) = """{"email":"$email","otp":"$code","newPassword":"newpassword123"}"""
+            // Nine guesses stays under the per-IP auth rate limit of ten requests per minute.
+            val statuses = kotlinx.coroutines.coroutineScope {
+                List(9) {
+                    async {
+                        client.post("/api/auth/reset-password") {
+                            contentType(ContentType.Application.Json)
+                            setBody(body("000000"))
+                        }.status
+                    }
+                }.awaitAll()
+            }
+            // Serialized: four plain misses, the fifth burns the code (429), the rest see it consumed (400).
+            // Without the row lock every request reads attempts=0 and none ever reaches the cap.
+            assertEquals(1, statuses.count { it == HttpStatusCode.TooManyRequests }, "statuses=$statuses")
+            assertEquals(8, statuses.count { it == HttpStatusCode.BadRequest }, "statuses=$statuses")
+
+            val correct = client.post("/api/auth/reset-password") {
+                contentType(ContentType.Application.Json)
+                setBody(body("123456"))
+            }
+            assertNotEquals(HttpStatusCode.OK, correct.status, "a burned code must not reset the password")
+        } finally {
+            transaction {
+                com.collabsphere.model.PasswordResetTable.deleteWhere { com.collabsphere.model.PasswordResetTable.email eq email }
+            }
+        }
     }
 }

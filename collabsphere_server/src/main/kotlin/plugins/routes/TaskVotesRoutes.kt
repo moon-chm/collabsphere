@@ -58,13 +58,22 @@ internal fun Route.taskVotesRoutes() {
                 val result = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) return@dbQuery null
 
-                    if (request.type == "CREATE" && request.assignedToUserId != null) {
+                    // Idempotency first: a retried submission must get its original proposal back, not
+                    // trip the duplicate-delete check below against itself.
+                    val existing = request.idempotencyKey?.let { key ->
+                        TaskVoteProposalsTable.selectAll().where {
+                            (TaskVoteProposalsTable.idempotencyKey eq key) and
+                                (TaskVoteProposalsTable.proposerId eq actingUserId)
+                        }.singleOrNull()
+                    }
+
+                    if (existing == null && request.type == "CREATE" && request.assignedToUserId != null) {
                         if (!isMember(request.assignedToUserId, request.workspaceId)) {
                             throw IllegalArgumentException("Assignee is not a member of the workspace")
                         }
                     }
 
-                    if (request.type == "DELETE") {
+                    if (existing == null && request.type == "DELETE") {
                         val targetTask = TasksTable.selectAll().where {
                             (TasksTable.id eq request.taskId!!) and
                             (TasksTable.workspaceId eq request.workspaceId) and
@@ -83,10 +92,6 @@ internal fun Route.taskVotesRoutes() {
                         }
                     }
 
-                    // Idempotency check
-                    val existing = request.idempotencyKey?.let { key ->
-                        TaskVoteProposalsTable.selectAll().where { TaskVoteProposalsTable.idempotencyKey eq key }.singleOrNull()
-                    }
                     if (existing != null) {
                         val propId = existing[TaskVoteProposalsTable.id]
                         val myVote = TaskVotesTable.selectAll().where {
@@ -303,8 +308,11 @@ internal fun Route.taskVotesRoutes() {
                 val now = System.currentTimeMillis()
 
                 val resolution = dbQuery {
+                    // Row lock: concurrent voters must see each other's counts, otherwise a vote is
+                    // lost or two voters both cross the threshold and the task is created twice.
                     val proposal = TaskVoteProposalsTable.selectAll()
                         .where { TaskVoteProposalsTable.id eq proposalIdParam }
+                        .forUpdate()
                         .singleOrNull() ?: return@dbQuery null
 
                     val workspaceId = proposal[TaskVoteProposalsTable.workspaceId]
