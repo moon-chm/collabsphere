@@ -10,6 +10,12 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -615,7 +621,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                                 bottomEnd = 12.dp, topStart = 12.dp))
                             .background(BubbleLeft)
                             .padding(horizontal = 10.dp, vertical = 6.dp)) {
-                            Text("Morning everyone! 👋", style = TextStyle(
+                            Text("Good morning, everyone!", style = TextStyle(
                                 fontFamily = ManropeFamily, fontSize = 11.sp, color = InkPrimary))
                         }
                         // Reaction badge
@@ -815,7 +821,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                     fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkPrimary))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("📞", style = TextStyle(fontSize = 14.sp))
+                Icon(Icons.Default.Call, contentDescription = "Call", tint = InkMuted, modifier = androidx.compose.ui.Modifier.size(14.dp))
                 Text("⋮", style = TextStyle(fontSize = 14.sp, color = InkMuted))
             }
         }
@@ -926,7 +932,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color(0xFFE1E0FF)),
                     contentAlignment = Alignment.Center) {
-                    Text("📎", style = TextStyle(fontSize = 12.sp))
+                    Icon(Icons.Default.AttachFile, contentDescription = "Attachment", tint = IndigoAccent, modifier = androidx.compose.ui.Modifier.size(14.dp))
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("design_v3.fig", style = TextStyle(fontFamily = ManropeFamily,
@@ -959,11 +965,11 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("😊", style = TextStyle(fontSize = 12.sp))
+            Icon(Icons.Default.EmojiEmotions, contentDescription = "Emoji", tint = InkMuted, modifier = androidx.compose.ui.Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Text("Message Priya...", modifier = Modifier.weight(1f),
                 style = TextStyle(fontFamily = ManropeFamily, fontSize = 10.sp, color = InkMuted))
-            Text("🎤", style = TextStyle(fontSize = 12.sp))
+            Icon(Icons.Default.Mic, contentDescription = "Voice", tint = InkMuted, modifier = androidx.compose.ui.Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Box(modifier = Modifier.size(18.dp).background(IndigoAccent, CircleShape),
                 contentAlignment = Alignment.Center) {
@@ -1333,7 +1339,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                 .padding(8.dp)
         ) {
             Column {
-                Text("Don't forget standup 📌", style = TextStyle(
+                Text("Don't forget standup", style = TextStyle(
                     fontFamily  = NewsreaderFamily,
                     fontSize    = 11.sp,
                     fontStyle   = FontStyle.Italic,

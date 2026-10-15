@@ -69,7 +69,9 @@ class DmWebSocketService : Service() {
         // of the DmDto flow above, since they aren't chat messages.
         serviceScope.launch {
             NotificationCenter.incoming.collect { notification ->
-                notificationHelper.showGenericNotification(notification)
+                // A DM's tray notification comes from its RECEIVE_MESSAGE frame (chat-style, suppressed
+                // while that chat is open); the server's DM notification frame is for the in-app list only.
+                if (notification.type != "DM") notificationHelper.showGenericNotification(notification)
             }
         }
 

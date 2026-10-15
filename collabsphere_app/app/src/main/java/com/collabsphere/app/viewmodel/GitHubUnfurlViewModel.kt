@@ -139,8 +139,6 @@ class GitHubUnfurlViewModel(private val httpClient: HttpClient) : ViewModel() {
             }
         }
     }
-    override fun onCleared() {
-        super.onCleared()
-        httpClient.close()
-    }
+    // No onCleared() close: httpClient is the app-wide Koin singleton. Closing it here killed every
+    // later REST call in the app ("Parent job is Completed") once the user left a screen using this ViewModel.
 }

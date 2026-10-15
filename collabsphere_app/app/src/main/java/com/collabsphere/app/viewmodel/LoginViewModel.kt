@@ -155,7 +155,7 @@ class LoginViewModel(
                     } else {
                         val errorMessage = when (throwable) {
                             is HttpRequestTimeoutException,
-                            is SocketTimeoutException -> "Server is waking up, please try again in a moment ☕"
+                            is SocketTimeoutException -> "Server is waking up, please try again in a moment."
                             is IOException -> "Network issue. Please check your internet connection."
                             else -> if (rawMsg.contains("Parent job", ignoreCase = true) || rawMsg.contains("cancel", ignoreCase = true)) {
                                 ""

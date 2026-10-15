@@ -37,7 +37,7 @@ import com.collabsphere.app.ui.theme.SurfaceRaised
 import com.collabsphere.app.ui.theme.skeuoFloatingCard
 
 private fun MessageEntity.pinnedPreview(): String =
-    content.ifBlank { if (mediaUrl != null) "📷 Photo" else "" }
+    content.ifBlank { if (mediaUrl != null) "Photo" else "" }
 
 @Composable
 fun PinnedMessagesBanner(

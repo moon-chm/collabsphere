@@ -152,9 +152,9 @@ fun GitHubUnfurlCard(
 
                 if (preview.ciStatus != null) {
                     val (ciColor, ciText) = when (preview.ciStatus) {
-                        "success" -> Color(0xFF238636) to "✅ CI Passed"
-                        "failure" -> Color(0xFFD32F2F) to "❌ CI Failed"
-                        "pending" -> Color(0xFFE3B341) to "⏳ CI Pending"
+                        "success" -> Color(0xFF238636) to "CI Passed"
+                        "failure" -> Color(0xFFD32F2F) to "CI Failed"
+                        "pending" -> Color(0xFFE3B341) to "CI Running"
                         else -> Color.Gray to "CI Unknown"
                     }
                     Box(

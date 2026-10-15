@@ -912,11 +912,11 @@ internal fun pullRequestStatus(pr: GitHubPullRequestItem): Pair<String, Color> =
 
 internal fun checkSuiteStatus(suite: GitHubCheckSuiteItem): Pair<String, Color> {
     if (suite.status != "completed") {
-        return "⏳ Running" to Color(0xFFBF8700)
+        return "Running" to Color(0xFFBF8700)
     }
     return when (suite.conclusion) {
-        "success" -> "✅ Passed" to Color(0xFF2DA44E)
-        "failure", "timed_out", "action_required", "startup_failure" -> "❌ Failed" to Color(0xFFCF222E)
+        "success" -> "Passed" to Color(0xFF2DA44E)
+        "failure", "timed_out", "action_required", "startup_failure" -> "Failed" to Color(0xFFCF222E)
         "cancelled" -> "Cancelled" to Color(0xFF70625E)
         "skipped" -> "Skipped" to Color(0xFF70625E)
         "neutral" -> "Neutral" to Color(0xFF70625E)

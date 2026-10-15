@@ -87,6 +87,8 @@ class NotificationHelper(
     }
 
     private val recentGenericNotifications = ConcurrentHashMap<String, Long>()
+    /** Server notification ids already posted, oldest first. Guarded by itself. */
+    private val shownNotificationIds = LinkedHashSet<Int>()
 
     /**
      * Posts a plain system-tray notification for MENTION/CHANNEL_MESSAGE/TASK_ASSIGNED/TASK_UPDATED/GITHUB_CI
@@ -95,6 +97,16 @@ class NotificationHelper(
     fun showGenericNotification(notification: NotificationResponse) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         if (quietHoursStore.isQuietNow()) return
+
+        // The server delivers each notification over both the WebSocket and FCM, with no bound on how far
+        // apart; post a given server notification id once.
+        synchronized(shownNotificationIds) {
+            if (!shownNotificationIds.add(notification.id)) {
+                Log.d("NotificationHelper", "Suppressed already-shown notification id=${notification.id}")
+                return
+            }
+            if (shownNotificationIds.size > 200) shownNotificationIds.remove(shownNotificationIds.first())
+        }
 
         // Deduplicate identical push messages received in rapid succession (e.g. multi-workspace GitHub CI hooks)
         val dedupeKey = "${notification.title}:${notification.body}"
@@ -169,6 +181,18 @@ class NotificationHelper(
             return
         }
         if (quietHoursStore.isQuietNow()) return
+
+        // The same DM can arrive over the WebSocket and as an FCM push (e.g. while the socket reconnects).
+        val messageId = dm.id ?: 0
+        if (messageId > 0) {
+            val alreadyShown = conversationHistory[dm.senderId]?.let { history ->
+                synchronized(history) { history.any { it.first == messageId } }
+            } == true
+            if (alreadyShown) {
+                Log.d("NotificationHelper", "Suppressed already-shown DM id=$messageId")
+                return
+            }
+        }
 
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 

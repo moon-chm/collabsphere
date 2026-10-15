@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -1167,12 +1168,12 @@ fun DMScreen(
                                                         workspaceId = workspaceId,
                                                         senderId = currentUserId.toInt(),
                                                         receiverId = partner.id,
-                                                        content = "Hi 👋"
+                                                        content = "Hi there!"
                                                     )
                                                 }
                                                 .padding(horizontal = 20.dp, vertical = 8.dp)
                                         ) {
-                                            Text("Say hi 👋", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            Text("Say Hello", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         }
                                     }
                                 }
@@ -1445,7 +1446,7 @@ fun DMScreen(
                                                                     showActionMenu = false
                                                                     selectedMessage = null
                                                                 },
-                                                                leadingIcon = { Text("😊", fontSize = 18.sp) }
+                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                             )
                                                             DropdownMenuItem(
                                                                 text = { Text("Edit message", color = Ink) },
@@ -1759,7 +1760,7 @@ fun DMScreen(
                                                                     showActionMenu = false
                                                                     selectedMessage = null
                                                                 },
-                                                                leadingIcon = { Text("😊", fontSize = 18.sp) }
+                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                             )
                                                         }
                                                     }

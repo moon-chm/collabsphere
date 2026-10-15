@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Image
 import com.collabsphere.app.view.components.AppToast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -646,7 +647,7 @@ fun MessageScreen(
                                 // Author tag
                                 Text(
                                     text = (if (isOwnMessage) "You" else message.userName) +
-                                        if (message.pinnedAt != null) " · 📌 Pinned" else "",
+                                        if (message.pinnedAt != null) " · Pinned" else "",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -852,7 +853,7 @@ fun MessageScreen(
                                                         reactionPickerFor = message
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Text("😊", fontSize = 18.sp) }
+                                                    leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (message.id > 0) {
