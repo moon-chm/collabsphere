@@ -178,7 +178,11 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
 
     // The test process sees only the explicit test database. Provider configuration is blanked
     // so application tests can exercise their fallback behavior without sending real messages.
-    environment("DATABASE_URL", "")
+    if (testDatabaseUrl.isPresent) {
+        environment("DATABASE_URL", testDatabaseUrl.get())
+    } else {
+        environment("DATABASE_URL", "")
+    }
     environment("JDBC_DATABASE_URL", "")
     environment("DATABASE_READ_URL", "")
     environment("JDBC_DATABASE_READ_URL", "")

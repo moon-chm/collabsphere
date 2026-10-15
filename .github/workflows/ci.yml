@@ -4,6 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_ui_tests:
+        description: 'Run Android Compose UI tests (slow emulator)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -35,6 +47,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: 'gradle'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
@@ -54,9 +67,38 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: 'gradle'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
+      - name: Create mock google-services.json for CI
+        working-directory: collabsphere_app/app
+        run: |
+          cat << 'EOF' > google-services.json
+          {
+            "project_info": {
+              "project_number": "1234567890",
+              "project_id": "collabsphere-ci",
+              "storage_bucket": "collabsphere-ci.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:1234567890:android:abcdef",
+                  "android_client_info": {
+                    "package_name": "com.collabsphere.app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [{ "current_key": "dummy_api_key_for_ci_build" }],
+                "services": {
+                  "analytics_service": { "status": 1 }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
       - name: Grant execute permission for gradlew
         working-directory: collabsphere_app
         run: chmod +x gradlew
@@ -66,6 +108,7 @@ jobs:
 
   android-ui-tests:
     name: Android Compose UI tests
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_ui_tests }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -74,9 +117,38 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: 'gradle'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.4.1'
+      - name: Create mock google-services.json for CI
+        working-directory: collabsphere_app/app
+        run: |
+          cat << 'EOF' > google-services.json
+          {
+            "project_info": {
+              "project_number": "1234567890",
+              "project_id": "collabsphere-ci",
+              "storage_bucket": "collabsphere-ci.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:1234567890:android:abcdef",
+                  "android_client_info": {
+                    "package_name": "com.collabsphere.app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [{ "current_key": "dummy_api_key_for_ci_build" }],
+                "services": {
+                  "analytics_service": { "status": 1 }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
       - name: Grant execute permission for gradlew
         working-directory: collabsphere_app
         run: chmod +x gradlew
@@ -88,4 +160,6 @@ jobs:
           arch: x86_64
           profile: pixel_2
           working-directory: collabsphere_app
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
           script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
