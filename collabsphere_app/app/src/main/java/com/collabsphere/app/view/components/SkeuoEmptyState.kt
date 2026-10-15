@@ -29,6 +29,9 @@ import androidx.compose.ui.draw.clip
 import com.collabsphere.app.ui.theme.SkeuoTokens
 import com.collabsphere.app.ui.theme.SurfaceRaised
 import com.collabsphere.app.ui.theme.skeuoFloatingCard
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 
 @Composable
 fun SkeuoEmptyState(
@@ -85,7 +88,16 @@ fun SkeuoEmptyState(
                     .height(48.dp)
                     .skeuoBounceClick(onClick = onAction)
                     .skeuoRaised(cornerRadius = SkeuoTokens.RadiusMedium)
-                    .clip(RoundedCornerShape(SkeuoTokens.RadiusMedium)),
+                    .clip(RoundedCornerShape(SkeuoTokens.RadiusMedium))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFF7F1EA),
+                                Color(0xFFEDE4D8),
+                                Color(0xFFE5DAD0)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

@@ -71,8 +71,14 @@ data class GitHubIssueItem(
     val state: String,
     val authorUsername: String,
     val createdAt: Long,
-    val url: String
-)
+    val url: String,
+    /** The workspace member behind [authorUsername], when their GitHub account is linked. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
+) {
+    /** The member's CollabSphere name when linked, otherwise the GitHub login. */
+    val displayAuthor: String get() = memberUsername ?: authorUsername.ifBlank { "Unknown" }
+}
 
 @Serializable
 data class GitHubPullRequestPage(
@@ -164,8 +170,15 @@ data class GitHubCommitItem(
     val authorName: String? = null,
     val commitDate: Long,
     val url: String? = null,
-    val ciStatus: String? = null
-)
+    val ciStatus: String? = null,
+    val authorLogin: String? = null,
+    /** The workspace member who authored the commit, when their GitHub account (or email) matches. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
+) {
+    /** The member's CollabSphere name when linked, otherwise the GitHub login or git author name. */
+    val displayAuthor: String get() = memberUsername ?: authorLogin ?: authorName ?: "Unknown"
+}
 
 @Serializable
 data class GitHubPullRequestItem(
@@ -176,8 +189,14 @@ data class GitHubPullRequestItem(
     val createdAt: Long,
     val mergedAt: Long? = null,
     val url: String? = null,
-    val ciStatus: String? = null
-)
+    val ciStatus: String? = null,
+    /** The workspace member behind [authorUsername], when their GitHub account is linked. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
+) {
+    /** The member's CollabSphere name when linked, otherwise the GitHub login. */
+    val displayAuthor: String get() = memberUsername ?: authorUsername.ifBlank { "Unknown" }
+}
 
 @Serializable
 data class AvailableRepo(

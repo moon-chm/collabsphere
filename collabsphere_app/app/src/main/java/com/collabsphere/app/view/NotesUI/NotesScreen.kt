@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -91,10 +92,7 @@ fun NotesScreen(
             ) {
                 Text(
                     text = "Notes",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    ),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -408,7 +406,7 @@ fun CreateNotesBottomSheet(
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 brush = Brush.linearGradient(
-                                    colors = listOf(Amber, Color(0xFFD97706))
+                                    colors = listOf(CoralStart, CoralEnd)
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -424,10 +422,7 @@ fun CreateNotesBottomSheet(
                     Column {
                         Text(
                             text = if (isEditMode) "Edit note" else "New note",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            ),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                             color = Ink
                         )
                         Text(
@@ -468,85 +463,33 @@ fun CreateNotesBottomSheet(
                     color = Muted
                 )
 
-                // Debossed Note Title Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = name,
+                    onValueChange = { viewModel.onNotesNameChange(it) },
+                    label = "Title",
+                    placeholder = "e.g. Weekly Sync Notes",
+                    leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = null,
-                            tint = Amber,
+                            tint = CoralStart.copy(alpha = 0.75f),
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(Modifier.width(10.dp))
-                        BasicTextField(
-                            value = name,
-                            onValueChange = { viewModel.onNotesNameChange(it) },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontWeight = FontWeight.SemiBold),
-                            cursorBrush = SolidColor(Amber),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            decorationBox = { inner ->
-                                Box(contentAlignment = Alignment.CenterStart) {
-                                    if (name.isEmpty()) {
-                                        Text(
-                                            text = "Note title (e.g. Weekly Sync Notes)",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Ink.copy(alpha = 0.45f)
-                                        )
-                                    }
-                                    inner()
-                                }
-                            }
-                        )
                     }
-                }
+                )
 
-                // Debossed Note Content Field (Spacious multiline)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 130.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.TopStart
-                ) {
-                    BasicTextField(
-                        value = description,
-                        onValueChange = { viewModel.onNotesDescChange(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        singleLine = false,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(Amber),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.TopStart) {
-                                if (description.isEmpty()) {
-                                    Text(
-                                        text = "Write your note content here (Markdown supported)...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.45f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                Spacer(Modifier.height(4.dp))
+
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = description,
+                    onValueChange = { viewModel.onNotesDescChange(it) },
+                    label = "Content",
+                    placeholder = "Write your note here (Markdown supported)...",
+                    imeAction = ImeAction.Default,
+                    singleLine = false,
+                    minLines = 5,
+                    maxLines = 12
+                )
             }
 
             Spacer(Modifier.height(4.dp))
@@ -584,7 +527,7 @@ fun CreateNotesBottomSheet(
                         .drawWithCache {
                             onDrawBehind {
                                 drawRoundRect(
-                                    color = Amber.copy(alpha = 0.28f * submitAlpha),
+                                    color = CoralStart.copy(alpha = 0.28f * submitAlpha),
                                     topLeft = Offset(0f, 3.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(14.dp.toPx())
@@ -592,8 +535,8 @@ fun CreateNotesBottomSheet(
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            Amber.copy(alpha = submitAlpha),
-                                            Color(0xFFD97706).copy(alpha = submitAlpha)
+                                            CoralStart.copy(alpha = submitAlpha),
+                                            CoralEnd.copy(alpha = submitAlpha)
                                         ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
@@ -699,7 +642,7 @@ fun DeleteNoteConfirmationDialog(
 
                 Text(
                     text = "Delete note",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 

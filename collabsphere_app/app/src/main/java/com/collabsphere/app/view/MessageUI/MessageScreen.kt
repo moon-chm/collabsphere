@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -439,20 +440,24 @@ fun MessageScreen(
                         }
                     }
                     // Debossed text input field
+                    var isComposerFocused by remember { mutableStateOf(false) }
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 48.dp, max = 120.dp)
-                            .skeuoInset(cornerRadius = 16.dp, depth = 2.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .skeuoFocusRing(isComposerFocused, cornerRadius = 24.dp)
+                            .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                            .clip(RoundedCornerShape(24.dp))
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         BasicTextField(
                             value = messageContent,
                             onValueChange = { viewModel.onMessageContentChange(it) },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged { isComposerFocused = it.isFocused },
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
                             cursorBrush = SolidColor(CoralStart),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(
@@ -480,8 +485,8 @@ fun MessageScreen(
                                     if (messageContent.isEmpty()) {
                                         Text(
                                             text = if (isEditing) "Edit message..." else "Message #$channelName...",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Ink.copy(alpha = 0.65f)
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = Ink.copy(alpha = 0.40f)
                                         )
                                     }
                                     inner()

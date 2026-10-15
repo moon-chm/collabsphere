@@ -13,6 +13,7 @@ import com.collabsphere.app.dto.workspace.WorkspaceRequest
 import com.collabsphere.app.dto.workspace.WorkspaceResponse
 import com.collabsphere.app.dto.workspace.WorkspaceSyncDto
 import com.collabsphere.app.dto.workspace.DeleteWorkspaceResponse
+import com.collabsphere.app.dto.workspace.WorkspaceAnalyticsResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -43,6 +44,12 @@ class WorkspaceApiService(
         }
         return response.body()
     }
+
+    /** [range] is one of "7d", "30d", "90d", "all". */
+    suspend fun getAnalytics(workspaceId: Int, range: String): WorkspaceAnalyticsResponse =
+        client.get("$baseUrl/$workspaceId/analytics") {
+            parameter("range", range)
+        }.requireSuccess().body()
 
     suspend fun addMemberToWorkspace(
         workspaceId: Int,

@@ -264,6 +264,7 @@ object GitHubUnfurlService {
                         title = prInfo.title,
                         state = prInfo.state,
                         authorUsername = prInfo.user?.login ?: "",
+                        authorGithubId = prInfo.user?.id,
                         createdAt = com.collabsphere.util.parseGitHubTime(prInfo.created_at) ?: now,
                         closedAt = com.collabsphere.util.parseGitHubTime(prInfo.closed_at),
                         mergedAt = com.collabsphere.util.parseGitHubTime(prInfo.merged_at),
@@ -317,7 +318,9 @@ object GitHubUnfurlService {
                         message = commitInfo.commit?.message ?: "",
                         authorName = commitInfo.commit?.author?.name,
                         authorEmail = commitInfo.commit?.author?.email,
-                        commitDate = com.collabsphere.util.parseGitHubTime(commitInfo.commit?.author?.date) ?: now
+                        commitDate = com.collabsphere.util.parseGitHubTime(commitInfo.commit?.author?.date) ?: now,
+                        authorLogin = commitInfo.author?.login,
+                        authorGithubId = commitInfo.author?.id
                     )
                     newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.saveCommits(repoId, listOf(commitRecord)) }
                     val ciStatus = newSuspendedTransaction(kotlinx.coroutines.Dispatchers.IO) { com.collabsphere.util.GitHubDataStore.ciStatusFor(repoId, listOf(parsed.sha))[parsed.sha] }

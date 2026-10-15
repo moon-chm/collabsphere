@@ -20,12 +20,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddBusiness
-import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -184,7 +184,7 @@ fun CreateWorkspaceScreen(
                                 onDrawBehind {
                                 drawCircle(
                                     brush = Brush.radialGradient(
-                                        colors = listOf(MintLight, Mint),
+                                        colors = listOf(CoralLight, CoralStart),
                                         center = Offset(center.x - 5.dp.toPx(), center.y - 5.dp.toPx()),
                                         radius = size.minDimension / 2f
                                     )
@@ -239,10 +239,10 @@ fun CreateWorkspaceScreen(
                             placeholder = "e.g. Design Studio",
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.Business,
+                                    imageVector = Icons.Outlined.Business,
                                     contentDescription = null,
-                                    tint = CoralStart,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         )
@@ -254,10 +254,10 @@ fun CreateWorkspaceScreen(
                             placeholder = "e.g. John Doe",
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.Person,
+                                    imageVector = Icons.Outlined.Person,
                                     contentDescription = null,
-                                    tint = IndigoStart,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         )
@@ -272,19 +272,19 @@ fun CreateWorkspaceScreen(
                             imeAction = ImeAction.Done,
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.Lock,
+                                    imageVector = Icons.Outlined.Lock,
                                     contentDescription = null,
-                                    tint = Amber,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             },
                             trailingIcon = {
                                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                     Icon(
-                                        imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                                         contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                                        tint = Muted,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = if (isPasswordVisible) CoralStart else Muted,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -432,7 +432,7 @@ fun CreateWorkspaceScreen(
     }
 }
 
-/** Inset debossed field tailored for workspace forms using shared skeuoInset modifier */
+/** Pill-shaped inset field, same look as the Login/Register fields (shared SkeuoTextField defaults). */
 @Composable
 private fun WorkspaceDebossedField(
     value: String,
@@ -446,65 +446,16 @@ private fun WorkspaceDebossedField(
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Ink.copy(alpha = 0.75f),
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                .clip(RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (leadingIcon != null) {
-                    leadingIcon()
-                    Spacer(Modifier.width(10.dp))
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                    cursorBrush = SolidColor(CoralStart),
-                    visualTransformation = visualTransformation,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = keyboardType,
-                        imeAction = imeAction
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onNext = { onImeAction() },
-                        onDone = { onImeAction() }
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (value.isEmpty()) {
-                                Text(
-                                    text = placeholder,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Ink.copy(alpha = 0.65f)
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                )
-                if (trailingIcon != null) {
-                    trailingIcon()
-                }
-            }
-        }
-    }
+    com.collabsphere.app.view.components.SkeuoTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        placeholder = placeholder,
+        keyboardType = keyboardType,
+        imeAction = imeAction,
+        onImeAction = onImeAction,
+        visualTransformation = visualTransformation,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon
+    )
 }

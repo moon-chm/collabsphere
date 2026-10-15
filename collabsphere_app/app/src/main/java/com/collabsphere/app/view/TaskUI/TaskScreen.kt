@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -128,10 +131,7 @@ fun TaskScreen(
             ) {
                 Text(
                     text = if (selectedViewMode == 0) "Kanban board" else "Team votes",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    ),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -686,6 +686,10 @@ fun CreateTaskBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        // Bottom insets only (nav bar + keyboard). The default also pads the top by however much of the
+        // status bar the sheet overlaps; for this full-height sheet that padding changes the sheet's height,
+        // which moves it, which changes the padding again, so the sheet bounced up and down non-stop.
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         containerColor = SurfaceRaised,
         scrimColor = Color.Black.copy(alpha = 0.45f),
         dragHandle = {
@@ -700,9 +704,13 @@ fun CreateTaskBottomSheet(
         },
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
+        // The form is taller than the screen; capping it keeps the sheet clear of the status bar and the form
+        // scrolls inside instead.
+        val maxSheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
                 .imePadding()
@@ -742,10 +750,7 @@ fun CreateTaskBottomSheet(
                     Column {
                         Text(
                             text = "Propose new task",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            ),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                             color = Ink
                         )
                         Text(
@@ -783,74 +788,33 @@ fun CreateTaskBottomSheet(
                     color = Muted
                 )
 
-                // Debossed Name Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    BasicTextField(
-                        value = name,
-                        onValueChange = { viewModel.onTaskNameChange(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontWeight = FontWeight.Medium),
-                        cursorBrush = SolidColor(CoralStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
-                                if (name.isEmpty()) {
-                                    Text(
-                                        text = "What needs to be done?",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.45f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = name,
+                    onValueChange = { viewModel.onTaskNameChange(it) },
+                    label = "Task name",
+                    placeholder = "What needs to be done?",
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.TaskAlt,
+                            contentDescription = null,
+                            tint = CoralStart.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
 
-                // Debossed Description Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.TopStart
-                ) {
-                    BasicTextField(
-                        value = description,
-                        onValueChange = { viewModel.onTaskDescriptionChange(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        singleLine = false,
-                        maxLines = 3,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.TopStart) {
-                                if (description.isEmpty()) {
-                                    Text(
-                                        text = "Add optional details or acceptance criteria...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.45f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                Spacer(Modifier.height(4.dp))
+
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = description,
+                    onValueChange = { viewModel.onTaskDescriptionChange(it) },
+                    label = "Description",
+                    placeholder = "Add optional details or acceptance criteria...",
+                    imeAction = ImeAction.Done,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 4
+                )
             }
 
             // SECTION: PRIORITY & SCHEDULING
@@ -884,11 +848,11 @@ fun CreateTaskBottomSheet(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
-                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .height(54.dp)
+                            .skeuoInset(cornerRadius = 27.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                            .clip(RoundedCornerShape(27.dp))
                             .clickable { dropdownExpanded = true }
-                            .padding(horizontal = 14.dp),
+                            .padding(start = 18.dp, end = 20.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Row(
@@ -1146,80 +1110,38 @@ onDrawBehind {
             ) {
                 Text(
                     text = "Update task",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
                 taskReferenceLabel(task.id)?.let {
                     Text(text = it, style = MaterialTheme.typography.labelMedium, color = Muted)
                 }
 
-                // Debossed Name Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    BasicTextField(
-                        value = updatedName,
-                        onValueChange = { updatedName = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
-                                if (updatedName.isEmpty()) {
-                                    Text(
-                                        text = "Task name",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = updatedName,
+                    onValueChange = { updatedName = it },
+                    label = "Task name",
+                    placeholder = "Task name",
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.TaskAlt,
+                            contentDescription = null,
+                            tint = CoralStart.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
 
-                // Debossed Description Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    BasicTextField(
-                        value = updatedDescription,
-                        onValueChange = { updatedDescription = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.CenterStart) {
-                                if (updatedDescription.isEmpty()) {
-                                    Text(
-                                        text = "Description (optional)",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.65f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = updatedDescription,
+                    onValueChange = { updatedDescription = it },
+                    label = "Description",
+                    placeholder = "Description (optional)",
+                    imeAction = ImeAction.Done,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 4
+                )
 
                 PrioritySelector(
                     selected = updatedPriority,
@@ -1278,7 +1200,7 @@ onDrawBehind {
                             .drawWithCache {
 onDrawBehind {
                                 drawRoundRect(
-                                    color = IndigoStart.copy(alpha = 0.25f * updateAlpha),
+                                    color = CoralStart.copy(alpha = 0.25f * updateAlpha),
                                     topLeft = Offset(0f, 2.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(12.dp.toPx())
@@ -1286,8 +1208,8 @@ onDrawBehind {
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            IndigoStart.copy(alpha = updateAlpha),
-                                            IndigoEnd.copy(alpha = updateAlpha)
+                                            CoralStart.copy(alpha = updateAlpha),
+                                            CoralEnd.copy(alpha = updateAlpha)
                                         ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
@@ -1356,7 +1278,7 @@ onDrawBehind {
             ) {
                 Text(
                     text = "Assign member",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 
@@ -1490,7 +1412,7 @@ onDrawBehind {
 
                 Text(
                     text = "Delete task",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 

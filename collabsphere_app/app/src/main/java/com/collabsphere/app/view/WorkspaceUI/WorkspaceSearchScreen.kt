@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.collabsphere.app.ui.theme.fadingScrollEdges
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,10 +38,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,25 +103,28 @@ fun WorkspaceSearchScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
             }
+            var isSearchFocused by remember { mutableStateOf(false) }
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp)
-                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .padding(horizontal = 12.dp),
+                    .height(52.dp)
+                    .skeuoFocusRing(isSearchFocused, cornerRadius = 26.dp)
+                    .skeuoInset(cornerRadius = 26.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                    .clip(RoundedCornerShape(26.dp))
+                    .padding(start = 18.dp, end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
                 BasicTextField(
                     value = query,
                     onValueChange = viewModel::onQueryChange,
                     modifier = Modifier
                         .weight(1f)
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        .onFocusChanged { isSearchFocused = it.isFocused },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
                     cursorBrush = SolidColor(CoralStart),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     decorationBox = { inner ->
@@ -131,8 +132,8 @@ fun WorkspaceSearchScreen(
                             if (query.isEmpty()) {
                                 Text(
                                     text = "Search $workspaceName",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Muted,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Ink.copy(alpha = 0.40f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )

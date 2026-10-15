@@ -134,7 +134,9 @@ object GitHubWebhookService {
                 message = commit["message"]?.jsonPrimitive?.contentOrNull ?: "",
                 authorName = author?.get("name")?.jsonPrimitive?.contentOrNull,
                 authorEmail = author?.get("email")?.jsonPrimitive?.contentOrNull,
-                commitDate = parseGitHubTime(commit["timestamp"]?.jsonPrimitive?.contentOrNull) ?: now
+                commitDate = parseGitHubTime(commit["timestamp"]?.jsonPrimitive?.contentOrNull) ?: now,
+                // Push payloads carry the matched GitHub login as author.username (no numeric id).
+                authorLogin = author?.get("username")?.jsonPrimitive?.contentOrNull
             )
         } ?: return emptyList()
         if (commits.isEmpty()) return emptyList()
@@ -158,6 +160,7 @@ object GitHubWebhookService {
             title = pr["title"]?.jsonPrimitive?.contentOrNull ?: "",
             state = pr["state"]?.jsonPrimitive?.contentOrNull ?: "open",
             authorUsername = pr["user"]?.jsonObject?.get("login")?.jsonPrimitive?.contentOrNull ?: "",
+            authorGithubId = pr["user"]?.jsonObject?.get("id")?.jsonPrimitive?.longOrNull,
             createdAt = parseGitHubTime(pr["created_at"]?.jsonPrimitive?.contentOrNull) ?: System.currentTimeMillis(),
             closedAt = parseGitHubTime(pr["closed_at"]?.jsonPrimitive?.contentOrNull),
             mergedAt = parseGitHubTime(pr["merged_at"]?.jsonPrimitive?.contentOrNull),

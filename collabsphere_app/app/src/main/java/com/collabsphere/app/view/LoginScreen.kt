@@ -27,9 +27,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.animation.core.tween as tweenAnim
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.collabsphere.app.R
@@ -147,6 +151,9 @@ fun LoginScreen(
         }
     }
 
+    val formScroll = rememberScrollState()
+    val formScrollEnabled = rememberKeyboardOnlyScroll(formScroll)
+
     // ── Neumorphic Wave Shell ──
     Box(
         modifier = Modifier
@@ -166,7 +173,7 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(formScroll, enabled = formScrollEnabled)
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -211,13 +218,20 @@ fun LoginScreen(
                 value = email,
                 onValueChange = { email = it },
                 label = "Email address",
-                placeholder = "",
+                placeholder = "Your email address",
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next,
                 onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
                 isError = isEmailError,
                 errorMessage = "Email cannot be empty",
-                leadingIcon = null,
+                leadingIcon = {
+                    Icon(
+                        Icons.Outlined.Email,
+                        contentDescription = null,
+                        tint = CoralStart.copy(alpha = 0.75f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
                 trailingIcon = {
                     AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                         IconButton(onClick = { email = "" }) {
@@ -234,7 +248,7 @@ fun LoginScreen(
                 value = password,
                 onValueChange = { password = it },
                 label = "Password",
-                placeholder = "••••••••",
+                placeholder = "Your password",
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
                 onImeAction = { handleLogin() },
@@ -242,14 +256,21 @@ fun LoginScreen(
                                        else PasswordVisualTransformation(),
                 isError = isPasswordError,
                 errorMessage = "Password cannot be empty",
-                leadingIcon = null,
+                leadingIcon = {
+                    Icon(
+                        Icons.Outlined.Lock,
+                        contentDescription = null,
+                        tint = CoralStart.copy(alpha = 0.75f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
                 trailingIcon = {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Outlined.Visibility
                                           else Icons.Outlined.VisibilityOff,
                             contentDescription = if (passwordVisible) "Hide" else "Show",
-                            tint = Muted,
+                            tint = if (passwordVisible) CoralStart else Muted,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -722,7 +743,22 @@ internal fun SkeuoFormCard(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** Inset text field using the centralized skeuoInset debossed cavity modifier */
+/**
+ * The auth pages stay put while the keyboard is closed; while it is open the form may scroll so every
+ * field above the keyboard can be reached, and it settles back to the top once the keyboard closes.
+ * Returns whether user scrolling is currently allowed.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun rememberKeyboardOnlyScroll(scrollState: androidx.compose.foundation.ScrollState): Boolean {
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeVisible) {
+        if (!imeVisible) scrollState.animateScrollTo(0)
+    }
+    return imeVisible
+}
+
+/** Inset text field delegating to centralized SkeuoTextField */
 @Composable
 internal fun SkeuoTextField(
     value               : String,
@@ -738,102 +774,19 @@ internal fun SkeuoTextField(
     isError             : Boolean              = false,
     errorMessage        : String?              = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text  = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = Ink.copy(alpha = 0.75f),
-            modifier = Modifier.padding(start = 12.dp)
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .skeuoInset(cornerRadius = 27.dp, depth = 3.dp)
-                .clip(RoundedCornerShape(27.dp)),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(
-                modifier          = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (leadingIcon != null) {
-                    leadingIcon()
-                    Spacer(Modifier.width(10.dp))
-                }
-                BasicTextField_Compat(
-                    value                = value,
-                    onValueChange        = onValueChange,
-                    placeholder          = placeholder,
-                    keyboardType         = keyboardType,
-                    imeAction            = imeAction,
-                    onImeAction          = onImeAction,
-                    visualTransformation = visualTransformation,
-                    modifier             = Modifier.weight(1f)
-                )
-                if (trailingIcon != null) {
-                    trailingIcon()
-                }
-            }
-        }
-        androidx.compose.animation.AnimatedVisibility(
-            visible = isError && errorMessage != null,
-            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
-            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
-        ) {
-            Text(
-                text = errorMessage ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                color = DestructiveStart,
-                modifier = Modifier.padding(start = 12.dp, top = 4.dp)
-            )
-        }
-    }
-}
-
-/** Thin wrapper around BasicTextField for clean typography */
-@Composable
-private fun BasicTextField_Compat(
-    value               : String,
-    onValueChange       : (String) -> Unit,
-    placeholder         : String,
-    keyboardType        : KeyboardType,
-    imeAction           : ImeAction,
-    onImeAction         : () -> Unit,
-    visualTransformation: VisualTransformation,
-    modifier            : Modifier
-) {
-    androidx.compose.foundation.text.BasicTextField(
-        value                  = value,
-        onValueChange          = onValueChange,
-        modifier               = modifier,
-        singleLine             = true,
-        textStyle              = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-        cursorBrush            = androidx.compose.ui.graphics.SolidColor(CoralStart),
-        visualTransformation   = visualTransformation,
-        keyboardOptions        = KeyboardOptions(
-            keyboardType = keyboardType,
-            imeAction    = imeAction
-        ),
-        keyboardActions        = KeyboardActions(
-            onNext = { onImeAction() },
-            onDone = { onImeAction() }
-        ),
-        decorationBox = { innerTextField ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) {
-                    Text(
-                        text  = placeholder,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Ink.copy(alpha = 0.65f)
-                    )
-                }
-                innerTextField()
-            }
-        }
+    com.collabsphere.app.view.components.SkeuoTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        placeholder = placeholder,
+        keyboardType = keyboardType,
+        imeAction = imeAction,
+        onImeAction = onImeAction,
+        visualTransformation = visualTransformation,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        isError = isError,
+        errorMessage = errorMessage
     )
 }
 
@@ -870,9 +823,17 @@ internal fun SkeuoPrimaryButton(
             .fillMaxWidth()
             .height(56.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoRaised(cornerRadius = 28.dp, elevation = if (isPressed) 2.dp else 6.dp)
+            .skeuoRaised(cornerRadius = 28.dp, elevation = if (isPressed) 2.dp else 8.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(SurfaceRaised)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF7F1EA),
+                        Color(0xFFEDE4D8),
+                        Color(0xFFE5DAD0)
+                    )
+                )
+            )
             .clickable(
                 enabled           = enabled && !isLoading,
                 interactionSource = interactionSource,

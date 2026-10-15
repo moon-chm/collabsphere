@@ -1,6 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
 import com.collabsphere.app.view.components.CollabSpinner
+import com.collabsphere.app.view.components.SkeuoTextField
 
 import android.content.Intent
 import android.graphics.Color as AndroidColor
@@ -19,8 +20,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -767,139 +766,51 @@ onDrawBehind {
                         )
 
                         // Name Field
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Display name",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Muted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = CoralStart,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    BasicTextField(
-                                        value = userName,
-                                        onValueChange = onNameChange,
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                                        cursorBrush = SolidColor(CoralStart)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Status message field
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Status",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Muted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                                    .clip(RoundedCornerShape(14.dp)),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = IndigoStart,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    BasicTextField(
-                                        value = statusMessage,
-                                        onValueChange = { if (it.length <= 60) onStatusMessageChange(it) },
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true,
-                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                                        cursorBrush = SolidColor(CoralStart),
-                                        decorationBox = { inner ->
-                                            Box(contentAlignment = Alignment.CenterStart) {
-                                                if (statusMessage.isEmpty()) {
-                                                    Text(
-                                                        text = "What are you up to?",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = Ink.copy(alpha = 0.5f)
-                                                    )
-                                                }
-                                                inner()
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Bio field
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Bio",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Muted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 80.dp)
-                                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .padding(horizontal = 14.dp, vertical = 12.dp)
-                            ) {
-                                BasicTextField(
-                                    value = bio,
-                                    onValueChange = { if (it.length <= 300) onBioChange(it) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                                    cursorBrush = SolidColor(CoralStart),
-                                    decorationBox = { inner ->
-                                        Box {
-                                            if (bio.isEmpty()) {
-                                                Text(
-                                                    text = "Tell your team a little about yourself",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    color = Ink.copy(alpha = 0.5f)
-                                                )
-                                            }
-                                            inner()
-                                        }
-                                    }
+                        SkeuoTextField(
+                            value = userName,
+                            onValueChange = onNameChange,
+                            label = "Display name",
+                            placeholder = "Your name",
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
-                        }
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Status message field
+                        SkeuoTextField(
+                            value = statusMessage,
+                            onValueChange = { if (it.length <= 60) onStatusMessageChange(it) },
+                            label = "Status",
+                            placeholder = "What are you up to?",
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Bio field
+                        SkeuoTextField(
+                            value = bio,
+                            onValueChange = { if (it.length <= 300) onBioChange(it) },
+                            label = "Bio",
+                            placeholder = "Tell your team a little about yourself...",
+                            singleLine = false,
+                            minLines = 3,
+                            maxLines = 5
+                        )
 
                         // Password toggle row
                         Row(
@@ -951,124 +862,55 @@ onDrawBehind {
                                 verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 // Current Password
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "Current password",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Muted,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(52.dp)
-                                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
-                                        contentAlignment = Alignment.CenterStart
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            BasicTextField(
-                                                value = currentPassword,
-                                                onValueChange = onCurrentPasswordChange,
-                                                modifier = Modifier.weight(1f),
-                                                singleLine = true,
-                                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                                                cursorBrush = SolidColor(CoralStart),
-                                                visualTransformation = if (showCurrentPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                                keyboardOptions = KeyboardOptions(
-                                                    keyboardType = KeyboardType.Password,
-                                                    imeAction = ImeAction.Next
-                                                ),
-                                                decorationBox = { inner ->
-                                                    Box(contentAlignment = Alignment.CenterStart) {
-                                                        if (currentPassword.isEmpty()) {
-                                                            Text(
-                                                                text = "Verify existing password",
-                                                                style = MaterialTheme.typography.bodyLarge,
-                                                                color = Ink.copy(alpha = 0.65f)
-                                                            )
-                                                        }
-                                                        inner()
-                                                    }
-                                                }
+                                // Current Password
+                                SkeuoTextField(
+                                    value = currentPassword,
+                                    onValueChange = onCurrentPasswordChange,
+                                    label = "Current password",
+                                    placeholder = "Verify existing password",
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Next,
+                                    visualTransformation = if (showCurrentPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                                    },
+                                    trailingIcon = {
+                                        IconButton(onClick = { showCurrentPassword = !showCurrentPassword }) {
+                                            Icon(
+                                                imageVector = if (showCurrentPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = "Toggle password visibility",
+                                                tint = if (showCurrentPassword) CoralStart else Muted,
+                                                modifier = Modifier.size(18.dp)
                                             )
-                                            IconButton(onClick = { showCurrentPassword = !showCurrentPassword }) {
-                                                Icon(
-                                                    imageVector = if (showCurrentPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                    contentDescription = "Toggle password visibility",
-                                                    tint = Muted,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
                                         }
                                     }
-                                }
+                                )
+
+                                Spacer(Modifier.height(12.dp))
 
                                 // New Password
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "New password",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Muted,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(52.dp)
-                                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
-                                        contentAlignment = Alignment.CenterStart
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            BasicTextField(
-                                                value = newPassword,
-                                                onValueChange = onNewPasswordChange,
-                                                modifier = Modifier.weight(1f),
-                                                singleLine = true,
-                                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                                                cursorBrush = SolidColor(CoralStart),
-                                                visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                                keyboardOptions = KeyboardOptions(
-                                                    keyboardType = KeyboardType.Password,
-                                                    imeAction = ImeAction.Done
-                                                ),
-                                                decorationBox = { inner ->
-                                                    Box(contentAlignment = Alignment.CenterStart) {
-                                                        if (newPassword.isEmpty()) {
-                                                            Text(
-                                                                text = "Enter updated password",
-                                                                style = MaterialTheme.typography.bodyLarge,
-                                                                color = Ink.copy(alpha = 0.65f)
-                                                            )
-                                                        }
-                                                        inner()
-                                                    }
-                                                }
+                                SkeuoTextField(
+                                    value = newPassword,
+                                    onValueChange = onNewPasswordChange,
+                                    label = "New password",
+                                    placeholder = "Enter updated password",
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Done,
+                                    visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                                    },
+                                    trailingIcon = {
+                                        IconButton(onClick = { showNewPassword = !showNewPassword }) {
+                                            Icon(
+                                                imageVector = if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = "Toggle password visibility",
+                                                tint = if (showNewPassword) CoralStart else Muted,
+                                                modifier = Modifier.size(18.dp)
                                             )
-                                            IconButton(onClick = { showNewPassword = !showNewPassword }) {
-                                                Icon(
-                                                    imageVector = if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                                    contentDescription = "Toggle password visibility",
-                                                    tint = Muted,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
                                         }
                                     }
-                                }
+                                )
                             }
                         }
                     }
@@ -1163,38 +1005,15 @@ onDrawBehind {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(46.dp)
-                                            .skeuoInset(cornerRadius = 12.dp, depth = 2.dp)
-                                            .clip(RoundedCornerShape(12.dp)),
-                                        contentAlignment = Alignment.CenterStart
-                                    ) {
-                                        BasicTextField(
-                                            value = verificationToken,
-                                            onValueChange = onVerificationTokenChange,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp),
-                                            singleLine = true,
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                                            cursorBrush = SolidColor(CoralStart),
-                                            decorationBox = { inner ->
-                                                Box(contentAlignment = Alignment.CenterStart) {
-                                                    if (verificationToken.isEmpty()) {
-                                                        Text(
-                                                            text = "Verification code",
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            color = Ink.copy(alpha = 0.5f)
-                                                        )
-                                                    }
-                                                    inner()
-                                                }
-                                            }
-                                        )
-                                    }
+                                    SkeuoTextField(
+                                        value = verificationToken,
+                                        onValueChange = onVerificationTokenChange,
+                                        placeholder = "Verification code",
+                                        cornerRadius = 23.dp,
+                                        height = 46.dp,
+                                        keyboardType = KeyboardType.NumberPassword,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                     Text(
                                         text = "Verify",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
@@ -1596,30 +1415,40 @@ onDrawBehind {
                         style = MaterialTheme.typography.bodyMedium,
                         color = Muted
                     )
-                    OutlinedTextField(
+                    SkeuoTextField(
                         value = newEmailInput,
                         onValueChange = onNewEmailChange,
-                        label = { Text("New email") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        label = "New email",
+                        placeholder = "name@example.com",
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next,
+                        leadingIcon = {
+                            Icon(Icons.Default.Email, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     var showPw by remember { mutableStateOf(false) }
-                    OutlinedTextField(
+                    SkeuoTextField(
                         value = emailChangePassword,
                         onValueChange = onEmailChangePasswordChange,
-                        label = { Text("Current password") },
-                        singleLine = true,
+                        label = "Current password",
+                        placeholder = "Your current password",
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
                         visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        },
                         trailingIcon = {
                             IconButton(onClick = { showPw = !showPw }) {
                                 Icon(
                                     imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password visibility"
+                                    contentDescription = "Toggle password visibility",
+                                    tint = if (showPw) CoralStart else Muted,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1663,21 +1492,27 @@ onDrawBehind {
                         color = Muted
                     )
                     var showPw by remember { mutableStateOf(false) }
-                    OutlinedTextField(
+                    SkeuoTextField(
                         value = deleteAccountPassword,
                         onValueChange = onDeleteAccountPasswordChange,
-                        label = { Text("Confirm password") },
-                        singleLine = true,
+                        label = "Confirm password",
+                        placeholder = "Your password to confirm",
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
                         visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = {
+                            Icon(Icons.Default.Lock, null, tint = DestructiveStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        },
                         trailingIcon = {
                             IconButton(onClick = { showPw = !showPw }) {
                                 Icon(
                                     imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password visibility"
+                                    contentDescription = "Toggle password visibility",
+                                    tint = if (showPw) DestructiveStart else Muted,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

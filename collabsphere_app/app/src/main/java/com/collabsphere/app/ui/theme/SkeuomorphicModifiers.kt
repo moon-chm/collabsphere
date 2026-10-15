@@ -88,8 +88,8 @@ private val matteGrainBrush: ShaderBrush by lazy {
  */
 fun Modifier.skeuoWaveBackground(): Modifier = this.drawBehind {
     val cr = 48.dp.toPx()
-    val el = 12.dp.toPx() // Increased elevation for deeper skeuomorphic feel
-    
+    val el = 16.dp.toPx()
+
     val path = androidx.compose.ui.graphics.Path().apply {
         moveTo(cr, 0f)
         lineTo(size.width * 0.45f, 0f)
@@ -106,49 +106,62 @@ fun Modifier.skeuoWaveBackground(): Modifier = this.drawBehind {
         quadraticTo(0f, 0f, cr, 0f)
         close()
     }
-    
-    // Stronger shadows for "real" skeuomorphic look
-    val darkColor = Color(0xFF2C201A).copy(alpha = 0.22f) 
-    val lightColor = Color.White.copy(alpha = 0.95f)
-    
+
+    val darkColor  = Color(0xFF1A100A).copy(alpha = 0.30f)
+    val darkColor2 = Color(0xFF2C201A).copy(alpha = 0.14f)
+    val lightColor = Color.White.copy(alpha = 0.90f)
+
     drawIntoCanvas { canvas ->
-        // Ambient drop shadow (dark, bottom-right)
-        val darkPaint = Paint().apply {
+        val farShadow = Paint().apply {
             asFrameworkPaint().apply {
                 isAntiAlias = true
                 color = android.graphics.Color.TRANSPARENT
-                setShadowLayer(el * 3f, el * 1.5f, el * 1.8f, darkColor.toArgb())
+                setShadowLayer(el * 4.5f, el * 2.0f, el * 2.4f, darkColor.toArgb())
             }
         }
-        // Specular highlight (light, top-left)
+        val nearShadow = Paint().apply {
+            asFrameworkPaint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.TRANSPARENT
+                setShadowLayer(el * 2.0f, el * 0.8f, el * 1.0f, darkColor2.toArgb())
+            }
+        }
         val lightPaint = Paint().apply {
             asFrameworkPaint().apply {
                 isAntiAlias = true
                 color = android.graphics.Color.TRANSPARENT
-                setShadowLayer(el * 2.5f, -el * 1.2f, -el * 1.4f, lightColor.toArgb())
+                setShadowLayer(el * 3.0f, -el * 1.4f, -el * 1.6f, lightColor.toArgb())
             }
         }
-        canvas.drawPath(path, darkPaint)
+        canvas.drawPath(path, farShadow)
+        canvas.drawPath(path, nearShadow)
         canvas.drawPath(path, lightPaint)
     }
-    
-    // Fill the surface
-    drawPath(path, color = SurfaceRaised)
-    
-    // Add a sharp specular edge rim hugging the top-left contours (Classic Skeuomorphism)
-    val rimBrush = Brush.verticalGradient(
+
+    val surfaceFill = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = 0.85f),
-            Color.White.copy(alpha = 0.15f),
+            Color(0xFFF5EFE8),
+            Color(0xFFEDE5DB),
+            Color(0xFFE8DDD3)
+        ),
+        start = Offset(0f, 0f),
+        end   = Offset(size.width * 0.5f, size.height)
+    )
+    drawPath(path, brush = surfaceFill)
+
+    val rimBrush = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.90f),
+            Color.White.copy(alpha = 0.30f),
             Color.Transparent
         ),
-        startY = 0f,
-        endY = size.height * 0.4f
+        start = Offset(0f, 0f),
+        end   = Offset(size.width * 0.4f, size.height * 0.4f)
     )
     drawPath(
-        path = path,
+        path  = path,
         brush = rimBrush,
-        style = Stroke(width = 1.dp.toPx())
+        style = Stroke(width = 1.5.dp.toPx())
     )
 }
 
@@ -169,45 +182,37 @@ fun Modifier.skeuoRaised(
     val cr = cornerRadius.toPx()
     val el = elevation.toPx()
 
-    val lightColor = if (isDark) ShadowLightDark else ShadowLight
-    val darkColor  = if (isDark) ShadowDarkDark  else ShadowDark
+    val lightColor  = if (isDark) ShadowLightDark else ShadowLight
+    val darkColor   = if (isDark) ShadowDarkDark  else ShadowDark
+    val darkColor2  = Color(0xFF1A100A).copy(alpha = if (isDark) 0.35f else 0.18f)
 
     drawIntoCanvas { canvas ->
-        // ── Bottom-right dark ambient shadow ──
-        val darkPaint = Paint().apply {
+        val farCast = Paint().apply {
             asFrameworkPaint().apply {
                 isAntiAlias = true
                 color = android.graphics.Color.TRANSPARENT
-                setShadowLayer(el * 2.5f, el * 1.2f, el * 1.4f, darkColor.toArgb())
+                setShadowLayer(el * 4.0f, el * 1.6f, el * 2.0f, darkColor2.toArgb())
             }
         }
-        canvas.drawRoundRect(
-            left   = 0f,
-            top    = 0f,
-            right  = size.width,
-            bottom = size.height,
-            radiusX = cr,
-            radiusY = cr,
-            paint   = darkPaint
-        )
+        canvas.drawRoundRect(0f, 0f, size.width, size.height, cr, cr, farCast)
 
-        // ── Top-left specular light reflection ──
+        val nearCast = Paint().apply {
+            asFrameworkPaint().apply {
+                isAntiAlias = true
+                color = android.graphics.Color.TRANSPARENT
+                setShadowLayer(el * 2.0f, el * 0.8f, el * 1.0f, darkColor.toArgb())
+            }
+        }
+        canvas.drawRoundRect(0f, 0f, size.width, size.height, cr, cr, nearCast)
+
         val lightPaint = Paint().apply {
             asFrameworkPaint().apply {
                 isAntiAlias = true
                 color = android.graphics.Color.TRANSPARENT
-                setShadowLayer(el * 2f, -el * 0.8f, -el * 0.9f, lightColor.toArgb())
+                setShadowLayer(el * 2.5f, -el * 1.2f, -el * 1.3f, lightColor.toArgb())
             }
         }
-        canvas.drawRoundRect(
-            left   = 0f,
-            top    = 0f,
-            right  = size.width,
-            bottom = size.height,
-            radiusX = cr,
-            radiusY = cr,
-            paint   = lightPaint
-        )
+        canvas.drawRoundRect(0f, 0f, size.width, size.height, cr, cr, lightPaint)
     }
 }
 
@@ -223,69 +228,96 @@ fun Modifier.skeuoRaised(
  * @param cornerRadius  rounded corner of the debossed region (defaults to SkeuoTokens.RadiusSmall)
  * @param depth         depth of the inset cavity (defaults to SkeuoTokens.DepthInset)
  * @param isDark        swap shadow values for dark mode
+ * @param symmetric     light from straight above: both ends of a pill get the same carved-in shading
+ *                      (the look the right end has by default) instead of a darker top-left corner
+ * @param shadowStrength scales the dark shading inside the cavity (floor wash and dark rim); 0 removes it
  */
 fun Modifier.skeuoInset(
     cornerRadius: Dp = SkeuoTokens.RadiusSmall,
     depth: Dp = SkeuoTokens.DepthInset,
-    isDark: Boolean = false
+    isDark: Boolean = false,
+    symmetric: Boolean = false,
+    shadowStrength: Float = 1f
 ): Modifier = this.drawWithCache {
     val cr = cornerRadius.toPx()
+    val shift = 4.dp.toPx()
+    // Symmetric: the dark rim sits `shift` outside both ends (as it does at the right end in the default
+    // look) and the light rim `shift` inside both ends; only the vertical offset remains.
+    val darkPath = androidx.compose.ui.graphics.Path().apply {
+        if (symmetric) addRoundRect(androidx.compose.ui.geometry.RoundRect(-shift, 0f, size.width + shift, size.height, CornerRadius(cr)))
+        else addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, CornerRadius(cr)))
+    }
+    val lightPath = androidx.compose.ui.graphics.Path().apply {
+        if (symmetric) addRoundRect(androidx.compose.ui.geometry.RoundRect(shift, 0f, size.width - shift, size.height, CornerRadius(cr)))
+        else addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, CornerRadius(cr)))
+    }
+    val darkDx = if (symmetric) 0f else shift
+    val lightDx = if (symmetric) 0f else -shift
 
     onDrawBehind {
-        // bg-surface-container-lowest/80
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.8f),
+            color = Color.White.copy(alpha = if (isDark) 0.06f else 0.72f),
             size = size,
             cornerRadius = CornerRadius(cr)
         )
-        
-        // Inset 1: 3px 3px 6px rgba(190, 182, 169, 0.5)
-        // We simulate true inset by clipping to the rect and drawing a blurred thick stroke along the edge
+
+        val floorBrush = Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFD8CFCA).copy(alpha = (if (isDark) 0.30f else 0.22f) * shadowStrength),
+                Color.Transparent
+            ),
+            start = Offset(0f, 0f),
+            end   = if (symmetric) Offset(0f, size.height * 0.65f) else Offset(size.width * 0.55f, size.height * 0.65f)
+        )
+        if (shadowStrength > 0f) drawRoundRect(
+            brush        = floorBrush,
+            size         = size,
+            cornerRadius = CornerRadius(cr)
+        )
+
         drawIntoCanvas { canvas ->
             canvas.save()
             val path = androidx.compose.ui.graphics.Path().apply {
                 addRoundRect(androidx.compose.ui.geometry.RoundRect(0f, 0f, size.width, size.height, CornerRadius(cr)))
             }
             canvas.clipPath(path)
-            
+
             val paintDark = Paint().apply {
                 style = androidx.compose.ui.graphics.PaintingStyle.Stroke
-                strokeWidth = 10.dp.toPx()
+                strokeWidth = 14.dp.toPx()
                 asFrameworkPaint().apply {
                     isAntiAlias = true
-                    color = Color(190, 182, 169, (0.5f * 255).toInt()).toArgb()
-                    maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                    color = Color(160, 148, 136, (0.65f * shadowStrength * 255).toInt()).toArgb()
+                    maskFilter = android.graphics.BlurMaskFilter(9.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
                 }
             }
-            // Offset to top-left to cast shadow bottom-right
-            canvas.translate(3.dp.toPx(), 3.dp.toPx())
-            canvas.drawPath(path, paintDark)
-            canvas.translate(-3.dp.toPx(), -3.dp.toPx())
-            
-            // Inset 2: -3px -3px 6px rgba(255, 255, 255, 0.9)
+            if (shadowStrength > 0f) {
+                canvas.translate(darkDx, shift)
+                canvas.drawPath(darkPath, paintDark)
+                canvas.translate(-darkDx, -shift)
+            }
+
             val paintLight = Paint().apply {
                 style = androidx.compose.ui.graphics.PaintingStyle.Stroke
-                strokeWidth = 10.dp.toPx()
+                strokeWidth = 12.dp.toPx()
                 asFrameworkPaint().apply {
                     isAntiAlias = true
-                    color = Color(255, 255, 255, (0.9f * 255).toInt()).toArgb()
-                    maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                    color = Color(255, 255, 255, (0.95f * 255).toInt()).toArgb()
+                    maskFilter = android.graphics.BlurMaskFilter(8.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
                 }
             }
-            // Offset bottom-right to cast shadow top-left
-            canvas.translate(-3.dp.toPx(), -3.dp.toPx())
-            canvas.drawPath(path, paintLight)
-            canvas.translate(3.dp.toPx(), 3.dp.toPx())
-            
+            canvas.translate(lightDx, -shift)
+            canvas.drawPath(lightPath, paintLight)
+            canvas.translate(-lightDx, shift)
+
             canvas.restore()
         }
-        
-        // border-white/80 (drawn last to remain crisp on the edge)
+
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.8f),
-            size = size,
+            color        = Color.White.copy(alpha = 0.55f),
+            size         = size,
             cornerRadius = CornerRadius(cr),
-            style = Stroke(width = 1.dp.toPx())
+            style        = Stroke(width = 1.dp.toPx())
         )
     }
 }
@@ -1050,4 +1082,37 @@ fun Modifier.fadingScrollEdges(
     )
 
     return this.fadingEdge(top = animatedTop, bottom = animatedBottom)
+}
+
+/**
+ * Animated glowing focus ring for debossed skeuomorphic input containers.
+ * Smoothly transitions a 1.5dp Coral border when focused, or Destructive border on error.
+ */
+fun Modifier.skeuoFocusRing(
+    isFocused: Boolean,
+    cornerRadius: Dp = 14.dp,
+    ringColor: Color = CoralStart,
+    isError: Boolean = false
+): Modifier = composed {
+    val ringAlpha by animateFloatAsState(
+        targetValue = if (isError || isFocused) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "skeuoFocusRingAlpha"
+    )
+    val color = if (isError) DestructiveStart else ringColor
+
+    this.drawWithCache {
+        val cr = cornerRadius.toPx()
+        onDrawBehind {
+            if (ringAlpha > 0f) {
+                drawRoundRect(
+                    color = color.copy(alpha = 0.55f * ringAlpha),
+                    topLeft = Offset(-2.dp.toPx(), -2.dp.toPx()),
+                    size = Size(size.width + 4.dp.toPx(), size.height + 4.dp.toPx()),
+                    cornerRadius = CornerRadius(cr + 2.dp.toPx()),
+                    style = Stroke(width = 1.5.dp.toPx())
+                )
+            }
+        }
+    }
 }

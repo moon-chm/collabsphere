@@ -492,7 +492,7 @@ fun DeleteWorkspaceScreen(
     }
 }
 
-/** Inset debossed field tailored for delete workspace confirmation using shared skeuoInset */
+/** Inset debossed field tailored for delete workspace confirmation using shared SkeuoTextField */
 @Composable
 private fun DeleteDebossedField(
     value: String,
@@ -507,66 +507,18 @@ private fun DeleteDebossedField(
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Ink.copy(alpha = 0.75f),
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                .clip(RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (leadingIcon != null) {
-                    leadingIcon()
-                    Spacer(Modifier.width(10.dp))
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    readOnly = readOnly,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                    cursorBrush = SolidColor(DestructiveStart),
-                    visualTransformation = visualTransformation,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = keyboardType,
-                        imeAction = imeAction
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onNext = { onImeAction() },
-                        onDone = { onImeAction() }
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (value.isEmpty()) {
-                                Text(
-                                    text = placeholder,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Ink.copy(alpha = 0.65f)
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                )
-                if (trailingIcon != null) {
-                    trailingIcon()
-                }
-            }
-        }
-    }
+    com.collabsphere.app.view.components.SkeuoTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        placeholder = placeholder,
+        readOnly = readOnly,
+        keyboardType = keyboardType,
+        imeAction = imeAction,
+        onImeAction = onImeAction,
+        visualTransformation = visualTransformation,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        isError = true
+    )
 }

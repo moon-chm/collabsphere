@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -74,24 +75,28 @@ fun UserSearchScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 16.dp)) {
+            var isSearchFocused by remember { mutableStateOf(false) }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                    .clip(RoundedCornerShape(14.dp)),
+                    .height(54.dp)
+                    .skeuoFocusRing(isSearchFocused, cornerRadius = 27.dp)
+                    .skeuoInset(cornerRadius = 27.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                    .clip(RoundedCornerShape(27.dp)),
                 contentAlignment = Alignment.CenterStart
             ) {
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    modifier = Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     BasicTextField(
                         value = query,
                         onValueChange = viewModel::onQueryChanged,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { isSearchFocused = it.isFocused },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
                         cursorBrush = SolidColor(CoralStart),
@@ -102,7 +107,7 @@ fun UserSearchScreen(
                                     Text(
                                         text = "Search by username or email",
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = Ink.copy(alpha = 0.5f)
+                                        color = Ink.copy(alpha = 0.40f)
                                     )
                                 }
                                 inner()

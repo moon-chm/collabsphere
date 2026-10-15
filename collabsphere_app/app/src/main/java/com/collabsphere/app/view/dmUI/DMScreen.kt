@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
@@ -553,7 +554,7 @@ fun DMScreen(
                     // Username
                     Text(
                         text = partner.userName,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, fontSize = 20.sp),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = Ink,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
@@ -807,10 +808,7 @@ fun DMScreen(
                     ) {
                         Text(
                             text = "Direct messages",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 22.sp
-                            ),
+                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         val otherMembersCount = workspaceMembers.filter { it.id != currentUserId.toInt() }.size
@@ -1970,13 +1968,15 @@ fun DMScreen(
                                 }
 
                                 // Debossed message field
+                                var isComposerFocused by remember { mutableStateOf(false) }
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .heightIn(min = 48.dp, max = 120.dp)
-                                        .skeuoInset(cornerRadius = 16.dp, depth = 2.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .skeuoFocusRing(isComposerFocused, cornerRadius = 24.dp)
+                                        .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .padding(horizontal = 18.dp, vertical = 12.dp),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     BasicTextField(
@@ -1989,8 +1989,10 @@ fun DMScreen(
                                                 viewModel.onUserStoppedTyping(workspaceId, partner.id)
                                             }
                                         },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onFocusChanged { isComposerFocused = it.isFocused },
+                                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
                                         cursorBrush = SolidColor(CoralStart),
                                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                         keyboardActions = KeyboardActions(
@@ -2014,8 +2016,8 @@ fun DMScreen(
                                                 if (typedText.isEmpty()) {
                                                     Text(
                                                         text = if (editingMessage != null) "Edit message..." else "Message ${partner.userName}...",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = Ink.copy(alpha = 0.65f)
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = Ink.copy(alpha = 0.40f)
                                                     )
                                                 }
                                                 inner()

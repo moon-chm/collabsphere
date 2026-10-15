@@ -122,7 +122,7 @@ fun WorkspaceMembersDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Members",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink,
                     modifier = Modifier.weight(1f)
                 )

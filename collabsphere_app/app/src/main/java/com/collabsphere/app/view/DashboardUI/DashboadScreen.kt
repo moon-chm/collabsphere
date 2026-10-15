@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -453,29 +454,7 @@ fun DashboardScreen(
                 onNotificationsClick = onNotificationsClick
             )
 
-            Spacer(Modifier.height(20.dp))
-
-            // ── Section label ──
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Text(
-                    text  = "Active workspaces",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Ink
-                )
-                if (!workspaces.isNullOrEmpty()) {
-                    Text(
-                        text  = "${workspaces?.size ?: 0} total",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Muted
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
             // ── List, Skeleton, or Empty state ──
             androidx.compose.animation.Crossfade(
@@ -1034,12 +1013,14 @@ private fun JoinWorkspaceByCodeDialog(
                     textAlign = TextAlign.Center
                 )
 
+                var isInviteFocused by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
+                        .skeuoFocusRing(isInviteFocused, cornerRadius = 27.dp, ringColor = IndigoStart)
+                        .skeuoInset(cornerRadius = 27.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                        .clip(RoundedCornerShape(27.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     BasicTextField(
@@ -1047,6 +1028,7 @@ private fun JoinWorkspaceByCodeDialog(
                         onValueChange = {
                             if (it.length <= 6) codeInput = it.uppercase().filter { ch -> ch.isLetterOrDigit() }
                         },
+                        modifier = Modifier.onFocusChanged { isInviteFocused = it.isFocused },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.titleMedium.copy(
                             color = Ink,
@@ -1061,7 +1043,7 @@ private fun JoinWorkspaceByCodeDialog(
                                     Text(
                                         text = "INVITE",
                                         style = MaterialTheme.typography.titleMedium.copy(
-                                            color = Muted.copy(alpha = 0.5f),
+                                            color = Ink.copy(alpha = 0.40f),
                                             fontWeight = FontWeight.Bold,
                                             textAlign = TextAlign.Center,
                                             letterSpacing = 4.sp

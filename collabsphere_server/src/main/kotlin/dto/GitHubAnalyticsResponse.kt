@@ -54,7 +54,10 @@ data class GitHubIssueItem(
     val state: String,
     val authorUsername: String,
     val createdAt: Long,
-    val url: String
+    val url: String,
+    /** The CollabSphere member behind [authorUsername], when their GitHub account is linked. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
 )
 
 @Serializable
@@ -105,7 +108,11 @@ data class GitHubCommitItem(
     val authorName: String?,
     val commitDate: Long,
     val url: String? = null,
-    val ciStatus: String? = null
+    val ciStatus: String? = null,
+    val authorLogin: String? = null,
+    /** The CollabSphere member who authored the commit, when their GitHub account (or email) matches. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
 )
 
 @Serializable
@@ -117,7 +124,10 @@ data class GitHubPullRequestItem(
     val createdAt: Long,
     val mergedAt: Long?,
     val url: String? = null,
-    val ciStatus: String? = null
+    val ciStatus: String? = null,
+    /** The CollabSphere member behind [authorUsername], when their GitHub account is linked. */
+    val memberUserId: Int? = null,
+    val memberUsername: String? = null
 )
 
 @Serializable

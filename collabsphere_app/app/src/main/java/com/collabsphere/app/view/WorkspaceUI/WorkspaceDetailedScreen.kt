@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Description
@@ -95,6 +96,7 @@ fun WorkspaceDetailedScreen(
     onDmPartnerChange: (Int?) -> Unit = {},
     onBack: () -> Unit,
     onSearchClick: () -> Unit = {},
+    onInsightsClick: () -> Unit = {},
     onLeftWorkspace: () -> Unit = {},
     onChannelClick: (ChannelEntity) -> Unit,
     onAddMemberSubmit: (email: String) -> Unit,
@@ -231,7 +233,7 @@ fun WorkspaceDetailedScreen(
 
                     Text(
                         text = "Invite team member",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = Ink
                     )
 
@@ -243,62 +245,29 @@ fun WorkspaceDetailedScreen(
                     )
 
                     // Inset debossed email field
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    com.collabsphere.app.view.components.SkeuoTextField(
+                        value = memberEmailInput,
+                        onValueChange = { memberEmailInput = it },
+                        placeholder = "colleague@company.com",
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Done,
+                        onImeAction = {
+                            val email = memberEmailInput.trim()
+                            if (email.isNotEmpty()) {
+                                onAddMemberSubmit(email)
+                                showAddMemberDialog = false
+                                memberEmailInput = ""
+                            }
+                        },
+                        leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Email,
                                 contentDescription = null,
-                                tint = Muted,
+                                tint = CoralStart.copy(alpha = 0.75f),
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(Modifier.width(10.dp))
-                            BasicTextField(
-                                value = memberEmailInput,
-                                onValueChange = { memberEmailInput = it },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(CoralStart),
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Email,
-                                    imeAction = ImeAction.Done
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onDone = {
-                                        val email = memberEmailInput.trim()
-                                        if (email.isNotEmpty()) {
-                                            onAddMemberSubmit(email)
-                                            showAddMemberDialog = false
-                                            memberEmailInput = ""
-                                        }
-                                    }
-                                ),
-                                decorationBox = { inner ->
-                                    Box(contentAlignment = Alignment.CenterStart) {
-                                        if (memberEmailInput.isEmpty()) {
-                                            Text(
-                                                text = "colleague@company.com",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = Ink.copy(alpha = 0.65f)
-                                            )
-                                        }
-                                        inner()
-                                    }
-                                }
-                            )
                         }
-                    }
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -448,7 +417,7 @@ fun WorkspaceDetailedScreen(
                             // Workspace Title
                             Text(
                                 text = workspaceName,
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = Ink,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -462,6 +431,16 @@ fun WorkspaceDetailedScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Insights (contribution analytics)
+                                SkeuoActionIconButton(
+                                    onClick = onInsightsClick,
+                                    icon = Icons.Outlined.Insights,
+                                    contentDescription = "Workspace insights",
+                                    size = 32.dp,
+                                    iconSize = 16.dp,
+                                    tint = IndigoStart
+                                )
+
                                 // Mute / Unmute
                                 SkeuoActionIconButton(
                                     onClick = {

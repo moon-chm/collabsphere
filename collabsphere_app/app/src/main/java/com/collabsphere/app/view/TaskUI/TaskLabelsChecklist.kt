@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckBox
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -139,30 +141,33 @@ private fun AddItemField(
         if (text.isNotEmpty()) onSubmit(text)
         input = ""
     }
+    var isFocused by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
-            .border(1.dp, Muted.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp),
+            .height(48.dp)
+            .skeuoFocusRing(isFocused, cornerRadius = 24.dp)
+            .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+            .clip(RoundedCornerShape(24.dp))
+            .padding(start = 18.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = Muted, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
         BasicTextField(
             value = input,
             onValueChange = { input = it.take(maxLength) },
             singleLine = true,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { isFocused = it.isFocused },
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
             cursorBrush = SolidColor(CoralStart),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (input.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = Muted)
+                    if (input.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = Ink.copy(alpha = 0.40f))
                     inner()
                 }
             }

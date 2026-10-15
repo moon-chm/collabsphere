@@ -1548,6 +1548,11 @@ fun Application.configureRouting() {
                 progressionRoutes()
             }
 
+            // Workspace contribution analytics — plugins/routes/AnalyticsRoutes.kt
+            rateLimit(RateLimitName("api")) {
+                analyticsRoutes()
+            }
+
 
             // â”€â”€ Messages â”€â”€ extracted to plugins/routes/MessagesRoutes.kt â”€â”€â”€â”€â”€â”€â”€â”€
             messagesRoutes()

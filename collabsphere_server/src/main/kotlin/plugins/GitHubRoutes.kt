@@ -121,54 +121,18 @@ private suspend fun ApplicationCall.resolveGitHubAccess(requireOwner: Boolean): 
     return GitHubWorkspaceAccess(workspaceId, ownerId, callerId)
 }
 
-private data class MatchableMember(
-    val userId: Int,
-    val username: String,
-    val avatarUrl: String
-)
-
-private class WorkspaceMemberIndex(
-    private val byEmail: Map<String, MatchableMember>,
-    private val byGitHubLogin: Map<String, MatchableMember>
-) {
-    fun match(email: String?): MatchableMember? {
-        val normalized = email?.trim()?.lowercase() ?: return null
-        byEmail[normalized]?.let { return it }
-        val login = GITHUB_NOREPLY_EMAIL.matchEntire(normalized)?.groupValues?.get(1) ?: return null
-        return byGitHubLogin[login]
-    }
-}
-
-private val GITHUB_NOREPLY_EMAIL = Regex("(?:\\d+\\+)?([a-z0-9-]+)@users\\.noreply\\.github\\.com")
-
-private fun workspaceMembersForMatching(workspaceId: Int): WorkspaceMemberIndex {
-    val members = (WorkspaceMembersTable innerJoin UsersTable)
-        .selectAll()
-        .where { WorkspaceMembersTable.workspaceId eq workspaceId }
-        .map {
-            MatchableMember(
-                userId = it[UsersTable.id],
-                username = it[UsersTable.username],
-                avatarUrl = AvatarGenerator.avatarUrlFor(it[UsersTable.id], it[UsersTable.avatarUrl])
-            ) to it[UsersTable.email].trim().lowercase()
-        }
-    val byId = members.associate { (member, _) -> member.userId to member }
-    val byGitHubLogin = GitHubConnectionsTable.selectAll()
-        .where { GitHubConnectionsTable.userId inList byId.keys.toList() }
-        .mapNotNull { row ->
-            val member = byId[row[GitHubConnectionsTable.userId]] ?: return@mapNotNull null
-            row[GitHubConnectionsTable.githubUsername].lowercase() to member
-        }
-        .toMap()
-    return WorkspaceMemberIndex(
-        byEmail = members.associate { (member, email) -> email to member },
-        byGitHubLogin = byGitHubLogin
-    )
-}
-
-private fun pullRequestItems(rows: List<ResultRow>, repositoryId: Int, repoUrl: String): List<GitHubPullRequestItem> {
+private fun pullRequestItems(
+    rows: List<ResultRow>,
+    repositoryId: Int,
+    repoUrl: String,
+    identities: WorkspaceGitHubIdentities
+): List<GitHubPullRequestItem> {
     val ci = GitHubDataStore.ciStatusFor(repositoryId, rows.mapNotNull { it[GitHubPullRequestsTable.headSha] })
     return rows.map {
+        val member = identities.resolve(
+            githubId = it[GitHubPullRequestsTable.authorGithubId],
+            login = it[GitHubPullRequestsTable.authorUsername]
+        )
         GitHubPullRequestItem(
             number = it[GitHubPullRequestsTable.number],
             title = it[GitHubPullRequestsTable.title],
@@ -177,7 +141,9 @@ private fun pullRequestItems(rows: List<ResultRow>, repositoryId: Int, repoUrl: 
             createdAt = it[GitHubPullRequestsTable.createdAt],
             mergedAt = it[GitHubPullRequestsTable.mergedAt],
             url = "$repoUrl/pull/${it[GitHubPullRequestsTable.number]}",
-            ciStatus = it[GitHubPullRequestsTable.headSha]?.let(ci::get)
+            ciStatus = it[GitHubPullRequestsTable.headSha]?.let(ci::get),
+            memberUserId = member?.userId,
+            memberUsername = member?.username
         )
     }
 }
@@ -591,7 +557,7 @@ fun Application.configureGitHubRoutes() {
                             .orderBy(GitHubPullRequestsTable.createdAt, SortOrder.DESC)
                             .limit(pageSize + 1, offset = ((page - 1) * pageSize).toLong())
                             .toList()
-                            .let { pullRequestItems(it, repoId, repoUrl) }
+                            .let { pullRequestItems(it, repoId, repoUrl, WorkspaceGitHubIdentities.forWorkspace(access.workspaceId)) }
                         GitHubPullRequestPage(items = rows.take(pageSize), hasMore = rows.size > pageSize)
                     }
 
@@ -862,27 +828,43 @@ fun Application.configureGitHubRoutes() {
                             .where { (GitHubPullRequestsTable.repositoryId eq repoId) and GitHubPullRequestsTable.mergedAt.isNotNull() }
                             .count().toInt()
 
-                        val members = workspaceMembersForMatching(access.workspaceId)
+                        val identities = WorkspaceGitHubIdentities.forWorkspace(access.workspaceId)
+                        // Grouped per distinct (account, email), then merged per member, so one person
+                        // committing from two machines/emails still appears once.
                         val commitCount = GitHubCommitsTable.id.count()
                         val authorName = GitHubCommitsTable.authorName.max()
                         val topContributors = GitHubCommitsTable
-                            .select(GitHubCommitsTable.authorEmail, authorName, commitCount)
+                            .select(
+                                GitHubCommitsTable.authorGithubId,
+                                GitHubCommitsTable.authorLogin,
+                                GitHubCommitsTable.authorEmail,
+                                authorName,
+                                commitCount
+                            )
                             .where { GitHubCommitsTable.repositoryId eq repoId }
-                            .groupBy(GitHubCommitsTable.authorEmail)
-                            .orderBy(commitCount, SortOrder.DESC)
-                            .limit(TOP_CONTRIBUTORS)
+                            .groupBy(GitHubCommitsTable.authorGithubId, GitHubCommitsTable.authorLogin, GitHubCommitsTable.authorEmail)
                             .map {
+                                val githubId = it[GitHubCommitsTable.authorGithubId]
+                                val login = it[GitHubCommitsTable.authorLogin]
                                 val email = it[GitHubCommitsTable.authorEmail]
                                 val name = it[authorName]
-                                val member = members.match(email)
-                                GitHubContributorStats(
-                                    username = member?.username ?: name ?: email ?: "Unknown",
+                                val member = identities.resolve(githubId, login, email)
+                                val key = member?.let { m -> "member:${m.userId}" }
+                                    ?: githubId?.let { id -> "gh:$id" }
+                                    ?: login?.let { l -> "login:${l.lowercase()}" }
+                                    ?: "email:${email?.lowercase()}"
+                                key to GitHubContributorStats(
+                                    username = member?.username ?: login ?: name ?: email ?: "Unknown",
                                     commits = it[commitCount].toInt(),
                                     memberUserId = member?.userId,
                                     avatarUrl = member?.avatarUrl,
-                                    githubName = name
+                                    githubName = login ?: name
                                 )
                             }
+                            .groupBy({ it.first }, { it.second })
+                            .map { (_, parts) -> parts.maxBy { it.commits }.copy(commits = parts.sumOf { it.commits }) }
+                            .sortedByDescending { it.commits }
+                            .take(TOP_CONTRIBUTORS)
 
                         val today = LocalDate.now(zone)
                         val since = today.minusDays(ACTIVITY_DAYS - 1L).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -902,12 +884,20 @@ fun Application.configureGitHubRoutes() {
                             .orderBy(GitHubCommitsTable.commitDate, SortOrder.DESC)
                             .limit(RECENT_ITEMS)
                             .map {
+                                val member = identities.resolve(
+                                    githubId = it[GitHubCommitsTable.authorGithubId],
+                                    login = it[GitHubCommitsTable.authorLogin],
+                                    email = it[GitHubCommitsTable.authorEmail]
+                                )
                                 GitHubCommitItem(
                                     sha = it[GitHubCommitsTable.sha],
                                     message = it[GitHubCommitsTable.message].lineSequence().first().take(200),
                                     authorName = it[GitHubCommitsTable.authorName],
                                     commitDate = it[GitHubCommitsTable.commitDate],
-                                    url = "${repoRow[GitHubRepositoriesTable.htmlUrl]}/commit/${it[GitHubCommitsTable.sha]}"
+                                    url = "${repoRow[GitHubRepositoriesTable.htmlUrl]}/commit/${it[GitHubCommitsTable.sha]}",
+                                    authorLogin = it[GitHubCommitsTable.authorLogin],
+                                    memberUserId = member?.userId,
+                                    memberUsername = member?.username
                                 )
                             }
                             .let { commits ->
@@ -920,7 +910,7 @@ fun Application.configureGitHubRoutes() {
                             .orderBy(GitHubPullRequestsTable.createdAt, SortOrder.DESC)
                             .limit(RECENT_ITEMS)
                             .toList()
-                            .let { pullRequestItems(it, repoId, repoRow[GitHubRepositoriesTable.htmlUrl]) }
+                            .let { pullRequestItems(it, repoId, repoRow[GitHubRepositoriesTable.htmlUrl], identities) }
 
                         val openIssues = GitHubIssuesTable.selectAll()
                             .where { (GitHubIssuesTable.repositoryId eq repoId) and (GitHubIssuesTable.state eq "open") }
@@ -931,13 +921,19 @@ fun Application.configureGitHubRoutes() {
                             .orderBy(GitHubIssuesTable.createdAt, SortOrder.DESC)
                             .limit(RECENT_ITEMS)
                             .map {
+                                val member = identities.resolve(
+                                    githubId = it[GitHubIssuesTable.authorGithubId],
+                                    login = it[GitHubIssuesTable.authorUsername]
+                                )
                                 GitHubIssueItem(
                                     number = it[GitHubIssuesTable.number],
                                     title = it[GitHubIssuesTable.title],
                                     state = it[GitHubIssuesTable.state],
                                     authorUsername = it[GitHubIssuesTable.authorUsername],
                                     createdAt = it[GitHubIssuesTable.createdAt],
-                                    url = it[GitHubIssuesTable.url]
+                                    url = it[GitHubIssuesTable.url],
+                                    memberUserId = member?.userId,
+                                    memberUsername = member?.username
                                 )
                             }
 

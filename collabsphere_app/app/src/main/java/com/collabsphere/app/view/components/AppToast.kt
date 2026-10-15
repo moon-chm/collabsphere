@@ -70,6 +70,7 @@ import com.collabsphere.app.ui.theme.MintGreen
 import com.collabsphere.app.ui.theme.Muted
 import com.collabsphere.app.ui.theme.SurfaceRaised
 import com.collabsphere.app.ui.theme.skeuoRaised
+import androidx.compose.ui.graphics.Brush
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -270,7 +271,15 @@ private fun ToastCard(toast: ToastMessage, onDismiss: () -> Unit) {
             }
             .skeuoRaised(cornerRadius = 18.dp, elevation = 8.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(SurfaceRaised)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF7F1EA),
+                        Color(0xFFEDE4D8),
+                        Color(0xFFE5DAD0)
+                    )
+                )
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

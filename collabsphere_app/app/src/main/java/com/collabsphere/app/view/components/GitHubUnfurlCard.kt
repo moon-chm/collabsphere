@@ -232,12 +232,13 @@ fun GitHubUnfurlCard(
                 
                 if (showComposer) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
+                    SkeuoTextField(
                         value = commentText,
                         onValueChange = { commentText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Leave a comment...", fontSize = 12.sp) },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                        placeholder = "Leave a comment...",
+                        singleLine = false,
+                        minLines = 2,
                         maxLines = 4
                     )
                     Spacer(modifier = Modifier.height(8.dp))

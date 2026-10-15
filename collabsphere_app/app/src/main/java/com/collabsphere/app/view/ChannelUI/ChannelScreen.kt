@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -90,10 +91,7 @@ fun ChannelScreen(
             ) {
                 Text(
                     text = "Channels",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    ),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -364,7 +362,7 @@ fun CreateChannelBottomSheet(
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 brush = Brush.linearGradient(
-                                    colors = listOf(IndigoStart, IndigoEnd)
+                                    colors = listOf(CoralStart, CoralEnd)
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -380,10 +378,7 @@ fun CreateChannelBottomSheet(
                     Column {
                         Text(
                             text = "Create channel",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            ),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                             color = Ink
                         )
                         Text(
@@ -421,90 +416,36 @@ fun CreateChannelBottomSheet(
                     color = Muted
                 )
 
-                // Debossed Name Field with # prefix
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = name,
+                    onValueChange = {
+                        // Clean spaces into hyphens or keep clean channel name
+                        viewModel.onChannelNamechange(it.lowercase().replace(" ", "-"))
+                    },
+                    label = "Channel name",
+                    placeholder = "e.g. announcements, general",
+                    leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Tag,
                             contentDescription = null,
-                            tint = IndigoStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        BasicTextField(
-                            value = name,
-                            onValueChange = { 
-                                // Clean spaces into hyphens or keep clean channel name
-                                val formatted = it.lowercase().replace(" ", "-")
-                                viewModel.onChannelNamechange(formatted) 
-                            },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontWeight = FontWeight.SemiBold),
-                            cursorBrush = SolidColor(IndigoStart),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            decorationBox = { inner ->
-                                Box(contentAlignment = Alignment.CenterStart) {
-                                    if (name.isEmpty()) {
-                                        Text(
-                                            text = "e.g. announcements, general",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Ink.copy(alpha = 0.45f)
-                                        )
-                                    }
-                                    inner()
-                                }
-                            }
+                            tint = CoralStart.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                }
+                )
 
-                // Debossed Description Field
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .skeuoInset(cornerRadius = 14.dp, depth = 2.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.TopStart
-                ) {
-                    BasicTextField(
-                        value = description,
-                        onValueChange = { viewModel.onChannelDescriptionChange(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        singleLine = false,
-                        maxLines = 3,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-                        cursorBrush = SolidColor(IndigoStart),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        decorationBox = { inner ->
-                            Box(contentAlignment = Alignment.TopStart) {
-                                if (description.isEmpty()) {
-                                    Text(
-                                        text = "What is this channel about? (optional)",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Ink.copy(alpha = 0.45f)
-                                    )
-                                }
-                                inner()
-                            }
-                        }
-                    )
-                }
+                Spacer(Modifier.height(4.dp))
+
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = description,
+                    onValueChange = { viewModel.onChannelDescriptionChange(it) },
+                    label = "Description",
+                    placeholder = "What is this channel about? (optional)",
+                    imeAction = ImeAction.Done,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 3
+                )
             }
 
             // INFO CARD: GUIDELINES
@@ -522,7 +463,7 @@ fun CreateChannelBottomSheet(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
-                        tint = IndigoStart,
+                        tint = CoralStart,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -565,7 +506,7 @@ fun CreateChannelBottomSheet(
                         .drawWithCache {
                             onDrawBehind {
                                 drawRoundRect(
-                                    color = IndigoStart.copy(alpha = 0.28f * createAlpha),
+                                    color = CoralStart.copy(alpha = 0.28f * createAlpha),
                                     topLeft = Offset(0f, 3.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(14.dp.toPx())
@@ -573,8 +514,8 @@ fun CreateChannelBottomSheet(
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            IndigoStart.copy(alpha = createAlpha),
-                                            IndigoEnd.copy(alpha = createAlpha)
+                                            CoralStart.copy(alpha = createAlpha),
+                                            CoralEnd.copy(alpha = createAlpha)
                                         ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
@@ -693,7 +634,7 @@ fun DeleteChannelConfirmationDialog(
 
                 Text(
                     text = "Delete channel",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 

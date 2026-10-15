@@ -151,6 +151,9 @@ object LocalFilesTable : Table("local_files") {
     val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
     val contentHash = varchar("content_hash", 64).nullable()
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // When the row was first created (workspace analytics). Null on rows that predate the column; those
+    // fall back to updated_at, since backfilling would bump sync_xid and make every client re-download them.
+    val createdAt = long("created_at").nullable().clientDefault { System.currentTimeMillis() }
     val isDeleted = bool("is_deleted").default(false)
     // Stamped by a Postgres trigger with the id of the last transaction that wrote the row — the
     // delta-sync cursor (see plugins/DeltaSync.kt). Never set from application code.
@@ -202,6 +205,9 @@ object NotesTable : Table("notes") {
     val pinnedByUserId = integer("pinned_by_user_id").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // When the row was first created (workspace analytics). Null on rows that predate the column; those
+    // fall back to updated_at, since backfilling would bump sync_xid and make every client re-download them.
+    val createdAt = long("created_at").nullable().clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created note so a WorkManager retry after a lost (but
     // successful) create response returns the existing row instead of inserting a duplicate.
     val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
@@ -238,6 +244,9 @@ object TasksTable : Table("task") {
     val prioritySetBy = integer("priority_set_by").nullable()
     val isDeleted = bool("is_deleted").default(false)
     val updatedAt = long("updated_at").clientDefault { System.currentTimeMillis() }
+    // When the row was first created (workspace analytics). Null on rows that predate the column; those
+    // fall back to updated_at, since backfilling would bump sync_xid and make every client re-download them.
+    val createdAt = long("created_at").nullable().clientDefault { System.currentTimeMillis() }
     // Set by the client on an offline-created task so a WorkManager retry after a lost (but
     // successful) create response returns the existing row instead of inserting a duplicate.
     val idempotencyKey = varchar("idempotency_key", 64).nullable().uniqueIndex()
@@ -521,6 +530,7 @@ object GitHubIssuesTable : Table("github_issues") {
     val title = varchar("title", 500)
     val state = varchar("state", 20)
     val authorUsername = varchar("author_username", 255)
+    val authorGithubId = long("author_github_id").nullable()
     val url = varchar("url", 500)
     val createdAt = long("created_at")
     val closedAt = long("closed_at").nullable()
@@ -556,6 +566,10 @@ object GitHubCommitsTable : Table("github_commits") {
     val message = text("message")
     val authorName = varchar("author_name", 255).nullable()
     val authorEmail = varchar("author_email", 255).nullable()
+    // The author's GitHub account, when GitHub could tie the commit to one; this, not the free-text git
+    // name/email, is how commits are attributed to members. Null on rows synced before these columns.
+    val authorLogin = varchar("author_login", 255).nullable()
+    val authorGithubId = long("author_github_id").nullable()
     val commitDate = long("commit_date")
 
     override val primaryKey = PrimaryKey(id)
@@ -573,6 +587,7 @@ object GitHubPullRequestsTable : Table("github_pull_requests") {
     val title = varchar("title", 500)
     val state = varchar("state", 50) // open, closed
     val authorUsername = varchar("author_username", 255)
+    val authorGithubId = long("author_github_id").nullable()
     val createdAt = long("created_at")
     val closedAt = long("closed_at").nullable()
     val mergedAt = long("merged_at").nullable()

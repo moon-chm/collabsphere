@@ -51,7 +51,7 @@ internal fun PullRequestListView(
             }
             Text(
                 text = "Pull requests",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2C2A28)
             )
@@ -94,7 +94,7 @@ internal fun PullRequestListView(
                     val (statusLabel, statusColor) = pullRequestStatus(pr)
                     ActivityRow(
                         title = "#${pr.number} ${pr.title}",
-                        subtitle = "${pr.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(pr.createdAt)}",
+                        subtitle = "${pr.displayAuthor} · ${relativeTime(pr.createdAt)}",
                         badge = statusLabel,
                         badgeColor = statusColor,
                         url = pr.url,

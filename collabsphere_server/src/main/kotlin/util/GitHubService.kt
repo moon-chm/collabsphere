@@ -27,7 +27,8 @@ data class GitHubRepository(
 
 @Serializable
 data class GitHubOwner(
-    val login: String
+    val login: String,
+    val id: Long? = null
 )
 
 @Serializable
@@ -575,7 +576,9 @@ data class GitHubIssueInfo(
 @Serializable
 data class GitHubCommitInfo(
     val sha: String,
-    val commit: GitHubCommitDetail? = null
+    val commit: GitHubCommitDetail? = null,
+    /** The GitHub account GitHub matched the commit to (null when the git email belongs to no account). */
+    val author: GitHubOwner? = null
 )
 
 @Serializable

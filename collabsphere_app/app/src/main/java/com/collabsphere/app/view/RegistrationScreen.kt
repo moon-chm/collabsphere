@@ -116,6 +116,9 @@ fun RegistrationScreen(
         }
     }
 
+    val formScroll = rememberScrollState()
+    val formScrollEnabled = rememberKeyboardOnlyScroll(formScroll)
+
     // ── Neumorphic Wave Shell ──
     Box(
         modifier = Modifier
@@ -135,7 +138,7 @@ fun RegistrationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(formScroll, enabled = formScrollEnabled)
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -177,11 +180,13 @@ fun RegistrationScreen(
                     value = otpCode,
                     onValueChange = { if (it.length <= 6) otpCode = it.filter { ch -> ch.isDigit() } },
                     label = "Verification Code",
-                    placeholder = "",
+                    placeholder = "123456",
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Done,
                     onImeAction = { handleVerify() },
-                    leadingIcon = null,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Lock, null, tint = MintGreen.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                    },
                     trailingIcon = {
                         AnimatedVisibility(otpCode.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                             IconButton(onClick = { otpCode = "" }) {
@@ -288,20 +293,22 @@ fun RegistrationScreen(
                     )
                 }
 
-                Spacer(Modifier.height(48.dp))
+                Spacer(Modifier.height(20.dp))
 
                 // Username field
                 SkeuoTextField(
                     value = username,
                     onValueChange = { username = it },
                     label = "Username",
-                    placeholder = "",
+                    placeholder = "Your username",
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next,
                     onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
                     isError = isUsernameError,
                     errorMessage = "Username cannot be empty",
-                    leadingIcon = null,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Person, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    },
                     trailingIcon = {
                         AnimatedVisibility(username.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                             IconButton(onClick = { username = "" }) {
@@ -311,20 +318,22 @@ fun RegistrationScreen(
                     }
                 )
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
                 // Email field
                 SkeuoTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = "Email address",
-                    placeholder = "",
+                    placeholder = "Your email address",
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
                     onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
                     isError = isEmailError,
                     errorMessage = "Email cannot be empty",
-                    leadingIcon = null,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Email, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    },
                     trailingIcon = {
                         AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                             IconButton(onClick = { email = "" }) {
@@ -334,14 +343,14 @@ fun RegistrationScreen(
                     }
                 )
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
                 // Password field
                 SkeuoTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = "Password",
-                    placeholder = "",
+                    placeholder = "Create a password",
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
                     onImeAction = { handleRegister() },
@@ -349,21 +358,23 @@ fun RegistrationScreen(
                     else PasswordVisualTransformation(),
                     isError = isPasswordError,
                     errorMessage = "Password cannot be empty",
-                    leadingIcon = null,
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(
                                 imageVector = if (passwordVisible) Icons.Outlined.Visibility
                                 else Icons.Outlined.VisibilityOff,
                                 contentDescription = if (passwordVisible) "Hide" else "Show",
-                                tint = Muted,
+                                tint = if (passwordVisible) CoralStart else Muted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 )
 
-                Spacer(Modifier.height(36.dp))
+                Spacer(Modifier.height(28.dp))
 
                 SkeuoPrimaryButton(
                     text = "Register",
@@ -374,7 +385,7 @@ fun RegistrationScreen(
                 )
 
                 Spacer(Modifier.weight(1f))
-                Spacer(Modifier.height(48.dp))
+                Spacer(Modifier.height(32.dp))
                 
                 // ── Footer ──
                 Row(

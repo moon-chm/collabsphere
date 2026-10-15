@@ -29,6 +29,7 @@ import androidx.compose.ui.window.Dialog
 import com.collabsphere.app.model.vote.TaskVoteProposalEntity
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.vote.TaskVoteViewModel
+import com.collabsphere.app.view.components.SkeuoTextField
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -417,7 +418,7 @@ fun RequestDeleteProposalDialog(
 
                 Text(
                     text = "Request task deletion",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 
@@ -427,13 +428,13 @@ fun RequestDeleteProposalDialog(
                     color = Muted
                 )
 
-                OutlinedTextField(
+                SkeuoTextField(
                     value = reason,
                     onValueChange = { reason = it },
-                    label = { Text("Reason for deletion") },
-                    placeholder = { Text("e.g. Duplicate task, requirements changed...") },
+                    label = "Reason for deletion",
+                    placeholder = "e.g. Duplicate task, requirements changed...",
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    singleLine = false,
                     minLines = 3,
                     maxLines = 5
                 )

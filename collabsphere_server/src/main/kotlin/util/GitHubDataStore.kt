@@ -27,7 +27,9 @@ data class CommitRecord(
     val message: String,
     val authorName: String?,
     val authorEmail: String?,
-    val commitDate: Long
+    val commitDate: Long,
+    val authorLogin: String? = null,
+    val authorGithubId: Long? = null
 )
 
 data class PullRequestRecord(
@@ -41,7 +43,8 @@ data class PullRequestRecord(
     val mergedAt: Long?,
     val body: String = "",
     val url: String? = null,
-    val headSha: String? = null
+    val headSha: String? = null,
+    val authorGithubId: Long? = null
 )
 
 data class IssueRecord(
@@ -53,7 +56,8 @@ data class IssueRecord(
     val url: String,
     val createdAt: Long,
     val closedAt: Long?,
-    val body: String = ""
+    val body: String = "",
+    val authorGithubId: Long? = null
 )
 
 fun GitHubIssueInfo.toRecord(now: Long = System.currentTimeMillis()): IssueRecord =
@@ -63,6 +67,7 @@ fun GitHubIssueInfo.toRecord(now: Long = System.currentTimeMillis()): IssueRecor
         title = title,
         state = state,
         authorUsername = user?.login ?: "",
+        authorGithubId = user?.id,
         url = html_url,
         createdAt = parseGitHubTime(created_at) ?: now,
         closedAt = parseGitHubTime(closed_at),
@@ -81,7 +86,31 @@ object GitHubDataStore {
             this[GitHubCommitsTable.message] = c.message
             this[GitHubCommitsTable.authorName] = c.authorName?.take(255)
             this[GitHubCommitsTable.authorEmail] = c.authorEmail?.take(255)
+            this[GitHubCommitsTable.authorLogin] = c.authorLogin?.take(255)
+            this[GitHubCommitsTable.authorGithubId] = c.authorGithubId
             this[GitHubCommitsTable.commitDate] = c.commitDate
+        }
+        // Rows stored before the author columns existed (or by a source that lacked them) are ignored by
+        // the insert above; give them the GitHub account now that this source knows it.
+        val withAccount = commits.filter { it.authorLogin != null }
+        if (withAccount.isEmpty()) return
+        withAccount.chunked(500).forEach { chunk ->
+            val missing = GitHubCommitsTable.select(GitHubCommitsTable.sha)
+                .where {
+                    (GitHubCommitsTable.repositoryId eq repositoryId) and
+                        (GitHubCommitsTable.sha inList chunk.map { it.sha }) and
+                        GitHubCommitsTable.authorLogin.isNull()
+                }
+                .map { it[GitHubCommitsTable.sha] }
+                .toSet()
+            chunk.filter { it.sha in missing }.forEach { c ->
+                GitHubCommitsTable.update({
+                    (GitHubCommitsTable.repositoryId eq repositoryId) and (GitHubCommitsTable.sha eq c.sha)
+                }) {
+                    it[authorLogin] = c.authorLogin?.take(255)
+                    it[authorGithubId] = c.authorGithubId
+                }
+            }
         }
     }
 
@@ -93,6 +122,8 @@ object GitHubDataStore {
             it[GitHubPullRequestsTable.title] = pr.title.take(500)
             it[GitHubPullRequestsTable.state] = pr.state
             it[GitHubPullRequestsTable.authorUsername] = pr.authorUsername.take(255)
+            // Only when known, so a source without the id never erases one already stored.
+            pr.authorGithubId?.let { id -> it[GitHubPullRequestsTable.authorGithubId] = id }
             it[GitHubPullRequestsTable.createdAt] = pr.createdAt
             it[GitHubPullRequestsTable.closedAt] = pr.closedAt
             it[GitHubPullRequestsTable.mergedAt] = pr.mergedAt
@@ -108,6 +139,7 @@ object GitHubDataStore {
             it[GitHubIssuesTable.title] = issue.title.take(500)
             it[GitHubIssuesTable.state] = issue.state
             it[GitHubIssuesTable.authorUsername] = issue.authorUsername.take(255)
+            issue.authorGithubId?.let { id -> it[GitHubIssuesTable.authorGithubId] = id }
             it[GitHubIssuesTable.url] = issue.url.take(500)
             it[GitHubIssuesTable.createdAt] = issue.createdAt
             it[GitHubIssuesTable.closedAt] = issue.closedAt
@@ -249,7 +281,9 @@ object GitHubDataStore {
                 message = c.commit?.message ?: "",
                 authorName = c.commit?.author?.name,
                 authorEmail = c.commit?.author?.email,
-                commitDate = parseGitHubTime(c.commit?.author?.date) ?: now
+                commitDate = parseGitHubTime(c.commit?.author?.date) ?: now,
+                authorLogin = c.author?.login,
+                authorGithubId = c.author?.id
             )
         }
         val issues = GitHubService.getIssues(token, repoFullName, incremental).orEmpty().map { it.toRecord(now) }
@@ -260,6 +294,7 @@ object GitHubDataStore {
                 title = pr.title,
                 state = pr.state,
                 authorUsername = pr.user?.login ?: "",
+                authorGithubId = pr.user?.id,
                 createdAt = parseGitHubTime(pr.created_at) ?: now,
                 closedAt = parseGitHubTime(pr.closed_at),
                 mergedAt = parseGitHubTime(pr.merged_at),

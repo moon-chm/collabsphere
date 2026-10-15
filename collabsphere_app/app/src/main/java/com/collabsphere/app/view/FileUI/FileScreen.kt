@@ -152,10 +152,7 @@ fun FileScreen(
             ) {
                 Text(
                     text = "Workspace files",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    ),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -495,7 +492,7 @@ fun UploadFileBottomSheet(
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 brush = Brush.linearGradient(
-                                    colors = listOf(Mint, Color(0xFF059669))
+                                    colors = listOf(CoralStart, CoralEnd)
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -511,10 +508,7 @@ fun UploadFileBottomSheet(
                     Column {
                         Text(
                             text = "Upload file",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            ),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                             color = Ink
                         )
                         Text(
@@ -571,13 +565,13 @@ fun UploadFileBottomSheet(
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(Mint.copy(alpha = 0.15f)),
+                                    .background(CoralStart.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Folder,
                                     contentDescription = null,
-                                    tint = Mint,
+                                    tint = CoralStart,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -612,13 +606,13 @@ fun UploadFileBottomSheet(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Mint.copy(alpha = 0.18f)),
+                                    .background(CoralStart.copy(alpha = 0.18f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.InsertDriveFile,
                                     contentDescription = null,
-                                    tint = Mint,
+                                    tint = CoralStart,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -644,7 +638,7 @@ fun UploadFileBottomSheet(
                             Text(
                                 text = "Change",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = IndigoStart
+                                color = CoralStart
                             )
                         }
                     }
@@ -666,7 +660,7 @@ fun UploadFileBottomSheet(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
-                        tint = Mint,
+                        tint = CoralStart,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -709,7 +703,7 @@ fun UploadFileBottomSheet(
                         .drawWithCache {
                             onDrawBehind {
                                 drawRoundRect(
-                                    color = Mint.copy(alpha = 0.28f * uploadAlpha),
+                                    color = CoralStart.copy(alpha = 0.28f * uploadAlpha),
                                     topLeft = Offset(0f, 3.dp.toPx()),
                                     size = Size(size.width, size.height),
                                     cornerRadius = CornerRadius(14.dp.toPx())
@@ -717,8 +711,8 @@ fun UploadFileBottomSheet(
                                 drawRoundRect(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
-                                            Mint.copy(alpha = uploadAlpha),
-                                            Color(0xFF059669).copy(alpha = uploadAlpha)
+                                            CoralStart.copy(alpha = uploadAlpha),
+                                            CoralEnd.copy(alpha = uploadAlpha)
                                         ),
                                         start = Offset(0f, 0f),
                                         end = Offset(size.width, size.height)
@@ -824,7 +818,7 @@ onDrawBehind {
 
                 Text(
                     text = "Delete file",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                     color = Ink
                 )
 

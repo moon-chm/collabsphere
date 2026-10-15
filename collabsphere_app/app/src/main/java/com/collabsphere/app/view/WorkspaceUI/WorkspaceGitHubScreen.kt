@@ -254,9 +254,9 @@ private fun OwnerOnlyView() {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "No repository linked",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF2C2A28)
+            color = Ink
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -285,9 +285,9 @@ private fun NotConnectedView(onConnect: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Connect GitHub",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF2C2A28)
+            color = Ink
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -329,9 +329,9 @@ private fun RepoPickerView(
     ) {
         Text(
             text = "Select a Repository",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF2C2A28)
+            color = Ink
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -466,10 +466,7 @@ private fun ConnectedView(
                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
                         text = analytics.repositoryName ?: "GitHub Activity",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        ),
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -658,7 +655,7 @@ private fun ConnectedView(
                         val (statusLabel, statusColor) = pullRequestStatus(pr)
                         ActivityRow(
                             title = "#${pr.number} ${pr.title}",
-                            subtitle = "${pr.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(pr.createdAt)}",
+                            subtitle = "${pr.displayAuthor} · ${relativeTime(pr.createdAt)}",
                             badge = statusLabel,
                             badgeColor = statusColor,
                             url = pr.url,
@@ -695,7 +692,7 @@ private fun ConnectedView(
                     analytics.recentIssues.forEach { issue ->
                         ActivityRow(
                             title = "#${issue.number} ${issue.title}",
-                            subtitle = "${issue.authorUsername.ifBlank { "Unknown" }} · ${relativeTime(issue.createdAt)}",
+                            subtitle = "${issue.displayAuthor} · ${relativeTime(issue.createdAt)}",
                             badge = if (issue.state == "open") "Open" else "Closed",
                             badgeColor = if (issue.state == "open") Color(0xFF2DA44E) else Color(0xFF6F42C1),
                             url = issue.url
@@ -712,7 +709,7 @@ private fun ConnectedView(
                     analytics.recentCommits.forEach { commit ->
                         ActivityRow(
                             title = commit.message.ifBlank { commit.sha.take(7) },
-                            subtitle = "${commit.authorName ?: "Unknown"} · ${relativeTime(commit.commitDate)}",
+                            subtitle = "${commit.displayAuthor} · ${relativeTime(commit.commitDate)}",
                             badge = commit.sha.take(7),
                             badgeColor = Color(0xFF70625E),
                             url = commit.url,

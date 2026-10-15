@@ -2,7 +2,9 @@ package com.collabsphere.app.view
 
 import kotlinx.coroutines.flow.first
 import com.collabsphere.app.view.WorkspaceUI.WorkspaceSearchScreen
+import com.collabsphere.app.view.WorkspaceUI.WorkspaceInsightsScreen
 import com.collabsphere.app.viewmodel.WorkspaceSearchViewModel
+import com.collabsphere.app.viewmodel.WorkspaceAnalyticsViewModel
 import com.collabsphere.app.remote.workspace.WorkspaceApiService
 import com.collabsphere.app.view.components.AppToast
 import java.net.URLDecoder
@@ -634,6 +636,10 @@ fun AppNavigation(
                         val encodedName = URLEncoder.encode(workspaceName, StandardCharsets.UTF_8.toString())
                         navController.navigate("workspace_search/$workspaceId/$encodedName")
                     },
+                    onInsightsClick = {
+                        val encodedName = URLEncoder.encode(workspaceName, StandardCharsets.UTF_8.toString())
+                        navController.navigate("workspace_insights/$workspaceId/$encodedName")
+                    },
                     onChannelClick = { channel ->
                         val encodedChannelName = URLEncoder.encode(channel.channelName, StandardCharsets.UTF_8.toString())
                         val encodedUserName = URLEncoder.encode(loggedInUsername, StandardCharsets.UTF_8.toString())
@@ -648,6 +654,42 @@ fun AppNavigation(
                             navController.popBackStack()
                         }
                     }
+                )
+            }
+
+            composable(
+                route = "workspace_insights/{workspaceId}/{workspaceName}",
+                arguments = listOf(
+                    navArgument("workspaceId") { type = NavType.IntType },
+                    navArgument("workspaceName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: 0
+                val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""
+                val workspaceName = try {
+                    URLDecoder.decode(rawWorkspaceName, StandardCharsets.UTF_8.toString())
+                } catch (e: Exception) {
+                    rawWorkspaceName
+                }
+                val workspaceApiService = koinInject<WorkspaceApiService>()
+                val insightsViewModel: WorkspaceAnalyticsViewModel = viewModel(
+                    viewModelStoreOwner = backStackEntry,
+                    key = "workspace_insights_$workspaceId",
+                    factory = object : ViewModelProvider.Factory {
+                        @Suppress("UNCHECKED_CAST")
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            return WorkspaceAnalyticsViewModel(
+                                api = workspaceApiService,
+                                workspaceId = workspaceId
+                            ) as T
+                        }
+                    }
+                )
+                WorkspaceInsightsScreen(
+                    viewModel = insightsViewModel,
+                    workspaceName = workspaceName,
+                    currentUserId = loggedInUserId.toInt(),
+                    onBack = { navController.popBackStack() }
                 )
             }
 
