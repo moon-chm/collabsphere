@@ -65,6 +65,9 @@ interface DmDao {
     @Query("UPDATE DM SET isRead = :isRead WHERE id = :dmId")
     suspend fun updateIsRead(dmId: Int, isRead: Boolean)
 
+    @Query("SELECT MIN(id) FROM DM WHERE workspaceId = :workspaceId AND senderId = :partnerId AND receiverId = :currentUserId AND isRead = 0 AND id > 0")
+    suspend fun firstUnreadId(workspaceId: Int, currentUserId: Int, partnerId: Int): Int?
+
     @Query("UPDATE DM SET isRead = 1 WHERE receiverId = :receiverId AND senderId = :senderId AND workspaceId = :workspaceId AND isRead = 0")
     suspend fun markMessagesAsRead(senderId: Int, receiverId: Int, workspaceId: Int)
 

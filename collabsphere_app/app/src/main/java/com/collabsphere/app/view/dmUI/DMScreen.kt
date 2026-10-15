@@ -1,5 +1,14 @@
 package com.collabsphere.app.view.dmUI
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.filled.ContentCopy
+import com.collabsphere.app.view.components.FullScreenImageViewer
+import com.collabsphere.app.view.components.MessageStatusTicks
+import com.collabsphere.app.view.components.NewMessagesDivider
+import com.collabsphere.app.view.components.SwipeToReply
 import com.collabsphere.app.view.components.JumpToLatestButton
 import com.collabsphere.app.view.components.UnreadCountBadge
 import com.collabsphere.app.view.components.isAwayFromLatest
@@ -236,6 +245,9 @@ fun DMScreen(
     val isLoadingMembers by viewModel.isLoadingMembers.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
+    val haptics = LocalHapticFeedback.current
+    val clipboard = LocalClipboardManager.current
+    val firstUnreadId by viewModel.firstUnreadId.collectAsStateWithLifecycle()
     val unreadByPartner by remember(workspaceId, currentUserId) {
         viewModel.unreadCounts(workspaceId, currentUserId.toInt())
     }.collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -369,6 +381,13 @@ fun DMScreen(
     var initialScrollDoneFor by remember { mutableStateOf<Int?>(null) }
     var lastCountedMessageId by remember(activeChatPartner?.id) { mutableStateOf<Int?>(null) }
 
+    LaunchedEffect(firstUnreadId) {
+        val id = firstUnreadId ?: return@LaunchedEffect
+        if (initialScrollDoneFor != activeChatPartner?.id || lazyListState.isScrollInProgress) return@LaunchedEffect
+        val index = messages.indexOfFirst { it.id == id }
+        if (index >= 0) lazyListState.scrollToItem(index + if (isLoadingOlder) 1 else 0)
+    }
+
     LaunchedEffect(messages.lastOrNull()?.id, isPartnerTyping) {
         val totalCount = latestRow + 1
         if (totalCount <= 0) return@LaunchedEffect
@@ -379,7 +398,8 @@ fun DMScreen(
         val belongsToPartner = messages.lastOrNull()?.let { it.senderId == partnerId || it.receiverId == partnerId } == true
         if (!belongsToPartner) return@LaunchedEffect
         if (initialScrollDoneFor != partnerId) {
-            lazyListState.scrollToItem(totalCount - 1)
+            val dividerIndex = firstUnreadId?.let { id -> messages.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
+            lazyListState.scrollToItem(dividerIndex?.let { it + if (isLoadingOlder) 1 else 0 } ?: (totalCount - 1))
             initialScrollDoneFor = partnerId
             lastCountedMessageId = messages.lastOrNull()?.id
             return@LaunchedEffect
@@ -412,25 +432,7 @@ fun DMScreen(
 
     // Full-screen image viewer
     fullscreenImageUrl?.let { imgUrl ->
-        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .clickable { fullscreenImageUrl = null },
-                contentAlignment = Alignment.Center
-            ) {
-                SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(context).data(imgUrl).crossfade(true).build(),
-                    contentDescription = "Full screen image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight(),
-                    contentScale = ContentScale.Fit,
-                    loading = { CollabSpinner(color = CoralStart, modifier = Modifier.size(40.dp)) }
-                )
-            }
-        }
+        FullScreenImageViewer(url = imgUrl, onDismiss = { fullscreenImageUrl = null })
     }
 
     // Partner Profile Card dialog
@@ -1284,12 +1286,19 @@ fun DMScreen(
                                         }
                                     }
 
+                                    if (message.id == firstUnreadId) {
+                                        NewMessagesDivider()
+                                    }
+                                    SwipeToReply(
+                                        enabled = message.id > 0,
+                                        onReply = { replyingTo = message },
+                                        modifier = Modifier.animateItem()
+                                    ) {
                                     if (isOwnMessage) {
                                         // Outgoing message (Aligned End)
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .animateItem()
                                                 .padding(bottom = if (msgReactions.isNotEmpty()) 10.dp else 2.dp),
                                             contentAlignment = Alignment.CenterEnd
                                         ) {
@@ -1338,6 +1347,7 @@ fun DMScreen(
                                                         .combinedClickable(
                                                             onClick = {},
                                                             onLongClick = {
+                                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                 selectedMessage = message
                                                                 showActionMenu = true
                                                             }
@@ -1438,13 +1448,10 @@ fun DMScreen(
                                                                 fontSize = 10.sp,
                                                                 color = Color.White.copy(alpha = 0.75f)
                                                             )
-                                                            Spacer(modifier = Modifier.width(3.dp))
-                                                            Text(
-                                                                text = if (isRead) "✓✓" else "✓",
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.ExtraBold,
-                                                                color = if (isRead) Color(0xFF6EE7B7) else Color.White.copy(alpha = 0.70f)
-                                                            )
+                                                            if (message.id > 0) {
+                                                                Spacer(modifier = Modifier.width(3.dp))
+                                                                MessageStatusTicks(isRead = isRead)
+                                                            }
                                                         }
                                                     }
 
@@ -1479,6 +1486,18 @@ fun DMScreen(
                                                                 },
                                                                 leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                             )
+                                                            if (message.dm_content.isNotBlank()) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Copy", color = Ink) },
+                                                                    onClick = {
+                                                                        clipboard.setText(AnnotatedString(message.dm_content))
+                                                                        AppToast.show("Copied")
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                            }
                                                             DropdownMenuItem(
                                                                 text = { Text("Edit message", color = Ink) },
                                                                 onClick = {
@@ -1577,7 +1596,6 @@ fun DMScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .animateItem()
                                                 .padding(bottom = if (msgReactions.isNotEmpty()) 10.dp else 2.dp),
                                             horizontalArrangement = Arrangement.Start,
                                             verticalAlignment = Alignment.Bottom
@@ -1671,6 +1689,7 @@ fun DMScreen(
                                                         .combinedClickable(
                                                             onClick = {},
                                                             onLongClick = {
+                                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                 selectedMessage = message
                                                                 showActionMenu = true
                                                             }
@@ -1793,6 +1812,18 @@ fun DMScreen(
                                                                 },
                                                                 leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                             )
+                                                            if (message.dm_content.isNotBlank()) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Copy", color = Ink) },
+                                                                    onClick = {
+                                                                        clipboard.setText(AnnotatedString(message.dm_content))
+                                                                        AppToast.show("Copied")
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1859,6 +1890,7 @@ fun DMScreen(
                                                 }
                                             }
                                         }
+                                    }
                                     }
                                 }
 
@@ -2048,6 +2080,7 @@ fun DMScreen(
                                                         viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
                                                         editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = ""
                                                     } else {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                         viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
                                                     replyingTo = null
                                                         typedText = ""
@@ -2107,6 +2140,7 @@ fun DMScreen(
                                                     viewModel.updateMessage(dmId = currentlyEditing.id, workspaceId = workspaceId, receiverId = partner.id, newContent = textToSend)
                                                     editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = ""
                                                 } else {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                     viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partner.id, content = textToSend, replyToId = replyingTo?.id?.takeIf { it > 0 })
                                                     replyingTo = null
                                                     typedText = ""

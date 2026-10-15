@@ -1,5 +1,13 @@
 package com.collabsphere.app.view.MessageUI
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.filled.ContentCopy
+import com.collabsphere.app.view.components.FullScreenImageViewer
+import com.collabsphere.app.view.components.NewMessagesDivider
+import com.collabsphere.app.view.components.SwipeToReply
 import com.collabsphere.app.view.components.CollabSpinner
 
 import androidx.compose.animation.core.Spring
@@ -137,6 +145,13 @@ fun MessageScreen(
         canModerate = myRole == "OWNER" || myRole == "ADMIN"
     }
     var confirmDeleteFor by remember { mutableStateOf<MessageEntity?>(null) }
+    val haptics = LocalHapticFeedback.current
+    val clipboard = LocalClipboardManager.current
+    val firstUnreadAfterId by viewModel.firstUnreadAfterId.collectAsStateWithLifecycle()
+    val dividerMessageId = remember(firstUnreadAfterId, messages?.firstOrNull()?.id) {
+        val after = firstUnreadAfterId ?: return@remember null
+        messages?.firstOrNull { it.id > after && it.userId != viewModel.currentUserId }?.id
+    }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -179,6 +194,13 @@ fun MessageScreen(
             .filter { it }
             .collect { viewModel.loadOlder() }
     }
+    LaunchedEffect(dividerMessageId) {
+        val id = dividerMessageId ?: return@LaunchedEffect
+        if (!initialScrollDone || listState.isScrollInProgress) return@LaunchedEffect
+        val index = messages?.indexOfFirst { it.id == id } ?: -1
+        if (index >= 0) listState.scrollToItem(index + if (isLoadingOlder) 1 else 0)
+    }
+
     LaunchedEffect(messages?.lastOrNull()?.id) {
         val msgs = messages ?: return@LaunchedEffect
         if (msgs.isEmpty()) return@LaunchedEffect
@@ -186,7 +208,8 @@ fun MessageScreen(
 
         // Opening the chat lands on the newest message at once instead of animating through history.
         if (!initialScrollDone) {
-            listState.scrollToItem(target)
+            val dividerIndex = dividerMessageId?.let { id -> msgs.indexOfFirst { it.id == id } }?.takeIf { it >= 0 }
+            listState.scrollToItem(dividerIndex?.let { it + if (isLoadingOlder) 1 else 0 } ?: target)
             initialScrollDone = true
             return@LaunchedEffect
         }
@@ -236,23 +259,7 @@ fun MessageScreen(
     }
 
     fullscreenImageUrl?.let { imageUrl ->
-        Dialog(onDismissRequest = { fullscreenImageUrl = null }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .clickable { fullscreenImageUrl = null },
-                contentAlignment = Alignment.Center
-            ) {
-                SubcomposeAsyncImage(
-                    model = ImageRequest.Builder(context).data(imageUrl).crossfade(true).build(),
-                    contentDescription = "Full screen image",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit,
-                    loading = { CollabSpinner(color = CoralStart, modifier = Modifier.size(40.dp)) }
-                )
-            }
-        }
+        FullScreenImageViewer(url = imageUrl, onDismiss = { fullscreenImageUrl = null })
     }
 
     if (showPinnedDialog) {
@@ -539,6 +546,7 @@ fun MessageScreen(
                                             selectedMessage = null
                                             viewModel.endEdit()
                                         } else {
+                                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             viewModel.onSendMessageUser()
                                         }
                                     }
@@ -620,6 +628,7 @@ fun MessageScreen(
                                     selectedMessage = null
                                     viewModel.endEdit()
                                 } else {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel.onSendMessageUser()
                                 }
                             },
@@ -682,7 +691,7 @@ fun MessageScreen(
                         top = if (pinned.isNotEmpty()) 76.dp else 12.dp,
                         bottom = 12.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (isLoadingOlder) {
                         item(key = "loading_older") {
@@ -703,12 +712,28 @@ fun MessageScreen(
                     itemsIndexed(messages ?: emptyList(), key = { _, it -> it.id ?: it.hashCode() }) { index, message ->
                         val isOwnMessage = message.userId == currentUserId
                         val sentAt = message.createdAt
-                        val previousSentAt = messages?.getOrNull(index - 1)?.createdAt
+                        val previous = messages?.getOrNull(index - 1)
+                        val previousSentAt = previous?.createdAt
+                        val startsNewDay = sentAt != null && (previousSentAt == null || !isSameChatDay(previousSentAt, sentAt))
+                        val showsDivider = message.id == dividerMessageId
+                        val continuesGroup = previous != null && !startsNewDay && !showsDivider &&
+                            previous.userId == message.userId &&
+                            sentAt != null && previousSentAt != null && sentAt - previousSentAt < 5 * 60_000L
 
-                        Column(modifier = Modifier.fillMaxWidth().animateItem()) {
-                        if (sentAt != null && (previousSentAt == null || !isSameChatDay(previousSentAt, sentAt))) {
-                            ChatDateSeparator(timestamp = sentAt)
+                        Column(modifier = Modifier.fillMaxWidth().animateItem().padding(top = if (continuesGroup) 0.dp else 8.dp)) {
+                        if (startsNewDay) {
+                            ChatDateSeparator(timestamp = sentAt!!)
                         }
+                        if (showsDivider) {
+                            NewMessagesDivider()
+                        }
+                        SwipeToReply(
+                            enabled = message.id > 0,
+                            onReply = {
+                                isEditing = false
+                                viewModel.startReply(message)
+                            }
+                        ) {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = if (isOwnMessage) Alignment.CenterEnd else Alignment.CenterStart
@@ -717,14 +742,21 @@ fun MessageScreen(
                                 horizontalAlignment = if (isOwnMessage) Alignment.End else Alignment.Start,
                                 modifier = Modifier.widthIn(max = 300.dp)
                             ) {
-                                // Author tag
-                                Text(
-                                    text = listOfNotNull(
+                                val authorLine = if (continuesGroup) {
+                                    listOfNotNull(
+                                        if (message.editedAt != null) "edited" else null,
+                                        if (message.pinnedAt != null) "Pinned" else null
+                                    )
+                                } else {
+                                    listOfNotNull(
                                         if (isOwnMessage) "You" else message.userName,
                                         sentAt?.let(::chatTime),
                                         if (message.editedAt != null) "edited" else null,
                                         if (message.pinnedAt != null) "Pinned" else null
-                                    ).joinToString(" · "),
+                                    )
+                                }
+                                if (authorLine.isNotEmpty()) Text(
+                                    text = authorLine.joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -812,6 +844,7 @@ fun MessageScreen(
                                             onClick = {},
                                             onLongClick = {
                                                 if (isOwnMessage || message.id > 0) {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                     selectedMessage = message
                                                     showActionMenu = true
                                                 }
@@ -922,6 +955,18 @@ fun MessageScreen(
                                                     }
                                                 )
                                             }
+                                            if (message.content.isNotBlank()) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Copy", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        clipboard.setText(AnnotatedString(message.content))
+                                                        AppToast.show("Copied")
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                )
+                                            }
                                             if (message.id > 0) {
                                                 DropdownMenuItem(
                                                     text = { Text("React", color = Ink) },
@@ -1024,6 +1069,7 @@ fun MessageScreen(
                                     }
                                 }
                             }
+                        }
                         }
                         } // Column (day separator + row)
                     }

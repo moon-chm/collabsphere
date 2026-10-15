@@ -277,6 +277,9 @@ class MessageViewModel(
 
     private val _readStates = MutableStateFlow<Map<Int, ChannelReadState>>(emptyMap())
     val readStates = _readStates.asStateFlow()
+
+    private val _firstUnreadAfterId = MutableStateFlow<Int?>(null)
+    val firstUnreadAfterId = _firstUnreadAfterId.asStateFlow()
     private var lastMarkedReadId = 0
     // Newest message seen on screen, waiting out the read-mark debounce; flushed if the screen closes first.
     @Volatile private var pendingReadId = 0
@@ -294,6 +297,7 @@ class MessageViewModel(
         }
         viewModelScope.launch {
             repo.fetchReadStates(loggedWorkspaceId, loggedChannelId).onSuccess { states ->
+                _firstUnreadAfterId.value = states.firstOrNull { it.userId == loggedUserId }?.lastReadMessageId
                 _readStates.update { current -> current + states.associateBy { it.userId } }
             }
         }

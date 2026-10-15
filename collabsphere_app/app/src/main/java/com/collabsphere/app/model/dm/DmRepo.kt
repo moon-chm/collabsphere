@@ -203,6 +203,9 @@ class DmRepo(
     }
 
     /** Tell the server we've read all messages from chatPartnerId */
+    suspend fun firstUnreadId(workspaceId: Int, currentUserId: Int, partnerId: Int): Int? =
+        dmDao.firstUnreadId(workspaceId, currentUserId, partnerId)
+
     suspend fun markConversationRead(workspaceId: Int, currentUserId: Int, chatPartnerId: Int) {
         // Optimistic local update
         dmDao.markMessagesAsRead(senderId = chatPartnerId, receiverId = currentUserId, workspaceId = workspaceId)

@@ -57,6 +57,9 @@ class DmViewModel(
     private val _isSendingMessage = MutableStateFlow(false)
     val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
 
+    private val _firstUnreadId = MutableStateFlow<Int?>(null)
+    val firstUnreadId: StateFlow<Int?> = _firstUnreadId.asStateFlow()
+
     private val _isLoadingOlder = MutableStateFlow(false)
     val isLoadingOlder: StateFlow<Boolean> = _isLoadingOlder.asStateFlow()
 
@@ -207,6 +210,7 @@ class DmViewModel(
         olderLoadJob?.cancel()
         _isLoadingOlder.value = false
         hasMoreOlder = true
+        _firstUnreadId.value = null
 
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", chatPartnerId)
@@ -239,6 +243,7 @@ class DmViewModel(
         // Mark conversation as read when opened
         viewModelScope.launch {
             try {
+                _firstUnreadId.value = repo.firstUnreadId(workspaceId, userId, chatPartnerId)
                 repo.markConversationRead(workspaceId, userId, chatPartnerId)
             } catch (e: Exception) {
                 Log.e("DM_VM", "Failed marking conversation as read (partnerId=$chatPartnerId)", e)
