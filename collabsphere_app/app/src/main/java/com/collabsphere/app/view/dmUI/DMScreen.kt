@@ -1,5 +1,10 @@
 package com.collabsphere.app.view.dmUI
 
+import com.collabsphere.app.view.components.ScheduleSendDialog
+import com.collabsphere.app.view.components.ScheduledMessagesChip
+import com.collabsphere.app.view.components.ScheduledMessagesDialog
+import com.collabsphere.app.view.components.rememberScheduledMessages
+import com.collabsphere.app.view.components.scheduleLabel
 import com.collabsphere.app.view.components.VoiceMessagePlayer
 import com.collabsphere.app.view.components.VoiceRecorder
 import com.collabsphere.app.view.components.VoiceRecordingBar
@@ -280,6 +285,10 @@ fun DMScreen(
     var showActionMenu by remember { mutableStateOf(false) }
     var showReactionPickerFor by remember { mutableStateOf<DmEntity?>(null) }
     var forwardTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var infoFor by remember { mutableStateOf<DmEntity?>(null) }
+    val scheduled = rememberScheduledMessages("DM", workspaceId, null, activeChatPartner?.id)
+    var showSchedule by remember { mutableStateOf(false) }
+    var showScheduledList by remember { mutableStateOf(false) }
     val savedStore = org.koin.compose.koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
     val savedKeys by savedStore.keys.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { savedStore.refresh() }
@@ -487,6 +496,38 @@ fun DMScreen(
     // Full-screen image viewer
     fullscreenImageUrl?.let { imgUrl ->
         FullScreenImageViewer(url = imgUrl, onDismiss = { fullscreenImageUrl = null })
+    }
+
+    if (showSchedule) {
+        ScheduleSendDialog(
+            onPick = { at ->
+                showSchedule = false
+                val text = typedText.trim()
+                replyScope.launch {
+                    if (scheduled.schedule(text, at)) {
+                        typedText = ""
+                        AppToast.show("Scheduled for ${scheduleLabel(at)}")
+                    } else {
+                        AppToast.error("Couldn't schedule it. Pick a later time and check your connection.")
+                    }
+                }
+            },
+            onDismiss = { showSchedule = false }
+        )
+    }
+    if (showScheduledList) {
+        ScheduledMessagesDialog(state = scheduled, onDismiss = { showScheduledList = false })
+    }
+
+    infoFor?.let { target ->
+        com.collabsphere.app.view.components.MessageInfoDialog(
+            preview = target.dm_content,
+            sentAt = target.timestamp,
+            editedAt = target.editedAt,
+            statusLine = if (target.isRead) true to "Read" else false to "Delivered",
+            sections = emptyList(),
+            onDismiss = { infoFor = null }
+        )
     }
 
     forwardTarget?.let { (content, mediaUrl) ->
@@ -1561,6 +1602,17 @@ fun DMScreen(
                                                                     }
                                                                 )
                                                             }
+                                                            if (message.id > 0) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Info", color = Ink) },
+                                                                    onClick = {
+                                                                        infoFor = message
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                            }
                                                             DropdownMenuItem(
                                                                 text = { Text("Edit message", color = Ink) },
                                                                 onClick = {
@@ -2107,6 +2159,8 @@ fun DMScreen(
                         }
 
                         // Media upload progress bar
+                        ScheduledMessagesChip(count = scheduled.items.size, onClick = { showScheduledList = true })
+
                         if (isRecordingVoice) {
                             VoiceRecordingBar(
                                 recorder = voiceRecorder,
@@ -2280,10 +2334,16 @@ fun DMScreen(
                                             }
                                         }
                                         .clip(CircleShape)
-                                        .clickable(
+                                        .combinedClickable(
                                             enabled = canSend,
                                             interactionSource = sendInteractionSource,
-                                            indication = null
+                                            indication = null,
+                                            onLongClick = {
+                                                if (typedText.isNotBlank() && editingMessage == null) {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    showSchedule = true
+                                                }
+                                            }
                                         ) {
                                             if (showMic) {
                                                 if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==

@@ -163,48 +163,71 @@ fun VoiceRecordingBar(
 
 object VoicePlayback {
     private var player: MediaPlayer? = null
+    private var prepared = false
     var currentUrl by mutableStateOf<String?>(null)
         private set
     var isPlaying by mutableStateOf(false)
         private set
 
     fun toggle(url: String) {
-        if (currentUrl == url && player != null) {
-            val p = player!!
-            if (p.isPlaying) {
-                p.pause()
-                isPlaying = false
-            } else {
-                p.start()
-                isPlaying = true
-            }
+        val p = player
+        if (currentUrl == url && p != null) {
+            if (!prepared) return
+            runCatching {
+                if (p.isPlaying) {
+                    p.pause()
+                    isPlaying = false
+                } else {
+                    p.start()
+                    isPlaying = true
+                }
+            }.onFailure { stop() }
             return
         }
         stop()
         currentUrl = url
+        prepared = false
         player = MediaPlayer().apply {
-            setDataSource(url)
             setOnPreparedListener {
-                it.start()
-                this@VoicePlayback.isPlaying = true
+                prepared = true
+                runCatching { it.start() }.onSuccess { this@VoicePlayback.isPlaying = true }
             }
-            setOnCompletionListener { stop() }
+            setOnCompletionListener {
+                this@VoicePlayback.isPlaying = false
+                runCatching { it.seekTo(0) }
+            }
             setOnErrorListener { _, _, _ ->
-                stop()
+                this@VoicePlayback.isPlaying = false
                 true
             }
-            prepareAsync()
+            runCatching {
+                setDataSource(url)
+                prepareAsync()
+            }.onFailure { stop() }
         }
     }
 
-    fun positionMs(url: String): Long = if (url == currentUrl) runCatching { player?.currentPosition?.toLong() ?: 0L }.getOrDefault(0L) else 0L
-    fun durationMs(url: String): Long = if (url == currentUrl) runCatching { player?.duration?.toLong()?.takeIf { it > 0 } ?: 0L }.getOrDefault(0L) else 0L
+    fun positionMs(url: String): Long =
+        if (url == currentUrl && prepared) runCatching { player?.currentPosition?.toLong() ?: 0L }.getOrDefault(0L) else 0L
+
+    fun durationMs(url: String): Long =
+        if (url == currentUrl && prepared) runCatching { player?.duration?.toLong()?.takeIf { it > 0 } ?: 0L }.getOrDefault(0L) else 0L
 
     fun stop() {
-        runCatching { player?.release() }
+        val p = player
         player = null
+        prepared = false
         currentUrl = null
         isPlaying = false
+        if (p != null) {
+            runCatching {
+                p.setOnPreparedListener(null)
+                p.setOnCompletionListener(null)
+                p.setOnErrorListener(null)
+                p.reset()
+            }
+            runCatching { p.release() }
+        }
     }
 }
 
@@ -215,12 +238,16 @@ fun VoiceMessagePlayer(url: String, onDarkBubble: Boolean, modifier: Modifier = 
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     LaunchedEffect(active, playing) {
-        while (active) {
+        if (!active) {
+            position = 0L
+            return@LaunchedEffect
+        }
+        var waits = 0
+        do {
             position = VoicePlayback.positionMs(url)
             VoicePlayback.durationMs(url).takeIf { it > 0 }?.let { duration = it }
             delay(200)
-        }
-        position = 0L
+        } while (playing || (duration == 0L && waits++ < 50))
     }
     val tint = if (onDarkBubble) Color.White else CoralStart
     val track = if (onDarkBubble) Color.White.copy(alpha = 0.35f) else CoralStart.copy(alpha = 0.2f)

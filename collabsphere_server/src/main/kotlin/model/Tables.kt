@@ -931,3 +931,42 @@ object SavedMessagesTable : Table("saved_messages") {
         index(false, userId, savedAt)
     }
 }
+
+object PollsTable : Table("polls") {
+    val messageId = integer("message_id").references(MessageTable.id, onDelete = ReferenceOption.CASCADE)
+    val question = varchar("question", 255)
+    val optionsJson = text("options_json")
+    val allowsMultiple = bool("allows_multiple").default(false)
+    val createdAt = long("created_at")
+    val closedAt = long("closed_at").nullable()
+
+    override val primaryKey = PrimaryKey(messageId)
+}
+
+object PollVotesTable : Table("poll_votes") {
+    val messageId = integer("message_id").references(PollsTable.messageId, onDelete = ReferenceOption.CASCADE)
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val optionIndex = integer("option_index")
+
+    override val primaryKey = PrimaryKey(messageId, userId, optionIndex)
+}
+
+object ScheduledMessagesTable : Table("scheduled_messages") {
+    val id = integer("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val kind = varchar("kind", 10)
+    val workspaceId = integer("workspace_id").references(WorkspacesTable.id, onDelete = ReferenceOption.CASCADE)
+    val channelId = integer("channel_id").nullable()
+    val receiverId = integer("receiver_id").nullable()
+    val content = text("content")
+    val sendAt = long("send_at")
+    val createdAt = long("created_at")
+    val status = varchar("status", 12)
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, status, sendAt)
+        index(false, userId, status)
+    }
+}

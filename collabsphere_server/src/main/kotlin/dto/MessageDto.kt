@@ -144,3 +144,49 @@ data class SavedMessageItem(
     val sentAt: Long,
     val savedAt: Long
 )
+
+@Serializable
+data class CreatePollRequest(
+    val question: String,
+    val options: List<String>,
+    val allowsMultiple: Boolean = false
+)
+
+@Serializable
+data class PollVoteRequest(val optionIndexes: List<Int>)
+
+@Serializable
+data class PollOptionView(val text: String, val votes: Int)
+
+@Serializable
+data class PollView(
+    val messageId: Int,
+    val question: String,
+    val options: List<PollOptionView>,
+    val allowsMultiple: Boolean,
+    val myVotes: List<Int>,
+    val totalVoters: Int,
+    val closed: Boolean
+)
+
+@Serializable
+data class ScheduleMessageRequest(
+    val kind: String,
+    val workspaceId: Int,
+    val channelId: Int? = null,
+    val receiverId: Int? = null,
+    val content: String,
+    val sendAt: Long
+)
+
+@Serializable
+data class ScheduledMessageItem(
+    val id: Int,
+    val kind: String,
+    val workspaceId: Int,
+    val channelId: Int? = null,
+    val receiverId: Int? = null,
+    val content: String,
+    val sendAt: Long,
+    val status: String
+)

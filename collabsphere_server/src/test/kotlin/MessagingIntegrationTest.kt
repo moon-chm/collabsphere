@@ -1,5 +1,10 @@
 import com.collabsphere.dto.ChannelUnreadCount
 import com.collabsphere.dto.MessageResponse
+import com.collabsphere.dto.PollView
+import com.collabsphere.dto.ScheduledMessageItem
+import com.collabsphere.model.DirectMessagesTable
+import com.collabsphere.model.MessageTable
+import org.jetbrains.exposed.sql.selectAll
 import com.collabsphere.dto.SavedMessageItem
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UsersTable
@@ -254,5 +259,91 @@ class MessagingIntegrationTest {
             client.get("/api/message/unread/$ws") { bearerAuth(reader.token) }.bodyAsText()
         ).associate { it.channelId to it.count }
         assertEquals(1, unread[channel], "only the root counts as unread in the channel")
+    }
+
+    @Test
+    fun `polls count one choice per voter unless multiple answers are allowed and close for the author only`() = testApplication {
+        application { module() }
+        val owner = client.signUp("poll-owner")
+        val voter = client.signUp("poll-voter")
+        val outsider = client.signUp("poll-outsider")
+        val (ws, channel) = workspaceWithChannel(owner.id, voter.id)
+        val message = client.send(owner, ws, channel, "Lunch?")
+
+        val created = client.post("/api/message/${message.id}/poll") {
+            bearerAuth(owner.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"question":"Lunch?","options":["Pizza","Sushi","Tacos"]}""")
+        }
+        assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+
+        suspend fun vote(account: Account, vararg choices: Int) = client.post("/api/message/${message.id}/poll/vote") {
+            bearerAuth(account.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"optionIndexes":[${choices.joinToString(",")}]}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, vote(voter, 0).status)
+        val switched = json.decodeFromString<PollView>(vote(voter, 1).bodyAsText())
+        assertEquals(listOf(0, 1, 0), switched.options.map { it.votes }, "changing a vote moves it")
+        assertEquals(listOf(1), switched.myVotes)
+        assertEquals(HttpStatusCode.BadRequest, vote(voter, 0, 2).status, "single-choice poll")
+        assertEquals(HttpStatusCode.BadRequest, vote(voter, 7).status)
+        assertEquals(HttpStatusCode.Forbidden, vote(outsider, 0).status)
+
+        val listed = json.decodeFromString<List<PollView>>(
+            client.get("/api/message/polls/$ws/$channel") { bearerAuth(owner.token) }.bodyAsText()
+        ).single()
+        assertEquals(1, listed.totalVoters)
+        assertTrue(listed.myVotes.isEmpty())
+
+        assertEquals(HttpStatusCode.Forbidden, client.post("/api/message/${message.id}/poll/close") { bearerAuth(voter.token) }.status)
+        assertEquals(HttpStatusCode.OK, client.post("/api/message/${message.id}/poll/close") { bearerAuth(owner.token) }.status)
+        assertEquals(HttpStatusCode.Conflict, vote(voter, 2).status, "closed polls take no votes")
+    }
+
+    @Test
+    fun `scheduled messages wait for their time, can be cancelled and are sent by the dispatcher`() = testApplication {
+        application { module() }
+        val owner = client.signUp("sched-owner")
+        val partner = client.signUp("sched-partner")
+        val outsider = client.signUp("sched-outsider")
+        val (ws, channel) = workspaceWithChannel(owner.id, partner.id)
+        val sendAt = System.currentTimeMillis() + 120_000L
+
+        suspend fun schedule(account: Account, body: String) = client.post("/api/scheduled") {
+            bearerAuth(account.token)
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+        val channelBody = """{"kind":"CHANNEL","workspaceId":$ws,"channelId":$channel,"content":"standup in 5","sendAt":$sendAt}"""
+        assertEquals(HttpStatusCode.Created, schedule(owner, channelBody).status)
+        assertEquals(HttpStatusCode.Forbidden, schedule(outsider, channelBody).status)
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            schedule(owner, """{"kind":"CHANNEL","workspaceId":$ws,"channelId":$channel,"content":"now","sendAt":${System.currentTimeMillis()}}""").status
+        )
+        val dm = json.decodeFromString<ScheduledMessageItem>(
+            schedule(owner, """{"kind":"DM","workspaceId":$ws,"receiverId":${partner.id},"content":"happy birthday","sendAt":$sendAt}""").bodyAsText()
+        )
+        val cancelled = json.decodeFromString<ScheduledMessageItem>(
+            schedule(owner, """{"kind":"DM","workspaceId":$ws,"receiverId":${partner.id},"content":"never mind","sendAt":$sendAt}""").bodyAsText()
+        )
+        assertEquals(HttpStatusCode.OK, client.delete("/api/scheduled/${cancelled.id}") { bearerAuth(owner.token) }.status)
+
+        val pending = json.decodeFromString<List<ScheduledMessageItem>>(client.get("/api/scheduled?workspaceId=$ws") { bearerAuth(owner.token) }.bodyAsText())
+        assertEquals(2, pending.size)
+
+        assertEquals(0, plugins.dispatchDueScheduledMessages(System.currentTimeMillis()), "nothing is due yet")
+        assertEquals(2, plugins.dispatchDueScheduledMessages(sendAt + 1))
+
+        transaction {
+            assertTrue(MessageTable.selectAll().where { (MessageTable.channelId eq channel) and (MessageTable.content eq "standup in 5") }.count() == 1L)
+            assertTrue(DirectMessagesTable.selectAll().where { (DirectMessagesTable.senderId eq owner.id) and (DirectMessagesTable.content eq "happy birthday") }.count() == 1L)
+            assertTrue(DirectMessagesTable.selectAll().where { DirectMessagesTable.content eq "never mind" }.count() == 0L)
+        }
+        assertTrue(json.decodeFromString<List<ScheduledMessageItem>>(client.get("/api/scheduled") { bearerAuth(owner.token) }.bodyAsText()).isEmpty())
+        assertEquals(dm.receiverId, partner.id)
     }
 }

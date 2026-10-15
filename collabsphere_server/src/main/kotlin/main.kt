@@ -4,6 +4,7 @@ import plugins.WebSocketBroker
 import plugins.configureRouting
 import plugins.configureGitHubRoutes
 import plugins.startTaskReminderScheduler
+import plugins.startScheduledMessageDispatcher
 import com.collabsphere.util.JwtConfig
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -212,4 +213,5 @@ fun Application.module() {
     configureRouting()
     configureGitHubRoutes()
     startTaskReminderScheduler()
+    startScheduledMessageDispatcher()
 }

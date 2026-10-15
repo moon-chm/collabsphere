@@ -1562,6 +1562,8 @@ fun Application.configureRouting() {
             rateLimit(RateLimitName("api")) {
                 analyticsRoutes()
                 savedMessagesRoutes()
+                pollRoutes()
+                scheduledMessagesRoutes()
             }
 
 

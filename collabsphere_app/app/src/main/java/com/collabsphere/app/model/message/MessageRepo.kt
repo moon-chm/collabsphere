@@ -92,6 +92,28 @@ class MessageRepo(
         "IDEMPOTENCY_KEY" to idempotencyKey
     )
 
+    suspend fun sendPollMessage(
+        message: MessageEntity,
+        poll: com.collabsphere.app.dto.message.CreatePollRequest
+    ): com.collabsphere.app.dto.message.PollView = withContext(Dispatchers.IO) {
+        val idempotencyKey = java.util.UUID.randomUUID().toString()
+        val remote = apiService.createMessage(message.toCreateRequest(idempotencyKey))
+        messageDao.sendMessage(message.copy(id = remote.id, clientMutationId = idempotencyKey, syncStatus = OutboxSyncStatus.SYNCED))
+        apiService.createPoll(remote.id, poll)
+    }
+
+    suspend fun fetchPolls(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {
+        runCatching { apiService.getPolls(workspaceId, channelId) }
+    }
+
+    suspend fun votePoll(messageId: Int, optionIndexes: List<Int>) = withContext(Dispatchers.IO) {
+        runCatching { apiService.votePoll(messageId, optionIndexes) }
+    }
+
+    suspend fun closePoll(messageId: Int) = withContext(Dispatchers.IO) {
+        runCatching { apiService.closePoll(messageId) }
+    }
+
     suspend fun sendMessageToUser(message: MessageEntity): Long = withContext(Dispatchers.IO) {
         val idempotencyKey = java.util.UUID.randomUUID().toString()
         return@withContext try {

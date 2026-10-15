@@ -22,6 +22,41 @@ import io.ktor.http.*
 
 class MessageApiService(private val client: HttpClient) {
 
+    suspend fun createPoll(messageId: Int, request: com.collabsphere.app.dto.message.CreatePollRequest): com.collabsphere.app.dto.message.PollView =
+        client.post("$baseUrl/$messageId/poll") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.requireSuccess().body()
+
+    suspend fun getPolls(workspaceId: Int, channelId: Int): List<com.collabsphere.app.dto.message.PollView> =
+        client.get("$baseUrl/polls/$workspaceId/$channelId").requireSuccess().body()
+
+    suspend fun votePoll(messageId: Int, optionIndexes: List<Int>): com.collabsphere.app.dto.message.PollView =
+        client.post("$baseUrl/$messageId/poll/vote") {
+            contentType(ContentType.Application.Json)
+            setBody(com.collabsphere.app.dto.message.PollVoteRequest(optionIndexes))
+        }.requireSuccess().body()
+
+    suspend fun closePoll(messageId: Int): com.collabsphere.app.dto.message.PollView =
+        client.post("$baseUrl/$messageId/poll/close").requireSuccess().body()
+
+    suspend fun scheduleMessage(request: com.collabsphere.app.dto.message.ScheduleMessageRequest): com.collabsphere.app.dto.message.ScheduledMessageItem =
+        client.post("${AppConfig.BASE_URL}/api/scheduled") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.requireSuccess().body()
+
+    suspend fun getScheduled(workspaceId: Int, channelId: Int?, receiverId: Int?): List<com.collabsphere.app.dto.message.ScheduledMessageItem> =
+        client.get("${AppConfig.BASE_URL}/api/scheduled") {
+            parameter("workspaceId", workspaceId)
+            channelId?.let { parameter("channelId", it) }
+            receiverId?.let { parameter("receiverId", it) }
+        }.requireSuccess().body()
+
+    suspend fun cancelScheduled(id: Int) {
+        client.delete("${AppConfig.BASE_URL}/api/scheduled/$id").requireSuccess()
+    }
+
     suspend fun getSaved(): List<com.collabsphere.app.dto.message.SavedMessageItem> =
         client.get("${AppConfig.BASE_URL}/api/saved").requireSuccess().body()
 

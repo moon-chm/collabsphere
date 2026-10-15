@@ -1,5 +1,12 @@
 package com.collabsphere.app.view.MessageUI
 
+import com.collabsphere.app.view.components.ScheduleSendDialog
+import com.collabsphere.app.view.components.ScheduledMessagesChip
+import com.collabsphere.app.view.components.ScheduledMessagesDialog
+import com.collabsphere.app.view.components.rememberScheduledMessages
+import com.collabsphere.app.view.components.scheduleLabel
+import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.Comment
 import com.collabsphere.app.view.components.VoiceMessagePlayer
 import com.collabsphere.app.view.components.VoiceRecorder
@@ -156,6 +163,12 @@ fun MessageScreen(
     var forwardPeople by remember { mutableStateOf<List<ForwardPerson>>(emptyList()) }
     var forwardTarget by remember { mutableStateOf<MessageEntity?>(null) }
     var threadRoot by remember { mutableStateOf<MessageEntity?>(null) }
+    var infoFor by remember { mutableStateOf<MessageEntity?>(null) }
+    var showCreatePoll by remember { mutableStateOf(false) }
+    val scheduled = rememberScheduledMessages("CHANNEL", viewModel.currentWorkspaceId, viewModel.currentChannelId, null)
+    var showSchedule by remember { mutableStateOf(false) }
+    var showScheduledList by remember { mutableStateOf(false) }
+    val polls by viewModel.polls.collectAsStateWithLifecycle()
     val threadSummaries by viewModel.threadSummaries.collectAsStateWithLifecycle()
     val savedStore = koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
     val savedKeys by savedStore.keys.collectAsStateWithLifecycle()
@@ -312,6 +325,58 @@ fun MessageScreen(
 
     fullscreenImageUrl?.let { imageUrl ->
         FullScreenImageViewer(url = imageUrl, onDismiss = { fullscreenImageUrl = null })
+    }
+
+    if (showSchedule) {
+        ScheduleSendDialog(
+            onPick = { at ->
+                showSchedule = false
+                val text = messageContent.trim()
+                coroutineScope.launch {
+                    if (scheduled.schedule(text, at)) {
+                        viewModel.onMessageContentChange("")
+                        AppToast.show("Scheduled for ${scheduleLabel(at)}")
+                    } else {
+                        AppToast.error("Couldn't schedule it. Pick a later time and check your connection.")
+                    }
+                }
+            },
+            onDismiss = { showSchedule = false }
+        )
+    }
+    if (showScheduledList) {
+        ScheduledMessagesDialog(state = scheduled, onDismiss = { showScheduledList = false })
+    }
+
+    if (showCreatePoll) {
+        com.collabsphere.app.view.components.CreatePollDialog(
+            onCreate = { question, options, multiple ->
+                viewModel.createPoll(question, options, multiple) { ok -> if (ok) showCreatePoll = false }
+            },
+            onDismiss = { showCreatePoll = false }
+        )
+    }
+
+    infoFor?.let { target ->
+        val seen = readStates.values
+            .filter { it.userId != target.userId && it.lastReadMessageId >= target.id }
+            .map { it.userName }
+            .sorted()
+        val notSeen = forwardPeople
+            .filter { it.userId != target.userId && it.name !in seen }
+            .map { it.name }
+            .sorted()
+        com.collabsphere.app.view.components.MessageInfoDialog(
+            preview = target.content,
+            sentAt = target.createdAt,
+            editedAt = target.editedAt,
+            statusLine = null,
+            sections = listOf(
+                com.collabsphere.app.view.components.MessageInfoSection("Seen by", seen),
+                com.collabsphere.app.view.components.MessageInfoSection("Not seen yet", notSeen)
+            ),
+            onDismiss = { infoFor = null }
+        )
     }
 
     threadRoot?.let { root ->
@@ -540,6 +605,8 @@ fun MessageScreen(
                     }
                 }
 
+                ScheduledMessagesChip(count = scheduled.items.size, onClick = { showScheduledList = true })
+
                 if (isRecordingVoice) {
                     VoiceRecordingBar(
                         recorder = voiceRecorder,
@@ -613,6 +680,13 @@ fun MessageScreen(
                                     )
                                 }
                             }
+                        }
+                        IconButton(onClick = { showCreatePoll = true }, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                imageVector = Icons.Outlined.Poll,
+                                contentDescription = "Create poll",
+                                tint = IndigoStart
+                            )
                         }
                     }
                     // Debossed text input field
@@ -717,10 +791,16 @@ fun MessageScreen(
                                                             }
                             }
                             .clip(CircleShape)
-                            .clickable(
+                            .combinedClickable(
                                 enabled = canSend,
                                 interactionSource = sendInteractionSource,
-                                indication = null
+                                indication = null,
+                                onLongClick = {
+                                    if (messageContent.isNotBlank() && !isEditing) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showSchedule = true
+                                    }
+                                }
                             ) {
                                 if (isEditing) {
                                     val currentMsg = selectedMessage
@@ -1017,7 +1097,16 @@ fun MessageScreen(
                                                 Spacer(modifier = Modifier.height(6.dp))
                                             }
                                         }
-                                        if (message.content.isNotBlank() || message.mediaUrl == null) {
+                                        polls[message.id]?.let { poll ->
+                                            com.collabsphere.app.view.components.PollCard(
+                                                poll = poll,
+                                                onDarkBubble = isOwnMessage,
+                                                isAuthor = isOwnMessage,
+                                                onVote = { index -> viewModel.votePoll(message.id, index) },
+                                                onClose = { viewModel.closePoll(message.id) }
+                                            )
+                                        }
+                                        if (polls[message.id] == null && (message.content.isNotBlank() || message.mediaUrl == null)) {
                                             MarkdownText(
                                                 text = message.content,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
@@ -1193,6 +1282,17 @@ fun MessageScreen(
                                                             tint = IndigoStart
                                                         )
                                                     }
+                                                )
+                                            }
+                                            if (isOwnMessage && message.id > 0) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Info", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        infoFor = message
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (isOwnMessage || (canModerate && message.id > 0)) {

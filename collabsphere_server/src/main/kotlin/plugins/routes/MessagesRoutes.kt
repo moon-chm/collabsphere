@@ -150,100 +150,7 @@ internal fun Route.messagesRoutes() {
                     val (newMessage, wasInserted) = createResult
                     call.respond(HttpStatusCode.Created, newMessage)
                     if (wasInserted) broadcastChannelMessageChange(newMessage.id)
-                    // ── Notification hooks ────────────────────────────────────────────
-                    if (wasInserted) {
-                    val senderRow = dbQuery {
-                        UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                    }
-                    val senderName = senderRow?.get(UsersTable.username) ?: "Someone"
-                    val channelName = dbQuery {
-                        ChannelsTable.select(ChannelsTable.channelName)
-                            .where { ChannelsTable.id eq request.channelId }
-                            .singleOrNull()?.get(ChannelsTable.channelName)
-                    }
-
-                    val notificationBody = request.content.ifBlank { mediaNotificationLabel(newMessage.mediaUrl) }.take(200)
-                    // Parse @mentions from content
-                    val mentionedUsernames = MENTION_REGEX.findAll(request.content)
-                        .map { it.groupValues[1].lowercase() }.toSet()
-
-                    // Find all channel members (excluding sender)
-                    val channelMembers = dbQuery {
-                        (WorkspaceMembersTable innerJoin UsersTable)
-                            .selectAll()
-                            .where { WorkspaceMembersTable.workspaceId eq request.workspaceId }
-                            .filter { it[UsersTable.id] != actingUserId }
-                            .map { it[UsersTable.id] to it[UsersTable.username].lowercase() }
-                    }
-
-                    val mutedMemberIds = dbQuery {
-                        NotificationMutesTable
-                            .select(NotificationMutesTable.userId)
-                            .where {
-                                (NotificationMutesTable.workspaceId eq request.workspaceId) and
-                                        ((NotificationMutesTable.channelId eq 0) or (NotificationMutesTable.channelId eq request.channelId))
-                            }
-                            .map { it[NotificationMutesTable.userId] }
-                            .toSet()
-                    }
-
-                    val threadRootId = newMessage.threadRootId
-                    val threadParticipants = if (threadRootId == null) emptySet() else dbQuery {
-                        val rootAuthor = MessageTable.select(MessageTable.userId)
-                            .where { MessageTable.id eq threadRootId }
-                            .singleOrNull()?.get(MessageTable.userId)
-                        val repliers = MessageTable.select(MessageTable.userId)
-                            .where { (MessageTable.threadRootId eq threadRootId) and (MessageTable.isDeleted eq false) }
-                            .map { it[MessageTable.userId] }
-                        (repliers + listOfNotNull(rootAuthor)).toSet() - actingUserId
-                    }
-
-                    channelMembers.forEach { (memberId, memberUsername) ->
-                        val isMentioned = memberUsername in mentionedUsernames
-                        if (threadRootId != null && !isMentioned) {
-                            if (memberId in threadParticipants) {
-                                createAndPushNotification(
-                                    recipientId = memberId,
-                                    actorId = actingUserId,
-                                    type = "CHANNEL_MESSAGE",
-                                    title = "$senderName replied in a thread",
-                                    body = notificationBody,
-                                    workspaceId = request.workspaceId,
-                                    referenceId = newMessage.id,
-                                    channelId = request.channelId,
-                                    channelName = channelName
-                                )
-                            }
-                            return@forEach
-                        }
-                        if (!isMentioned && memberId in mutedMemberIds) return@forEach
-                        if (isMentioned) {
-                            createAndPushNotification(
-                                recipientId = memberId,
-                                actorId = actingUserId,
-                                type = "MENTION",
-                                title = "$senderName mentioned you",
-                                body = notificationBody,
-                                workspaceId = request.workspaceId,
-                                referenceId = newMessage.id,
-                                channelId = request.channelId,
-                                channelName = channelName
-                            )
-                        } else {
-                            createAndPushNotification(
-                                recipientId = memberId,
-                                actorId = actingUserId,
-                                type = "CHANNEL_MESSAGE",
-                                title = "New message from $senderName",
-                                body = notificationBody,
-                                workspaceId = request.workspaceId,
-                                referenceId = newMessage.id,
-                                channelId = request.channelId,
-                                channelName = channelName
-                            )
-                        }
-                    }
-                    }
+                    if (wasInserted) notifyChannelMessage(actingUserId, request.workspaceId, request.channelId, request.content, newMessage)
                 }
             } catch (e: Exception) {
                 // The 201 may already be out: what failed then was a follow-up notification.
@@ -806,4 +713,104 @@ internal fun mediaNotificationLabel(mediaUrl: String?): String = when {
     mediaUrl == null -> ""
     mediaUrl.contains("/voice/") -> "🎤 Voice message"
     else -> "📷 Photo"
+}
+
+internal suspend fun notifyChannelMessage(
+    actingUserId: Int,
+    workspaceId: Int,
+    channelId: Int,
+    content: String,
+    newMessage: MessageResponse
+) {
+    val senderRow = dbQuery {
+        UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
+    }
+    val senderName = senderRow?.get(UsersTable.username) ?: "Someone"
+    val channelName = dbQuery {
+        ChannelsTable.select(ChannelsTable.channelName)
+            .where { ChannelsTable.id eq channelId }
+            .singleOrNull()?.get(ChannelsTable.channelName)
+    }
+
+    val notificationBody = content.ifBlank { mediaNotificationLabel(newMessage.mediaUrl) }.take(200)
+    // Parse @mentions from content
+    val mentionedUsernames = MENTION_REGEX.findAll(content)
+        .map { it.groupValues[1].lowercase() }.toSet()
+
+    // Find all channel members (excluding sender)
+    val channelMembers = dbQuery {
+        (WorkspaceMembersTable innerJoin UsersTable)
+            .selectAll()
+            .where { WorkspaceMembersTable.workspaceId eq workspaceId }
+            .filter { it[UsersTable.id] != actingUserId }
+            .map { it[UsersTable.id] to it[UsersTable.username].lowercase() }
+    }
+
+    val mutedMemberIds = dbQuery {
+        NotificationMutesTable
+            .select(NotificationMutesTable.userId)
+            .where {
+                (NotificationMutesTable.workspaceId eq workspaceId) and
+                        ((NotificationMutesTable.channelId eq 0) or (NotificationMutesTable.channelId eq channelId))
+            }
+            .map { it[NotificationMutesTable.userId] }
+            .toSet()
+    }
+
+    val threadRootId = newMessage.threadRootId
+    val threadParticipants = if (threadRootId == null) emptySet() else dbQuery {
+        val rootAuthor = MessageTable.select(MessageTable.userId)
+            .where { MessageTable.id eq threadRootId }
+            .singleOrNull()?.get(MessageTable.userId)
+        val repliers = MessageTable.select(MessageTable.userId)
+            .where { (MessageTable.threadRootId eq threadRootId) and (MessageTable.isDeleted eq false) }
+            .map { it[MessageTable.userId] }
+        (repliers + listOfNotNull(rootAuthor)).toSet() - actingUserId
+    }
+
+    channelMembers.forEach { (memberId, memberUsername) ->
+        val isMentioned = memberUsername in mentionedUsernames
+        if (threadRootId != null && !isMentioned) {
+            if (memberId in threadParticipants) {
+                createAndPushNotification(
+                    recipientId = memberId,
+                    actorId = actingUserId,
+                    type = "CHANNEL_MESSAGE",
+                    title = "$senderName replied in a thread",
+                    body = notificationBody,
+                    workspaceId = workspaceId,
+                    referenceId = newMessage.id,
+                    channelId = channelId,
+                    channelName = channelName
+                )
+            }
+            return@forEach
+        }
+        if (!isMentioned && memberId in mutedMemberIds) return@forEach
+        if (isMentioned) {
+            createAndPushNotification(
+                recipientId = memberId,
+                actorId = actingUserId,
+                type = "MENTION",
+                title = "$senderName mentioned you",
+                body = notificationBody,
+                workspaceId = workspaceId,
+                referenceId = newMessage.id,
+                channelId = channelId,
+                channelName = channelName
+            )
+        } else {
+            createAndPushNotification(
+                recipientId = memberId,
+                actorId = actingUserId,
+                type = "CHANNEL_MESSAGE",
+                title = "New message from $senderName",
+                body = notificationBody,
+                workspaceId = workspaceId,
+                referenceId = newMessage.id,
+                channelId = channelId,
+                channelName = channelName
+            )
+        }
+    }
 }

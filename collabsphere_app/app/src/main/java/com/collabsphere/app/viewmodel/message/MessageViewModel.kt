@@ -80,6 +80,7 @@ class MessageViewModel(
             ChannelMessageCenter.incoming
                 .filter { it.workspaceId == loggedWorkspaceId && it.channelId == loggedChannelId }
                 .collect { change ->
+                    if (change.id in _polls.value || change.content.startsWith("📊")) refreshPolls(debounceMs = 300L)
                     val known = _pinned.value.firstOrNull { it.id == change.id }
                     val nowPinned = change.pinnedAt != null && !change.isDeleted
                     if ((known != null) != nowPinned || (known != null && known.pinnedAt != change.pinnedAt)) {
@@ -315,6 +316,67 @@ class MessageViewModel(
         }
     }
 
+    private val _polls = MutableStateFlow<Map<Int, com.collabsphere.app.dto.message.PollView>>(emptyMap())
+    val polls = _polls.asStateFlow()
+    private var pollRefreshJob: kotlinx.coroutines.Job? = null
+
+    private fun refreshPolls(debounceMs: Long = 0L) {
+        pollRefreshJob?.cancel()
+        pollRefreshJob = viewModelScope.launch {
+            if (debounceMs > 0) kotlinx.coroutines.delay(debounceMs)
+            repo.fetchPolls(loggedWorkspaceId, loggedChannelId).onSuccess { list ->
+                _polls.value = list.associateBy { it.messageId }
+            }
+        }
+    }
+
+    fun createPoll(question: String, options: List<String>, allowsMultiple: Boolean, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val message = MessageEntity(
+                userId = loggedUserId,
+                workspaceId = loggedWorkspaceId,
+                channelId = loggedChannelId,
+                userName = loggedUserName,
+                content = "📊 ${question.trim()}",
+                status = MessageStatus.Delivered
+            )
+            runCatching {
+                repo.sendPollMessage(message, com.collabsphere.app.dto.message.CreatePollRequest(question.trim(), options, allowsMultiple))
+            }.onSuccess { view ->
+                _polls.value = _polls.value + (view.messageId to view)
+                onDone(true)
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                _uiMessages.tryEmit("Couldn't create the poll. Polls need an internet connection.")
+                onDone(false)
+            }
+        }
+    }
+
+    fun votePoll(messageId: Int, optionIndex: Int) {
+        val poll = _polls.value[messageId] ?: return
+        if (poll.closed) return
+        val choices = when {
+            poll.allowsMultiple && optionIndex in poll.myVotes -> poll.myVotes - optionIndex
+            poll.allowsMultiple -> poll.myVotes + optionIndex
+            optionIndex in poll.myVotes -> emptyList()
+            else -> listOf(optionIndex)
+        }
+        viewModelScope.launch {
+            repo.votePoll(messageId, choices)
+                .onSuccess { view -> _polls.value = _polls.value + (messageId to view) }
+                .onFailure { _uiMessages.tryEmit("Couldn't record your vote. Check your connection.") }
+        }
+    }
+
+    fun closePoll(messageId: Int) {
+        viewModelScope.launch {
+            repo.closePoll(messageId)
+                .onSuccess { view -> _polls.value = _polls.value + (messageId to view) }
+                .onFailure { _uiMessages.tryEmit("Couldn't close the poll.") }
+        }
+    }
+
     private val _firstUnreadAfterId = MutableStateFlow<Int?>(null)
     val firstUnreadAfterId = _firstUnreadAfterId.asStateFlow()
     private var lastMarkedReadId = 0
@@ -333,6 +395,7 @@ class MessageViewModel(
                 .collect { if (!isEditingMessage) draftStore.save(draftKey, it) }
         }
         viewModelScope.launch {
+            refreshPolls()
             repo.fetchReadStates(loggedWorkspaceId, loggedChannelId).onSuccess { states ->
                 _firstUnreadAfterId.value = states.firstOrNull { it.userId == loggedUserId }?.lastReadMessageId
                 _readStates.update { current -> current + states.associateBy { it.userId } }
