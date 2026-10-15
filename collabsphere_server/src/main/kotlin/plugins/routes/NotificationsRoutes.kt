@@ -11,6 +11,9 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("NotificationsRoutes")
 
 internal fun Route.notificationsRoutes() {
     route("/api/notifications") {
@@ -110,8 +113,8 @@ internal fun Route.notificationsRoutes() {
                     call.respond(HttpStatusCode.Forbidden, false)
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, false)
+                val failure = classifyFailure(e, logger, "Mute update")
+                call.respond(failure.status, false)
             }
         }
 

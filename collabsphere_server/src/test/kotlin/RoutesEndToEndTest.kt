@@ -185,7 +185,8 @@ class RoutesEndToEndTest {
             json.decodeFromString<com.collabsphere.dto.MessageResponse>(first.bodyAsText()).id,
             json.decodeFromString<com.collabsphere.dto.MessageResponse>(retry.bodyAsText()).id
         )
-        assertEquals(HttpStatusCode.BadRequest, conflictingReplay.status)
+        // A conflict the client can't fix by retrying: 409, which the app drops like any other 4xx.
+        assertEquals(HttpStatusCode.Conflict, conflictingReplay.status)
         assertEquals(
             1,
             transaction { MessageTable.selectAll().where { MessageTable.idempotencyKey eq idempotencyKey }.count() }
@@ -222,7 +223,8 @@ class RoutesEndToEndTest {
             json.parseToJsonElement(first.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content,
             json.parseToJsonElement(retry.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content
         )
-        assertEquals(HttpStatusCode.BadRequest, conflictingReplay.status)
+        // A conflict the client can't fix by retrying: 409, which the app drops like any other 4xx.
+        assertEquals(HttpStatusCode.Conflict, conflictingReplay.status)
         assertEquals(
             1,
             transaction { ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq idempotencyKey }.count() }
@@ -420,7 +422,8 @@ class RoutesEndToEndTest {
             contentType(ContentType.Application.Json)
             setBody(reqWs1.replace(""""id":0""", """"id":0,"idempotencyKey":"${UUID.randomUUID()}""""))
         }
-        assertEquals(HttpStatusCode.BadRequest, c1Dup.status)
+        // A conflict the client can't fix by retrying: 409, which the app drops like any other 4xx.
+        assertEquals(HttpStatusCode.Conflict, c1Dup.status)
 
         val c2 = client.post("/api/channels") {
             bearerAuth(token)

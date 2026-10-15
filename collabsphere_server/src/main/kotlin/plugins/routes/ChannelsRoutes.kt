@@ -23,6 +23,15 @@ private fun ResultRow.toChannelResponse() = ChannelResponse(
     description = this[ChannelsTable.description]
 )
 
+private fun ResultRow.isSameChannelAs(actingUserId: Int, request: ChannelRequest) =
+    this[ChannelsTable.userId] == actingUserId &&
+        this[ChannelsTable.workspaceId] == request.workspaceId &&
+        this[ChannelsTable.channelName] == request.channelName &&
+        this[ChannelsTable.description] == request.description
+
+private fun idempotencyKeyReused() =
+    RequestRejected(HttpStatusCode.Conflict, "Idempotency key was already used for a different channel")
+
 /**
  * Channels feature routes — extracted from Routing.kt.
  * Mounted inside `authenticate("auth-jwt")` in configureRouting().
@@ -35,6 +44,11 @@ internal fun Route.channelsRoutes() {
             try {
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<ChannelRequest>()
+                if (request.channelName.isBlank()) return@post call.respond(HttpStatusCode.BadRequest, "Channel name cannot be blank")
+                if (request.channelName.length > 255) return@post call.respond(HttpStatusCode.BadRequest, "Channel name too long")
+                if (request.idempotencyKey != null && request.idempotencyKey.length > 128) {
+                    return@post call.respond(HttpStatusCode.BadRequest, "Invalid idempotencyKey")
+                }
 
                 val createResult = dbQuery {
                     if (!isMember(actingUserId, request.workspaceId)) {
@@ -44,12 +58,7 @@ internal fun Route.channelsRoutes() {
                         ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq key }.singleOrNull()
                     }
                     if (prior != null) {
-                        require(
-                            prior[ChannelsTable.userId] == actingUserId &&
-                                prior[ChannelsTable.workspaceId] == request.workspaceId &&
-                                prior[ChannelsTable.channelName] == request.channelName &&
-                                prior[ChannelsTable.description] == request.description
-                        ) { "Idempotency key was already used for a different channel" }
+                        if (!prior.isSameChannelAs(actingUserId, request)) throw idempotencyKeyReused()
                         return@dbQuery prior.toChannelResponse() to false
                     }
 
@@ -59,7 +68,7 @@ internal fun Route.channelsRoutes() {
                         (ChannelsTable.isDeleted eq false)
                     }.singleOrNull()
                     if (existingName != null) {
-                        throw IllegalArgumentException("Channel name already exists in this workspace")
+                        throw RequestRejected(HttpStatusCode.Conflict, "Channel name already exists in this workspace")
                     }
                     val insertResult = ChannelsTable.insertIgnore {
                         it[ChannelsTable.userId] = actingUserId
@@ -75,12 +84,7 @@ internal fun Route.channelsRoutes() {
                         val afterConflict = request.idempotencyKey?.let { key ->
                             ChannelsTable.selectAll().where { ChannelsTable.idempotencyKey eq key }.singleOrNull()
                         } ?: error("Channel insert conflicted without an idempotency row")
-                        require(
-                            afterConflict[ChannelsTable.userId] == actingUserId &&
-                                afterConflict[ChannelsTable.workspaceId] == request.workspaceId &&
-                                afterConflict[ChannelsTable.channelName] == request.channelName &&
-                                afterConflict[ChannelsTable.description] == request.description
-                        ) { "Idempotency key was already used for a different channel" }
+                        if (!afterConflict.isSameChannelAs(actingUserId, request)) throw idempotencyKeyReused()
                         return@dbQuery afterConflict.toChannelResponse() to false
                     }
 
@@ -99,8 +103,8 @@ internal fun Route.channelsRoutes() {
                     call.respond(HttpStatusCode.Created, createResult.first)
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Failed to create channel")
+                val failure = classifyFailure(e, logger, "Channel create")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -132,7 +136,7 @@ internal fun Route.channelsRoutes() {
                         (ChannelsTable.id neq channel[ChannelsTable.id])
                     }.count()
                     if (remainingCount == 0L) {
-                        throw IllegalArgumentException("Cannot delete the last channel in a workspace")
+                        throw RequestRejected(HttpStatusCode.BadRequest, "Cannot delete the last channel in a workspace")
                     }
                     ChannelsTable.update({ ChannelsTable.id eq channel[ChannelsTable.id] }) {
                         it[ChannelsTable.isDeleted] = true
@@ -145,11 +149,9 @@ internal fun Route.channelsRoutes() {
                     updatedRows > 0   -> call.respond(HttpStatusCode.OK, true)
                     else              -> call.respond(HttpStatusCode.NotFound, false)
                 }
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, false)
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.InternalServerError, false)
+                val failure = classifyFailure(e, logger, "Channel delete")
+                call.respond(failure.status, false)
             }
         }
 

@@ -168,6 +168,8 @@ internal const val MAX_UPLOAD_BYTES = 25L * 1024 * 1024
 internal const val DEFAULT_HISTORY_PAGE = 50
 internal const val DM_CATCH_UP_PAGE = 500
 internal const val MAX_HISTORY_PAGE = 100
+/** Matching rows read per user search, before block/visibility filtering. */
+internal const val USER_SEARCH_SCAN_LIMIT = 200
 
 internal fun ResultRow.toDmHistoryDto() = DmDto(
     action = "HISTORY",
@@ -407,7 +409,8 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.OK, response)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Malformed request body or server error")
+                val failure = classifyFailure(e, logger, "Login")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -490,7 +493,10 @@ fun Application.configureRouting() {
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email already registered")
-                else call.respond(HttpStatusCode.BadRequest, "Invalid registration request")
+                else {
+                    val failure = classifyFailure(e, logger, "Registration")
+                    call.respond(failure.status, failure.message)
+                }
             }
         }
 
@@ -569,7 +575,8 @@ fun Application.configureRouting() {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+                val failure = classifyFailure(e, logger, call.request.local.uri)
+                call.respond(failure.status, AuthMessageResponse(false, failure.message))
             }
         }
 
@@ -635,7 +642,8 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "A new 6-digit verification code has been sent to your email."))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+                val failure = classifyFailure(e, logger, call.request.local.uri)
+                call.respond(failure.status, AuthMessageResponse(false, failure.message))
             }
         }
 
@@ -684,7 +692,8 @@ fun Application.configureRouting() {
                 call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "If an account exists, a reset code has been sent."))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+                val failure = classifyFailure(e, logger, call.request.local.uri)
+                call.respond(failure.status, AuthMessageResponse(false, failure.message))
             }
         }
 
@@ -704,6 +713,8 @@ fun Application.configureRouting() {
                     return@post
                 }
 
+                // Hashed before the transaction so bcrypt never holds a pooled DB connection.
+                val newPasswordHash = PasswordHasher.hashAsync(request.newPassword)
                 val resetResult = dbQuery {
                     // Row lock serializes concurrent guesses against the same code; without it every
                     // parallel request reads the same `attempts` value and the attempt cap is bypassed.
@@ -755,15 +766,17 @@ fun Application.configureRouting() {
                     if (consumed != 1) return@dbQuery "INVALID"
 
                     val updated = UsersTable.update({ UsersTable.id eq userRow[UsersTable.id] }) {
-                        it[password] = PasswordHasher.hash(request.newPassword ?: "")
+                        it[password] = newPasswordHash
                         it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
                     }
 
-                    TokenVersions.invalidate(userRow[UsersTable.id])
-                    if (updated > 0) "OK" else "USER_NOT_FOUND"
+                    if (updated > 0) "OK:${userRow[UsersTable.id]}" else "USER_NOT_FOUND"
                 }
 
-                when (resetResult) {
+                // Invalidated after commit, so a concurrent request cannot re-cache the old version.
+                if (resetResult.startsWith("OK:")) TokenVersions.invalidate(resetResult.removePrefix("OK:").toInt())
+
+                when (resetResult.substringBefore(':')) {
                     "OK" -> call.respond(HttpStatusCode.OK, AuthMessageResponse(true, "Password reset successfully! You can now log in."))
                     "EXPIRED" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Reset code expired. Please request a new code."))
                     "INVALID" -> call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Invalid reset code. Please check and try again."))
@@ -772,7 +785,8 @@ fun Application.configureRouting() {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, AuthMessageResponse(false, "Malformed request"))
+                val failure = classifyFailure(e, logger, call.request.local.uri)
+                call.respond(failure.status, AuthMessageResponse(false, failure.message))
             }
         }
         }
@@ -827,8 +841,8 @@ fun Application.configureRouting() {
                     call.respond(HttpStatusCode.OK, mapOf("status" to "success"))
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                    logger.warn("[FCM] Token registration failed", e)
-                    call.respond(HttpStatusCode.BadRequest, "Invalid request body")
+                    val failure = classifyFailure(e, logger, "FCM token registration")
+                    call.respond(failure.status, failure.message)
                 }
             }
 
@@ -914,41 +928,48 @@ fun Application.configureRouting() {
                         call.respond(HttpStatusCode.BadRequest, passwordError ?: "Invalid profile fields.")
                         return@post
                     }
-                    val updateResult = dbQuery {
-                        val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
-                        if (userRow == null) {
-                            "NOT_FOUND"
-                        } else {
-                            if (changingPassword) {
-                                if (!PasswordHasher.matches(currentPassword!!, userRow[UsersTable.password])) {
-                                    return@dbQuery "UNAUTHORIZED"
-                                }
-                                UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                    it[UsersTable.username] = username
-                                    it[bio] = request.bio
-                                    it[statusMessage] = request.statusMessage
-                                    it[password] = PasswordHasher.hash(request.newPassword ?: "")
-                                    it[tokenVersion] = userRow[UsersTable.tokenVersion] + 1
-                                }
-                                TokenVersions.invalidate(actingUserId)
-                            } else {
-                                UsersTable.update({ UsersTable.id eq actingUserId }) {
-                                    it[UsersTable.username] = username
-                                    it[bio] = request.bio
-                                    it[statusMessage] = request.statusMessage
-                                }
-                            }
-                            "OK"
+                    // bcrypt runs outside the transaction so it never holds a pooled connection.
+                    if (changingPassword) {
+                        val storedHash = dbQuery {
+                            UsersTable.select(UsersTable.password).where { UsersTable.id eq actingUserId }
+                                .singleOrNull()?.get(UsersTable.password)
+                        } ?: return@post call.respond(HttpStatusCode.NotFound, false)
+                        if (!PasswordHasher.matchesAsync(currentPassword!!, storedHash)) {
+                            return@post call.respond(HttpStatusCode.Unauthorized, false)
                         }
                     }
-                    when (updateResult) {
-                        "OK" -> call.respond(HttpStatusCode.OK, true)
-                        "UNAUTHORIZED" -> call.respond(HttpStatusCode.Unauthorized, false)
-                        else -> call.respond(HttpStatusCode.NotFound, false)
+                    val newPasswordHash = if (changingPassword) PasswordHasher.hashAsync(newPassword!!) else null
+                    // Null: user gone. Otherwise the token version the account ends up on.
+                    val newTokenVersion: Int? = dbQuery {
+                        val userRow = UsersTable.selectAll().where { UsersTable.id eq actingUserId }.forUpdate().singleOrNull()
+                            ?: return@dbQuery null
+                        val nextVersion = if (newPasswordHash != null) userRow[UsersTable.tokenVersion] + 1 else userRow[UsersTable.tokenVersion]
+                        UsersTable.update({ UsersTable.id eq actingUserId }) {
+                            it[UsersTable.username] = username
+                            it[bio] = request.bio
+                            it[statusMessage] = request.statusMessage
+                            if (newPasswordHash != null) {
+                                it[password] = newPasswordHash
+                                it[tokenVersion] = nextVersion
+                            }
+                        }
+                        nextVersion
+                    }
+                    if (newTokenVersion == null) return@post call.respond(HttpStatusCode.NotFound, false)
+                    if (newPasswordHash == null) {
+                        call.respond(HttpStatusCode.OK, UpdateProfileResponse(success = true))
+                    } else {
+                        // Invalidated after commit, so a concurrent request cannot re-cache the old version.
+                        // The bump revoked the caller's own token too, so it gets a replacement.
+                        TokenVersions.invalidate(actingUserId)
+                        call.respond(
+                            HttpStatusCode.OK,
+                            UpdateProfileResponse(success = true, token = JwtConfig.generateToken(actingUserId, newTokenVersion))
+                        )
                     }
                 } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.InternalServerError, false)
+                    val failure = classifyFailure(e, logger, "Profile update")
+                    call.respond(failure.status, false)
                 }
             }
 
@@ -1082,7 +1103,10 @@ fun Application.configureRouting() {
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                     if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email already in use")
-                    else call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                    else {
+                        val failure = classifyFailure(e, logger, "Email change")
+                        call.respond(failure.status, failure.message)
+                    }
                 }
             }
 
@@ -1224,7 +1248,10 @@ fun Application.configureRouting() {
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                     if (e.isUniqueViolation()) call.respond(HttpStatusCode.Conflict, "Email address is already in use")
-                    else call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                    else {
+                        val failure = classifyFailure(e, logger, "Email verification")
+                        call.respond(failure.status, failure.message)
+                    }
                 }
             }
 
@@ -1267,7 +1294,8 @@ fun Application.configureRouting() {
                     }
                 } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                    call.respond(HttpStatusCode.BadRequest, "Malformed request")
+                    val failure = classifyFailure(e, logger, "Account deletion")
+                    call.respond(failure.status, failure.message)
                 }
             }
 
@@ -1368,10 +1396,13 @@ fun Application.configureRouting() {
                             (UserBlocksTable.blockerId eq actingUserId) or (UserBlocksTable.blockedId eq actingUserId)
                         }.map { if (it[UserBlocksTable.blockerId] == actingUserId) it[UserBlocksTable.blockedId] else it[UserBlocksTable.blockerId] }.toSet()
 
+                        // Case-insensitive like every other search here; `\` is the one LIKE metacharacter
+                        // the validation above lets through.
+                        val pattern = "%${escapeLikeLiteral(query.lowercase())}%"
                         val matches = UsersTable.selectAll().where {
-                            (UsersTable.username like "%$query%") or
-                                ((UsersTable.showEmail eq true) and (UsersTable.email like "%$query%"))
-                        }.toList()
+                            (UsersTable.username.lowerCase() like pattern) or
+                                ((UsersTable.showEmail eq true) and (UsersTable.email.lowerCase() like pattern))
+                        }.orderBy(UsersTable.username).limit(USER_SEARCH_SCAN_LIMIT).toList()
                         val viewerWorkspaces = WorkspaceMembersTable.select(WorkspaceMembersTable.workspaceId)
                             .where { WorkspaceMembersTable.userId eq actingUserId }
                             .map { it[WorkspaceMembersTable.workspaceId] }
@@ -1453,18 +1484,16 @@ fun Application.configureRouting() {
                 try {
                     val actingUserId = call.authenticatedUserId()
                     val blocked = dbQuery {
-                        (UserBlocksTable innerJoin UsersTable.alias("blocked_user"))
-                        UserBlocksTable.selectAll().where { UserBlocksTable.blockerId eq actingUserId }
-                            .mapNotNull { row ->
-                                val blockedId = row[UserBlocksTable.blockedId]
-                                UsersTable.selectAll().where { UsersTable.id eq blockedId }.singleOrNull()?.let { ur ->
-                                    SearchUserResult(
-                                        id = ur[UsersTable.id],
-                                        username = ur[UsersTable.username],
-                                        email = null,
-                                        avatarUrl = AvatarGenerator.avatarUrlFor(ur[UsersTable.id], ur[UsersTable.avatarUrl])
-                                    )
-                                }
+                        UserBlocksTable.join(UsersTable, JoinType.INNER, UserBlocksTable.blockedId, UsersTable.id)
+                            .selectAll()
+                            .where { UserBlocksTable.blockerId eq actingUserId }
+                            .map { ur ->
+                                SearchUserResult(
+                                    id = ur[UsersTable.id],
+                                    username = ur[UsersTable.username],
+                                    email = null,
+                                    avatarUrl = AvatarGenerator.avatarUrlFor(ur[UsersTable.id], ur[UsersTable.avatarUrl])
+                                )
                             }
                     }
                     call.respond(HttpStatusCode.OK, blocked)
@@ -1826,7 +1855,7 @@ fun Application.configureRouting() {
                                         val wsId = dmDto.workspaceId
                                         val readerId = userIdParam.toInt()   // the one who just read
                                         val senderId = dmDto.receiverId       // the original sender
-                                        dbQuery {
+                                        val markedRead = dbQuery {
                                             DirectMessagesTable.update({
                                                 (DirectMessagesTable.workspaceId eq wsId) and
                                                 (DirectMessagesTable.senderId eq senderId) and
@@ -1836,7 +1865,9 @@ fun Application.configureRouting() {
                                                 it[DirectMessagesTable.isRead] = true
                                             }
                                         }
-                                        // Notify the original sender their messages were read
+                                        // Notify the original sender their messages were read — only when some
+                                        // were, so a client can't push receipt frames at arbitrary user ids.
+                                        if (markedRead == 0) continue
                                         val receiptPayload = DmDto(
                                             action = "READ_RECEIPT",
                                             workspaceId = wsId,

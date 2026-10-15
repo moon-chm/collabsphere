@@ -35,6 +35,13 @@ data class UpdateProfileRequest(
     val newPassword: String? = null
 )
 
+/** A password change revokes every existing token, the caller's included, so [token] carries its replacement. */
+@Serializable
+data class UpdateProfileResponse(
+    val success: Boolean,
+    val token: String? = null
+)
+
 @Serializable
 data class RegisterResponse(
     val userId: Int,

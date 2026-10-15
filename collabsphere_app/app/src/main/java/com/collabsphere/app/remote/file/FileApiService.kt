@@ -54,7 +54,7 @@ class FileApiService(private val client: HttpClient) {
     }
 
     suspend fun getFilesByWorkspace(workspaceId: Int): List<FileResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId").body()
+        return client.get("$baseUrl/workspace/$workspaceId").requireSuccess().body()
     }
 
     /** Streams the response body straight to [destination] instead of buffering the whole file in memory. */

@@ -38,6 +38,35 @@ Tracking doc for the Android client and Ktor backend. Findings below are based o
 - Delta continuation no longer uses unbounded offsets. A fresh page-capable sync starts with the transaction-ID cursor; old clients without `pageSize` retain the timestamp path.
 - A Compose onboarding test covers moving through all onboarding pages and invoking the finish action; it is compiled and wired to emulator CI but still needs an emulator run.
 
+## API contract audit (2026-10-15)
+
+Every server route was mapped to its Android caller and the suspect ones reproduced against a disposable PostgreSQL 16 before fixing. Regression coverage lives in `ApiContractIntegrationTest` (integration task), `plugins.RouteFailuresTest` (server unit) and `ApiStatusExceptionTest` (Android unit).
+
+Fixed:
+
+- `GET /api/workspace/invitations/pending` answered 500 on every call: its implicit users join was ambiguous (`workspace.user_id` and `inviter_user_id` both reference users). It now joins on the inviter, skips deleted workspaces and names the admin who actually sent the invite.
+- Catch-all handlers answered 400 for any failure, database outages included, and the app's SyncPolicy drops queued work on a 4xx, so a transient outage discarded offline-created channels, notes, messages and workspaces. Routes and StatusPages now share `classifyFailure`: malformed bodies/explicit rejections are 4xx, anything unrecognised is a retryable 500.
+- `GET /api/message/read/{ws}/{channel}` returned read states of a channel in another workspace; the channel must now belong to the workspace whose membership was checked.
+- `POST /api/message` stored the client-supplied author name; it now uses the account's username.
+- `PUT /api/message/{id}` accepted blank/oversize content and edits of deleted messages, and echoed request ids; `PUT /api/notes/{id}` edited deleted notes and answered with the editor as author and `isPinned=false`. Both now validate and answer with stored values.
+- Channel create accepted blank and over-length names (the latter failing inside Postgres); duplicate names and idempotency-key reuse now answer 409.
+- User search was case-sensitive and unbounded; it now matches case-insensitively, escapes LIKE input and caps the scan.
+- Changing the password bumped `token_version`, revoking the caller's own token, and returned only `true`, so the app was logged out. The response now carries a replacement token, which the app stores. The app also no longer reports an offline password change as applied.
+- Invite codes came from `kotlin.random`; they now use `SecureRandom`. Join-by-code tolerates code collisions.
+- Token-version cache invalidation for password change/reset now happens after commit, and bcrypt for both runs outside the transaction.
+- DM `MARK_READ` only pushes a read receipt when messages were actually marked read.
+- Android: ~30 API calls decoded bodies without checking the status, so a 403/404 surfaced as a JSON error and was retried forever as if it were a network failure; they now use `requireSuccess()`, which also carries the server's short reason into the UI. DM REST calls (made through the WebSocket client) now report expired sessions like every other call.
+
+Open, by decision or out of scope for this pass:
+
+- Any workspace member may delete any task, while edits are restricted to creator/assignee. This looks like a product rule to confirm, not a bug to change silently.
+- Workspace member, invite-accept and join responses return the raw `avatarUrl` (null for default avatars) where other endpoints return the generated `/avatars/default/{id}` URL. The app handles both.
+- Offline profile edits other than passwords update only the local cache (no sync queue); the next profile fetch overwrites them.
+- Workspace invitation notifications are inserted without a WebSocket/FCM push, so invitees see them only on the next notification fetch.
+- Email change and account deletion still run bcrypt inside the DB transaction.
+- The server build pins the Ktor 3.1.0 BOM, but the version catalog resolves Ktor 3.5.0.
+- No emulator/device UI run was part of this pass; the server fixes need a deploy before the app sees them. The app stays compatible with the old server (it accepts the old bare `true` profile response).
+
 ## Broader maintainability work
 
 - Kotlin/KSP/serialization plugin version skew (3 different versions referenced) — bumping is a real regression risk without a full build/test run.

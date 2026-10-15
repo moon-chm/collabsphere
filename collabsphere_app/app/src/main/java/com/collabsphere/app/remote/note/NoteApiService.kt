@@ -42,7 +42,7 @@ class NoteApiService(private val client: HttpClient) {
     }
 
     suspend fun getNotes(workspaceId: Int): List<NotesResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId").body()
+        return client.get("$baseUrl/workspace/$workspaceId").requireSuccess().body()
     }
 
     suspend fun deleteNote(noteId: Int): HttpStatusCode =

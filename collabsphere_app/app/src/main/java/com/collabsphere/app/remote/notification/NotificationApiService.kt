@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.notification
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.notification.MarkReadRequest
 import com.collabsphere.app.dto.notification.MuteRequest
@@ -23,11 +24,11 @@ class NotificationApiService(private val client: HttpClient) {
                 if (unreadOnly) parameter("unread", "true")
                 parameter("limit", limit)
                 parameter("offset", offset)
-            }.body()
+            }.requireSuccess().body()
         }
 
     suspend fun getMutes(): List<MuteSetting> = withContext(Dispatchers.IO) {
-        client.get("$baseUrl/mutes").body()
+        client.get("$baseUrl/mutes").requireSuccess().body()
     }
 
     suspend fun setMute(request: MuteRequest): Boolean = withContext(Dispatchers.IO) {
@@ -38,7 +39,7 @@ class NotificationApiService(private val client: HttpClient) {
     }
 
     suspend fun getCount(): NotificationCountResponse = withContext(Dispatchers.IO) {
-        client.get("$baseUrl/count").body()
+        client.get("$baseUrl/count").requireSuccess().body()
     }
 
     suspend fun markRead(ids: List<Int>? = null): Boolean = withContext(Dispatchers.IO) {

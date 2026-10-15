@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory
 
 private val logger = LoggerFactory.getLogger("MessagesRoutes")
 
+private const val MAX_MESSAGE_LENGTH = 4000
+
 private fun ResultRow.toMessageResponse() = MessageResponse(
     id = this[MessageTable.id],
     userId = this[MessageTable.userId],
@@ -46,17 +48,17 @@ internal fun Route.messagesRoutes() {
                     val validMediaUrl = request.mediaUrl?.takeIf { CloudinaryService.isCloudinaryUrl(it) }
                     
                     if (request.content.isBlank() && validMediaUrl == null) {
-                        throw IllegalArgumentException("Message content cannot be blank")
+                        throw RequestRejected(HttpStatusCode.BadRequest, "Message content cannot be blank")
                     }
-                    if (request.content.length > 4000) {
-                        throw IllegalArgumentException("Message content too long")
+                    if (request.content.length > MAX_MESSAGE_LENGTH) {
+                        throw RequestRejected(HttpStatusCode.BadRequest, "Message content too long")
                     }
                     
                     val channel = ChannelsTable.selectAll().where {
                         (ChannelsTable.id eq request.channelId) and
                                 (ChannelsTable.workspaceId eq request.workspaceId) and
                                 (ChannelsTable.isDeleted eq false)
-                    }.singleOrNull() ?: throw IllegalArgumentException("Channel is missing or deleted")
+                    }.singleOrNull() ?: throw RequestRejected(HttpStatusCode.BadRequest, "Channel is missing or deleted")
 
                     val priorByKey = request.idempotencyKey?.let { key ->
                         MessageTable.selectAll().where { MessageTable.idempotencyKey eq key }.singleOrNull()
@@ -68,7 +70,7 @@ internal fun Route.messagesRoutes() {
                             priorByKey[MessageTable.content] == request.content &&
                             priorByKey[MessageTable.status] == request.status &&
                             priorByKey[MessageTable.mediaUrl] == validMediaUrl
-                        require(sameOperation) { "Idempotency key was already used for a different message" }
+                        if (!sameOperation) throw RequestRejected(HttpStatusCode.Conflict, "Idempotency key was already used for a different message")
                         val prior = priorByKey.toMessageResponse()
                         return@dbQuery prior to false
                     }
@@ -79,14 +81,18 @@ internal fun Route.messagesRoutes() {
                                     (MessageTable.channelId eq request.channelId) and
                                     (MessageTable.isDeleted eq false)
                         }.count() > 0L
-                        if (!targetExists) throw IllegalArgumentException("Reply target is missing, deleted, or in another channel")
+                        if (!targetExists) throw RequestRejected(HttpStatusCode.BadRequest, "Reply target is missing, deleted, or in another channel")
                         targetId
                     }
+                    // The author name is the account's, never the client-supplied one: otherwise anyone
+                    // could post as "Workspace Admin".
+                    val authorName = UsersTable.select(UsersTable.username).where { UsersTable.id eq actingUserId }
+                        .singleOrNull()?.get(UsersTable.username) ?: request.userName
                     val insertResult = MessageTable.insertIgnore {
                         it[MessageTable.userId] = actingUserId
                         it[MessageTable.workspaceId] = request.workspaceId
                         it[MessageTable.channelId] = request.channelId
-                        it[MessageTable.userName] = request.userName
+                        it[MessageTable.userName] = authorName
                         it[MessageTable.content] = request.content
                         it[MessageTable.replyToId] = validReplyToId
                         it[MessageTable.mediaUrl] = validMediaUrl
@@ -100,14 +106,13 @@ internal fun Route.messagesRoutes() {
                         val rowAfterConflict = request.idempotencyKey?.let { key ->
                             MessageTable.selectAll().where { MessageTable.idempotencyKey eq key }.singleOrNull()
                         } ?: error("Message insert conflicted without an idempotency row")
-                        require(
-                            rowAfterConflict[MessageTable.userId] == actingUserId &&
-                                rowAfterConflict[MessageTable.workspaceId] == request.workspaceId &&
-                                rowAfterConflict[MessageTable.channelId] == request.channelId &&
-                                rowAfterConflict[MessageTable.content] == request.content &&
-                                rowAfterConflict[MessageTable.status] == request.status &&
-                                rowAfterConflict[MessageTable.mediaUrl] == validMediaUrl
-                        ) { "Idempotency key was already used for a different message" }
+                        if (rowAfterConflict[MessageTable.userId] != actingUserId ||
+                            rowAfterConflict[MessageTable.workspaceId] != request.workspaceId ||
+                            rowAfterConflict[MessageTable.channelId] != request.channelId ||
+                            rowAfterConflict[MessageTable.content] != request.content ||
+                            rowAfterConflict[MessageTable.status] != request.status ||
+                            rowAfterConflict[MessageTable.mediaUrl] != validMediaUrl
+                        ) throw RequestRejected(HttpStatusCode.Conflict, "Idempotency key was already used for a different message")
                         return@dbQuery rowAfterConflict.toMessageResponse() to false
                     }
 
@@ -116,7 +121,7 @@ internal fun Route.messagesRoutes() {
                         userId = actingUserId,
                         workspaceId = request.workspaceId,
                         channelId = request.channelId,
-                        userName = request.userName,
+                        userName = authorName,
                         content = request.content,
                         status = request.status,
                         replyToId = validReplyToId,
@@ -189,14 +194,15 @@ internal fun Route.messagesRoutes() {
                     }
                     }
                 }
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, e.message ?: "Invalid request")
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    "Failed to insert message. Ensure parent references exist."
-                )
+                // The 201 may already be out: what failed then was a follow-up notification.
+                if (call.response.isCommitted) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    logger.error("[Messages] Post-create notification failed", e)
+                } else {
+                    val failure = classifyFailure(e, logger, "Message create")
+                    call.respond(failure.status, failure.message)
+                }
             }
         }
 
@@ -254,46 +260,42 @@ internal fun Route.messagesRoutes() {
                 }
                 val actingUserId = call.authenticatedUserId()
                 val request = call.receive<MessageRequest>()
+                if (request.content.length > MAX_MESSAGE_LENGTH) {
+                    return@put call.respond(HttpStatusCode.BadRequest, "Message content too long")
+                }
 
-                val updateResult = dbQuery {
-                    val existing = MessageTable.selectAll().where { MessageTable.id eq messageIdParam }.singleOrNull()
-                        ?: return@dbQuery -1
+                // -1 not found (or deleted), -2 not the sender, -3 would leave an empty message.
+                val updateResult: Pair<Int, MessageResponse?> = dbQuery {
+                    val existing = MessageTable.selectAll()
+                        .where { (MessageTable.id eq messageIdParam) and (MessageTable.isDeleted eq false) }
+                        .singleOrNull() ?: return@dbQuery -1 to null
                     if (existing[MessageTable.userId] != actingUserId) {
-                        return@dbQuery -2
+                        return@dbQuery -2 to null
                     }
                     if (!isMember(actingUserId, existing[MessageTable.workspaceId])) {
-                        return@dbQuery -2
+                        return@dbQuery -2 to null
                     }
+                    if (request.content.isBlank() && existing[MessageTable.mediaUrl] == null) return@dbQuery -3 to null
                     MessageTable.update({ MessageTable.id eq messageIdParam }) {
                         it[MessageTable.content] = request.content
                         it[MessageTable.status] = request.status
                         it[MessageTable.updatedAt] = System.currentTimeMillis()
                     }
+                    1 to MessageTable.selectAll().where { MessageTable.id eq messageIdParam }.single().toMessageResponse()
                 }
 
-                when {
-                    updateResult == -1 -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
-                    updateResult == -2 -> call.respond(HttpStatusCode.Forbidden, "Only the sender can edit this message")
-                    updateResult > 0 -> {
-                        call.respond(
-                            HttpStatusCode.OK,
-                            MessageResponse(
-                                id = messageIdParam,
-                                userId = actingUserId,
-                                workspaceId = request.workspaceId,
-                                channelId = request.channelId,
-                                userName = request.userName,
-                                content = request.content,
-                                status = request.status
-                            )
-                        )
+                when (updateResult.first) {
+                    -1 -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
+                    -2 -> call.respond(HttpStatusCode.Forbidden, "Only the sender can edit this message")
+                    -3 -> call.respond(HttpStatusCode.BadRequest, "Message content cannot be blank")
+                    else -> {
+                        call.respond(HttpStatusCode.OK, updateResult.second!!)
                         broadcastChannelMessageChange(messageIdParam)
                     }
-                    else -> call.respond(HttpStatusCode.NotFound, "Message not found to update")
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.InternalServerError, "Error updating message")
+                val failure = classifyFailure(e, logger, "Message edit")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -451,8 +453,13 @@ internal fun Route.messagesRoutes() {
                     event.second.forEach { sendToChannelCapableUser(it.toLong(), json) }
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, false)
+                if (call.response.isCommitted) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    logger.error("[Messages] Read-state broadcast failed", e)
+                } else {
+                    val failure = classifyFailure(e, logger, "Read-state update")
+                    call.respond(failure.status, false)
+                }
             }
         }
 
@@ -465,8 +472,14 @@ internal fun Route.messagesRoutes() {
                     return@get
                 }
                 val actingUserId = call.authenticatedUserId()
+                // null: not a member; second == false: the channel isn't in that workspace.
                 val states = dbQuery {
                     if (!isMember(actingUserId, workspaceIdParam)) return@dbQuery null
+                    // Membership of the named workspace says nothing about a channel id from another one.
+                    val channelInWorkspace = ChannelsTable.select(ChannelsTable.id)
+                        .where { (ChannelsTable.id eq channelIdParam) and (ChannelsTable.workspaceId eq workspaceIdParam) }
+                        .singleOrNull() != null
+                    if (!channelInWorkspace) return@dbQuery emptyList<ChannelReadState>() to false
                     (ChannelReadStateTable innerJoin UsersTable)
                         .selectAll()
                         .where { ChannelReadStateTable.channelId eq channelIdParam }
@@ -478,12 +491,12 @@ internal fun Route.messagesRoutes() {
                                 userName = it[UsersTable.username],
                                 lastReadMessageId = it[ChannelReadStateTable.lastReadMessageId]
                             )
-                        }
+                        } to true
                 }
-                if (states == null) {
-                    call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                } else {
-                    call.respond(HttpStatusCode.OK, states)
+                when {
+                    states == null -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                    !states.second -> call.respond(HttpStatusCode.NotFound, "Channel not found in this workspace")
+                    else -> call.respond(HttpStatusCode.OK, states.first)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e

@@ -28,7 +28,7 @@ class TaskApiService(private val client: HttpClient) {
     suspend fun getTasksByWorkspace(workspaceId: Int): List<TaskResponse> {
         return client.get("$baseUrl/workspace/$workspaceId") {
             contentType(ContentType.Application.Json)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun updateTask(taskId: Int, request: TaskRequest): TaskResponse {

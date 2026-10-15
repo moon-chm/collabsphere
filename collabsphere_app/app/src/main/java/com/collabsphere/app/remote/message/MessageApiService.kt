@@ -42,7 +42,7 @@ class MessageApiService(private val client: HttpClient) {
         client.delete("$baseUrl/$messageId/$userId/$workspaceId/$channelId").status
 
     suspend fun getMessageByuser(workspaceId: Int, channelId: Int): List<MessageResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").body()
+        return client.get("$baseUrl/workspace/$workspaceId/channels/$channelId").requireSuccess().body()
     }
 
     suspend fun markRead(workspaceId: Int, channelId: Int, lastReadMessageId: Int) {
@@ -53,7 +53,7 @@ class MessageApiService(private val client: HttpClient) {
     }
 
     suspend fun getReadStates(workspaceId: Int, channelId: Int): List<ChannelReadState> {
-        return client.get("$baseUrl/read/$workspaceId/$channelId").body()
+        return client.get("$baseUrl/read/$workspaceId/$channelId").requireSuccess().body()
     }
 
     suspend fun setPinned(messageId: Int, pinned: Boolean) {
@@ -74,7 +74,7 @@ class MessageApiService(private val client: HttpClient) {
             .alreadyMarked
 
     suspend fun getPinned(workspaceId: Int, channelId: Int): List<MessageSyncDto> {
-        return client.get("$baseUrl/pinned/$workspaceId/$channelId").body()
+        return client.get("$baseUrl/pinned/$workspaceId/$channelId").requireSuccess().body()
     }
 
     suspend fun toggleReaction(messageId: Int, emoji: String, add: Boolean): ChannelReactionSummary {
@@ -91,14 +91,14 @@ class MessageApiService(private val client: HttpClient) {
     suspend fun getReactions(workspaceId: Int, channelId: Int, fromId: Int): List<ChannelReactionSummary> {
         return client.get("$baseUrl/reactions/$workspaceId/$channelId") {
             parameter("fromId", fromId)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun getMessageHistory(workspaceId: Int, channelId: Int, beforeId: Int?, limit: Int): List<MessageSyncDto> {
         return client.get("$baseUrl/history/$workspaceId/$channelId") {
             beforeId?.let { parameter("before", it) }
             parameter("limit", limit)
-        }.body()
+        }.requireSuccess().body()
     }
 
     /** The newest page, plus the cursor to start delta sync from — read under the same snapshot as the page. */

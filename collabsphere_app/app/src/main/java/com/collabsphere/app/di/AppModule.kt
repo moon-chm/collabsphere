@@ -105,6 +105,21 @@ val DynamicTokenPlugin = io.ktor.client.plugins.api.createClientPlugin("DynamicT
     }
 }
 
+/** A 401 on our own session token means it was revoked or expired: let SessionEvents end the session. */
+private fun io.ktor.client.HttpClientConfig<*>.reportExpiredSessions() {
+    HttpResponseValidator {
+        validateResponse { response ->
+            if (response.status == io.ktor.http.HttpStatusCode.Unauthorized) {
+                val request = response.call.request
+                if (!request.url.encodedPath.endsWith("/api/login")) {
+                    val sentToken = request.headers[io.ktor.http.HttpHeaders.Authorization]?.removePrefix("Bearer ")
+                    SessionEvents.onUnauthorized(sentToken)
+                }
+            }
+        }
+    }
+}
+
 val networkModule = module {
     single(named("RegularHttpClient")) {
         HttpClient(OkHttp) {
@@ -122,17 +137,7 @@ val networkModule = module {
                 socketTimeoutMillis  = 60000
             }
             install(DynamicTokenPlugin)
-            HttpResponseValidator {
-                validateResponse { response ->
-                    if (response.status == io.ktor.http.HttpStatusCode.Unauthorized) {
-                        val request = response.call.request
-                        if (!request.url.encodedPath.endsWith("/api/login")) {
-                            val sentToken = request.headers[io.ktor.http.HttpHeaders.Authorization]?.removePrefix("Bearer ")
-                            SessionEvents.onUnauthorized(sentToken)
-                        }
-                    }
-                }
-            }
+            reportExpiredSessions()
         }
     }
 
@@ -159,6 +164,8 @@ val networkModule = module {
                 pingIntervalMillis = 15000
             }
             install(DynamicTokenPlugin)
+            // DmApiService also sends its REST calls (history, sync, presence) through this client.
+            reportExpiredSessions()
         }
     }
 

@@ -94,8 +94,8 @@ internal fun Route.workspaceRoutes() {
                 }
                 call.respond(outcome, outcome == HttpStatusCode.OK)
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, false)
+                val failure = classifyFailure(e, logger, "Role change")
+                call.respond(failure.status, false)
             }
         }
 
@@ -260,11 +260,10 @@ internal fun Route.workspaceRoutes() {
                             .singleOrNull()
                     }
                     if (existing != null) {
-                        require(
-                            existing[WorkspacesTable.workspaceName] == request.workspaceName &&
-                                existing[WorkspacesTable.workspaceOwner] == request.workspaceOwner &&
-                                PasswordHasher.matches(request.workspacePassword, existing[WorkspacesTable.workspacePassword])
-                        ) { "clientRequestId was already used for a different workspace" }
+                        if (existing[WorkspacesTable.workspaceName] != request.workspaceName ||
+                            existing[WorkspacesTable.workspaceOwner] != request.workspaceOwner ||
+                            !PasswordHasher.matches(request.workspacePassword, existing[WorkspacesTable.workspacePassword])
+                        ) throw RequestRejected(HttpStatusCode.Conflict, "clientRequestId was already used for a different workspace")
                         return@dbQuery WorkspaceResponse(
                             id = existing[WorkspacesTable.id],
                             userId = actingUserId,
@@ -300,8 +299,8 @@ internal fun Route.workspaceRoutes() {
 
                 call.respond(HttpStatusCode.Created, response)
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Database error")
+                val failure = classifyFailure(e, logger, "Workspace create")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -382,8 +381,8 @@ internal fun Route.workspaceRoutes() {
                     else -> call.respond(HttpStatusCode.Created, response)
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Error adding member")
+                val failure = classifyFailure(e, logger, "Adding member")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -428,8 +427,7 @@ internal fun Route.workspaceRoutes() {
                 }
 
                 // Generate unique 6-character alphanumeric code
-                val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-                val inviteCode = (1..6).map { chars.random() }.joinToString("")
+                val inviteCode = generateInviteCode()
                 val expiresAt = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L // 7 days
 
                 val insertResult = dbQuery {
@@ -516,8 +514,8 @@ internal fun Route.workspaceRoutes() {
                 call.respond(HttpStatusCode.Created, insertedInvitation)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                logger.error("[Workspace] Failed to send invitation", e)
-                call.respond(HttpStatusCode.BadRequest, "Failed to send invitation")
+                val failure = classifyFailure(e, logger, "Sending invitation")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -529,13 +527,18 @@ internal fun Route.workspaceRoutes() {
                 } ?: return@get call.respond(HttpStatusCode.Unauthorized, "User not found")
 
                 val pendingInvites = dbReadQuery {
-                    (WorkspaceInvitationsTable innerJoin WorkspacesTable innerJoin UsersTable)
+                    // Both workspace.user_id and inviter_user_id reference users, so the users join must
+                    // name its column: an implicit join is ambiguous and Exposed refuses it outright.
+                    (WorkspaceInvitationsTable innerJoin WorkspacesTable)
+                        .join(UsersTable, JoinType.INNER, WorkspaceInvitationsTable.inviterUserId, UsersTable.id)
                         .selectAll()
                         .where {
                             (WorkspaceInvitationsTable.inviteeEmail.lowerCase() eq userEmail.lowercase()) and
                             (WorkspaceInvitationsTable.status eq "PENDING") and
-                            (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
+                            (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis()) and
+                            (WorkspacesTable.isDeleted eq false)
                         }
+                        .orderBy(WorkspaceInvitationsTable.createdAt, SortOrder.DESC)
                         .map {
                             InvitationResponse(
                                 id = it[WorkspaceInvitationsTable.id],
@@ -552,8 +555,8 @@ internal fun Route.workspaceRoutes() {
                 }
                 call.respond(HttpStatusCode.OK, pendingInvites)
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.InternalServerError, "Failed to fetch invitations")
+                val failure = classifyFailure(e, logger, "Listing invitations")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -634,8 +637,8 @@ internal fun Route.workspaceRoutes() {
                     else -> call.respond(HttpStatusCode.NotFound, "Invitation not found")
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Failed to accept invitation")
+                val failure = classifyFailure(e, logger, "Accepting invitation")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -676,8 +679,8 @@ internal fun Route.workspaceRoutes() {
                     call.respond(HttpStatusCode.NotFound, "Invitation not found")
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Failed to decline invitation")
+                val failure = classifyFailure(e, logger, "Declining invitation")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -698,7 +701,9 @@ internal fun Route.workspaceRoutes() {
                             (WorkspaceInvitationsTable.status eq "PENDING") and
                             (WorkspaceInvitationsTable.expiresAt greater System.currentTimeMillis())
                         }
-                        .singleOrNull()
+                        .orderBy(WorkspaceInvitationsTable.id, SortOrder.DESC)
+                        .limit(1)
+                        .firstOrNull()
 
                     val wsId = if (invRow != null) {
                         invRow[WorkspaceInvitationsTable.workspaceId]
@@ -768,8 +773,8 @@ internal fun Route.workspaceRoutes() {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                logger.error("[Workspace] Failed to join workspace", e)
-                call.respond(HttpStatusCode.BadRequest, "Failed to join workspace")
+                val failure = classifyFailure(e, logger, "Joining by code")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -915,3 +920,10 @@ internal fun Route.workspaceRoutes() {
         }
     }
 }
+
+private val inviteCodeRandom = java.security.SecureRandom()
+private const val INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+/** Six characters with no 0/O/1/I lookalikes. A code grants workspace access, so it comes from a CSPRNG. */
+internal fun generateInviteCode(): String =
+    (1..6).map { INVITE_CODE_ALPHABET[inviteCodeRandom.nextInt(INVITE_CODE_ALPHABET.length)] }.joinToString("")

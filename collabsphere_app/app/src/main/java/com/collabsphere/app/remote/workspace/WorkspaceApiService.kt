@@ -67,7 +67,7 @@ class WorkspaceApiService(
     suspend fun getWorkspacesByUserId(userId: Int): List<WorkspaceResponse> {
         return client.get("$baseUrl/user/$userId") {
             contentType(ContentType.Application.Json)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun getWorkspaceUpdates(userId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<WorkspaceSyncDto> {
@@ -88,7 +88,7 @@ class WorkspaceApiService(
     suspend fun getWorkspaceMembers(workspaceId: Int): List<MemberResponse> {
         return client.get("$baseUrl/members/$workspaceId") {
             contentType(ContentType.Application.Json)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun sendInvitation(
@@ -98,19 +98,19 @@ class WorkspaceApiService(
         return client.post("$baseUrl/invitations/$workspaceId") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun getPendingInvitations(): List<com.collabsphere.app.dto.workspace.InvitationResponse> {
         return client.get("$baseUrl/invitations/pending") {
             contentType(ContentType.Application.Json)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun acceptInvitation(invitationId: Int): MemberResponse {
         return client.post("$baseUrl/invitations/$invitationId/accept") {
             contentType(ContentType.Application.Json)
-        }.body()
+        }.requireSuccess().body()
     }
 
     suspend fun declineInvitation(invitationId: Int): Boolean {
@@ -124,6 +124,6 @@ class WorkspaceApiService(
         return client.post("$baseUrl/join-by-code") {
             contentType(ContentType.Application.Json)
             setBody(request)
-        }.body()
+        }.requireSuccess().body()
     }
 }

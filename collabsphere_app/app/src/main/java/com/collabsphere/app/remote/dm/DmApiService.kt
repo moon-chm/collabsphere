@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.dm
 
+import com.collabsphere.app.remote.requireSuccess
 import android.util.Log
 import com.collabsphere.app.AuthTokenHolder
 import com.collabsphere.app.ChannelMessageCenter
@@ -192,7 +193,7 @@ class DmApiService(
         return client.get("$cleanBaseUrl/api/dm/history/$workspaceId/$partnerId") {
             beforeId?.let { parameter("before", it) }
             parameter("limit", limit)
-        }.body()
+        }.requireSuccess().body()
     }
 
     /**
@@ -212,7 +213,7 @@ class DmApiService(
     suspend fun getOnlineUsers(baseUrl: String, workspaceId: Int): List<Int> {
         return try {
             val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
-            client.get("$cleanBaseUrl/api/presence/$workspaceId").body()
+            client.get("$cleanBaseUrl/api/presence/$workspaceId").requireSuccess().body()
         } catch (e: Exception) {
             Log.w("DmApiService", "Failed fetching presence for workspace $workspaceId: ${e.message}")
             emptyList()

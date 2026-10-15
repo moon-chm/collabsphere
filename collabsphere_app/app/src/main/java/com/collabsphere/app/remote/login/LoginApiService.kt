@@ -1,5 +1,6 @@
 package com.collabsphere.app.remote.login
 
+import com.collabsphere.app.remote.requireSuccess
 import com.collabsphere.app.AppConfig
 import com.collabsphere.app.dto.login.LoginRequest
 import com.collabsphere.app.dto.login.RegisterRequest
@@ -112,12 +113,18 @@ class LoginApiService(private val client: HttpClient) {
         }
     }
 
-    suspend fun updateProfile(request: com.collabsphere.app.dto.login.UpdateProfileRequest): Boolean = withContext(Dispatchers.IO) {
+    /** Null when the server refused the change; network failures throw. */
+    suspend fun updateProfile(
+        request: com.collabsphere.app.dto.login.UpdateProfileRequest
+    ): com.collabsphere.app.dto.login.UpdateProfileResponse? = withContext(Dispatchers.IO) {
         val response: HttpResponse = client.post("${AppConfig.BASE_URL}/api/user/profile") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
-        response.status.isSuccess()
+        if (!response.status.isSuccess()) return@withContext null
+        // Servers from before token rotation answer a bare `true`.
+        runCatching { response.body<com.collabsphere.app.dto.login.UpdateProfileResponse>() }
+            .getOrDefault(com.collabsphere.app.dto.login.UpdateProfileResponse())
     }
 
     suspend fun getProfile(): UserProfileResponse = withContext(Dispatchers.IO) {
@@ -205,15 +212,15 @@ class LoginApiService(private val client: HttpClient) {
     }
 
     suspend fun blockUser(targetUserId: Int): BlockUserResponse = withContext(Dispatchers.IO) {
-        client.post("${AppConfig.BASE_URL}/api/user/block/$targetUserId").body()
+        client.post("${AppConfig.BASE_URL}/api/user/block/$targetUserId").requireSuccess().body()
     }
 
     suspend fun unblockUser(targetUserId: Int): BlockUserResponse = withContext(Dispatchers.IO) {
-        client.delete("${AppConfig.BASE_URL}/api/user/block/$targetUserId").body()
+        client.delete("${AppConfig.BASE_URL}/api/user/block/$targetUserId").requireSuccess().body()
     }
 
     suspend fun getBlockedUsers(): List<SearchUserResult> = withContext(Dispatchers.IO) {
-        client.get("${AppConfig.BASE_URL}/api/user/blocks").body()
+        client.get("${AppConfig.BASE_URL}/api/user/blocks").requireSuccess().body()
     }
 
     suspend fun updatePrivacySettings(request: PrivacySettingsRequest): HttpResponse = withContext(Dispatchers.IO) {

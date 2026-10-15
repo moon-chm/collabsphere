@@ -142,12 +142,13 @@ class UserRepo(
             val user = userDao.getUserByEmail(userEmail) ?: userDao.getUserById(userId)
             if (user == null || user.id != userId) return false
 
-            if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
-                val currentMatches = user.password.isEmpty() || PasswordHasher.matches(currentPassword, user.password)
+            val changingPassword = !newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()
+            if (changingPassword) {
+                val currentMatches = user.password.isEmpty() || PasswordHasher.matches(currentPassword!!, user.password)
                 if (!currentMatches) return false
             }
 
-            val remoteSuccess = try {
+            val remote = try {
                 apiService.updateProfile(
                     com.collabsphere.app.dto.login.UpdateProfileRequest(
                         userId = userId,
@@ -159,13 +160,16 @@ class UserRepo(
                     )
                 )
             } catch (e: Exception) {
-                // If offline / network unreachable, allow local cache update
-                true
-            }
+                if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+                // Offline: a profile edit may live in the local cache until the next profile fetch, but
+                // a password change that never reached the server must not look applied.
+                if (changingPassword) return false
+                com.collabsphere.app.dto.login.UpdateProfileResponse()
+            } ?: return false
 
-            if (!remoteSuccess) {
-                return false
-            }
+            // The server revoked the old session token with the password change; switch to its replacement
+            // before anything else uses the session.
+            remote.token?.let { userPreferences.saveAuthToken(it) }
 
             if (!newPassword.isNullOrBlank() && !currentPassword.isNullOrBlank()) {
                 userDao.updateUserProfileWithPassword(userId, newName, PasswordHasher.hash(newPassword))

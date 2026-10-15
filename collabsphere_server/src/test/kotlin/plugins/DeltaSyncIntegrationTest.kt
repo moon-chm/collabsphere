@@ -61,7 +61,7 @@ class DeltaSyncIntegrationTest {
 
     @AfterTest
     fun cleanUpFixtureRows() {
-        if (createdUserIds.isEmpty() && createdWorkspaceIds.isEmpty()) return
+        if (createdUserIds.isEmpty() && createdWorkspaceIds.isEmpty() && createdReminderKeys.isEmpty()) return
         transaction {
             if (createdUserIds.isNotEmpty()) {
                 NotificationsTable.deleteWhere { NotificationsTable.recipientId inList createdUserIds }
@@ -81,6 +81,7 @@ class DeltaSyncIntegrationTest {
         }
         createdWorkspaceIds.clear()
         createdUserIds.clear()
+        createdReminderKeys.clear()
     }
 
     private fun insertTask(workspaceId: Int, userId: Int, name: String, updatedAt: Long = System.currentTimeMillis()) =

@@ -71,8 +71,8 @@ internal fun Route.notesRoutes() {
                 if (newNotes == null) call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
                 else call.respond(HttpStatusCode.Created, newNotes)
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.BadRequest, "Database structure mismatch or missing foreign row.")
+                val failure = classifyFailure(e, logger, "Note create")
+                call.respond(failure.status, failure.message)
             }
         }
 
@@ -147,34 +147,38 @@ internal fun Route.notesRoutes() {
                 if (request.notesName.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, "Note name cannot be blank")
                 if (request.notesName.length > 255) return@put call.respond(HttpStatusCode.BadRequest, "Note name too long")
                 if (request.description.length > 10000) return@put call.respond(HttpStatusCode.BadRequest, "Note description too long")
-                val updateResult = dbQuery {
-                    val existingNote = NotesTable.selectAll().where { NotesTable.id eq noteIdParam }.singleOrNull()
-                        ?: return@dbQuery -1
+                // -1 not found (or deleted), -2 not a member; otherwise the stored note.
+                val updateResult: Pair<Int, NotesResponse?> = dbQuery {
+                    val existingNote = NotesTable.selectAll()
+                        .where { (NotesTable.id eq noteIdParam) and (NotesTable.isDeleted eq false) }
+                        .singleOrNull() ?: return@dbQuery -1 to null
                     if (!isMember(actingUserId, existingNote[NotesTable.workspaceId]) ||
                         !isMember(actingUserId, request.workspaceId)
-                    ) return@dbQuery -2
+                    ) return@dbQuery -2 to null
                     NotesTable.update({ NotesTable.id eq noteIdParam }) {
                         it[NotesTable.notesName] = request.notesName
                         it[NotesTable.workspaceId] = request.workspaceId
                         it[NotesTable.notesDescription] = request.description
                         it[NotesTable.updatedAt] = System.currentTimeMillis()
                     }
-                }
-                when {
-                    updateResult == -1 -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
-                    updateResult == -2 -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
-                    updateResult > 0   -> call.respond(HttpStatusCode.OK, NotesResponse(
+                    // The author and pin state are the stored ones, not the editor's.
+                    1 to NotesResponse(
                         id = noteIdParam,
-                        userId = actingUserId,
+                        userId = existingNote[NotesTable.userIdNotes],
                         notesName = request.notesName,
                         workspaceId = request.workspaceId,
-                        description = request.description
-                    ))
-                    else -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
+                        description = request.description,
+                        isPinned = existingNote[NotesTable.isPinned]
+                    )
+                }
+                when (updateResult.first) {
+                    -1 -> call.respond(HttpStatusCode.NotFound, "Note not found to update")
+                    -2 -> call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                    else -> call.respond(HttpStatusCode.OK, updateResult.second!!)
                 }
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                call.respond(HttpStatusCode.InternalServerError, "Error updating note")
+                val failure = classifyFailure(e, logger, "Note edit")
+                call.respond(failure.status, failure.message)
             }
         }
 

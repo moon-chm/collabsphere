@@ -4,7 +4,6 @@ import plugins.WebSocketBroker
 import plugins.configureRouting
 import plugins.configureGitHubRoutes
 import plugins.startTaskReminderScheduler
-import plugins.causedByPayloadTooLarge
 import com.collabsphere.util.JwtConfig
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -144,13 +143,11 @@ fun Application.module() {
     // from ever reaching a client.
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            // A JSON body cut off by JsonBodyLimit surfaces here wrapped by the deserializer.
-            if (cause.causedByPayloadTooLarge()) {
-                call.respond(HttpStatusCode.PayloadTooLarge, "Request body too large")
-                return@exception
-            }
-            call.application.environment.log.error("Unhandled exception caught by StatusPages", cause)
-            call.respond(HttpStatusCode.InternalServerError, "Internal server error")
+            // Same classification as the routes' own handlers: a malformed body is the client's to fix
+            // (4xx, dropped by the app's sync), anything unrecognised is a retryable 500. A JSON body
+            // cut off by JsonBodyLimit surfaces here wrapped by the deserializer.
+            val failure = plugins.classifyFailure(cause, call.application.environment.log, "Request ${call.request.local.uri}")
+            call.respond(failure.status, failure.message)
         }
     }
 

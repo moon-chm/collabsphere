@@ -35,7 +35,7 @@ class ChannelApiService(private val client: HttpClient) {
     }
 
     suspend fun getchannelbyuser(workspaceId: Int): List<ChannelResponse> {
-        return client.get("$baseUrl/workspace/$workspaceId").body()
+        return client.get("$baseUrl/workspace/$workspaceId").requireSuccess().body()
     }
 
     suspend fun getChannelUpdates(workspaceId: Int, since: Long, cursor: Long?, pageToken: String? = null): SyncPage<ChannelSyncDto> {
