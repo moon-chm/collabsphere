@@ -84,6 +84,7 @@ class MessageSyncWorker(
                 content = content,
                 status = status,
                 replyToId = inputData.getInt("REPLY_TO_ID", 0).takeIf { it > 0 },
+                threadRootId = inputData.getInt("THREAD_ROOT_ID", 0).takeIf { it > 0 },
                 mediaUrl = inputData.getString("MEDIA_URL"),
                 idempotencyKey = messageDao.getMessageById(messageId)?.clientMutationId
                     ?: inputData.getString("IDEMPOTENCY_KEY")

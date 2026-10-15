@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.runtime.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,12 +40,27 @@ fun ReactionPickerDialog(
     onPick: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("reaction_recents", android.content.Context.MODE_PRIVATE) }
+    val quickRow = remember {
+        val recent = prefs.getString("recent", null)?.split("\u0000")?.filter { it.isNotBlank() }.orEmpty()
+        (recent + REACTION_EMOJI_CHOICES).distinct().take(6)
+    }
+    var expanded by remember { mutableStateOf(false) }
+
+    fun pick(emoji: String) {
+        val recent = prefs.getString("recent", null)?.split("\u0000")?.filter { it.isNotBlank() }.orEmpty()
+        prefs.edit().putString("recent", (listOf(emoji) + recent).distinct().take(12).joinToString("\u0000")).apply()
+        onPick(emoji)
+        onDismiss()
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .clip(RoundedCornerShape(24.dp))
                 .background(SurfaceRaised)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -52,24 +69,47 @@ fun ReactionPickerDialog(
                 color = Muted
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                REACTION_EMOJI_CHOICES.forEach { emoji ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                quickRow.forEach { emoji ->
                     val isSelected = emoji in selectedEmojis
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(42.dp)
                             .clip(CircleShape)
                             .background(if (isSelected) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
                             .border(1.dp, if (isSelected) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)
-                            .clickable {
-                                onPick(emoji)
-                                onDismiss()
-                            },
+                            .clickable { pick(emoji) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = emoji, fontSize = 24.sp)
+                        Text(text = emoji, fontSize = 22.sp)
                     }
                 }
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(if (expanded) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
+                        .border(1.dp, if (expanded) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)
+                        .clickable { expanded = !expanded },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = if (expanded) "–" else "+", fontSize = 22.sp, color = Muted)
+                }
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { ctx ->
+                        androidx.emoji2.emojipicker.EmojiPickerView(ctx).apply {
+                            emojiGridColumns = 8
+                            setOnEmojiPickedListener { item -> pick(item.emoji) }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                )
             }
         }
     }

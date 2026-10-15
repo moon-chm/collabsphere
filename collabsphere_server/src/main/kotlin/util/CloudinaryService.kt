@@ -85,6 +85,26 @@ object CloudinaryService {
         }
     }
 
+    suspend fun uploadAudio(file: File, publicId: String): String = withContext(Dispatchers.IO) {
+        val timestamp = (System.currentTimeMillis() / 1000).toString()
+        val folder = "voice"
+        val signature = sha1Hex("folder=$folder&public_id=$publicId&timestamp=$timestamp$apiSecret")
+        postMultipart(
+            url = "https://api.cloudinary.com/v1_1/$cloudName/video/upload",
+            fields = listOf(
+                "api_key" to apiKey,
+                "timestamp" to timestamp,
+                "public_id" to publicId,
+                "folder" to folder,
+                "signature" to signature
+            ),
+            fileName = "$publicId.m4a",
+            contentType = "audio/mp4",
+            file = file,
+            failureLabel = "Cloudinary audio upload"
+        )
+    }
+
     val isConfigured: Boolean
         get() = listOf("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")
             .all { !System.getenv(it).isNullOrBlank() }

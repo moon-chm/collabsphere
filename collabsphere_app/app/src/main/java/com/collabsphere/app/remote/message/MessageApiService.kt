@@ -22,6 +22,20 @@ import io.ktor.http.*
 
 class MessageApiService(private val client: HttpClient) {
 
+    suspend fun getSaved(): List<com.collabsphere.app.dto.message.SavedMessageItem> =
+        client.get("${AppConfig.BASE_URL}/api/saved").requireSuccess().body()
+
+    suspend fun saveMessage(kind: String, messageId: Int) {
+        client.post("${AppConfig.BASE_URL}/api/saved") {
+            contentType(ContentType.Application.Json)
+            setBody(com.collabsphere.app.dto.message.SaveMessageRequest(kind, messageId))
+        }.requireSuccess()
+    }
+
+    suspend fun unsaveMessage(kind: String, messageId: Int) {
+        client.delete("${AppConfig.BASE_URL}/api/saved/$kind/$messageId").requireSuccess()
+    }
+
     suspend fun getUnreadCounts(workspaceId: Int): List<ChannelUnreadCount> =
         client.get("$baseUrl/unread/$workspaceId").requireSuccess().body()
 

@@ -1,5 +1,17 @@
 package com.collabsphere.app.view.MessageUI
 
+import androidx.compose.material.icons.automirrored.filled.Comment
+import com.collabsphere.app.view.components.VoiceMessagePlayer
+import com.collabsphere.app.view.components.VoiceRecorder
+import com.collabsphere.app.view.components.VoiceRecordingBar
+import com.collabsphere.app.view.components.isVoiceMediaUrl
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.BookmarkRemove
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Search
+import com.collabsphere.app.view.components.ChatSearchBar
+import com.collabsphere.app.view.components.chatSearchMatches
+import com.collabsphere.app.view.components.rememberChatSearchState
 import androidx.compose.material.icons.automirrored.filled.Forward
 import com.collabsphere.app.view.components.ForwardDialog
 import com.collabsphere.app.view.components.ForwardPerson
@@ -143,6 +155,11 @@ fun MessageScreen(
     var canModerate by remember { mutableStateOf(false) }
     var forwardPeople by remember { mutableStateOf<List<ForwardPerson>>(emptyList()) }
     var forwardTarget by remember { mutableStateOf<MessageEntity?>(null) }
+    var threadRoot by remember { mutableStateOf<MessageEntity?>(null) }
+    val threadSummaries by viewModel.threadSummaries.collectAsStateWithLifecycle()
+    val savedStore = koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
+    val savedKeys by savedStore.keys.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { savedStore.refresh() }
     LaunchedEffect(viewModel.currentWorkspaceId) {
         val members = runCatching { workspaceApi.getWorkspaceMembers(viewModel.currentWorkspaceId) }.getOrNull().orEmpty()
         forwardPeople = members.map { ForwardPerson(it.userId, it.userName) }
@@ -163,6 +180,20 @@ fun MessageScreen(
     }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val voiceRecorder = remember { VoiceRecorder(context) }
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    val startVoice = {
+        if (voiceRecorder.start()) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            isRecordingVoice = true
+        } else {
+            AppToast.error("Couldn't start recording")
+        }
+    }
+    val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) startVoice() else AppToast.show("Allow microphone access to record voice messages") }
+    DisposableEffect(Unit) { onDispose { voiceRecorder.cancel() } }
     LaunchedEffect(Unit) {
         viewModel.uiMessages.collect { AppToast.show(it) }
     }
@@ -197,6 +228,18 @@ fun MessageScreen(
     val awayFromLatest by remember(latestRow) { derivedStateOf { listState.isAwayFromLatest(latestRow) } }
     LaunchedEffect(awayFromLatest) { if (!awayFromLatest) jumpToLatest.reset() }
     var initialScrollDone by remember { mutableStateOf(false) }
+    val search = rememberChatSearchState(viewModel.currentChannelId)
+    val searchMatches = remember(messages, search.query) { chatSearchMatches(messages.orEmpty(), search.query) { it.content } }
+    val searchTargetIndex = searchMatches.getOrNull(searchMatches.size - 1 - search.position)
+    LaunchedEffect(searchTargetIndex, search.isOpen) {
+        val index = searchTargetIndex
+        if (!search.isOpen || index == null) {
+            search.highlightedId = null
+            return@LaunchedEffect
+        }
+        search.highlightedId = messages?.getOrNull(index)?.id
+        listState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0)
+    }
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex <= 2 && listState.isScrollInProgress }
             .distinctUntilChanged()
@@ -269,6 +312,10 @@ fun MessageScreen(
 
     fullscreenImageUrl?.let { imageUrl ->
         FullScreenImageViewer(url = imageUrl, onDismiss = { fullscreenImageUrl = null })
+    }
+
+    threadRoot?.let { root ->
+        ThreadSheet(root = root, viewModel = viewModel, onDismiss = { threadRoot = null })
     }
 
     forwardTarget?.let { target ->
@@ -398,6 +445,14 @@ fun MessageScreen(
                         )
                     }
 
+                    IconButton(onClick = { if (search.isOpen) search.close() else search.isOpen = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search in channel",
+                            tint = if (search.isOpen) CoralStart else IndigoStart
+                        )
+                    }
+
                     IconButton(
                         onClick = {
                             coroutineScope.launch {
@@ -483,6 +538,26 @@ fun MessageScreen(
                             )
                         }
                     }
+                }
+
+                if (isRecordingVoice) {
+                    VoiceRecordingBar(
+                        recorder = voiceRecorder,
+                        onCancel = {
+                            voiceRecorder.cancel()
+                            isRecordingVoice = false
+                        },
+                        onSend = {
+                            val file = voiceRecorder.stop()
+                            isRecordingVoice = false
+                            if (file == null) {
+                                AppToast.show("Hold on a little longer to record")
+                            } else {
+                                viewModel.onSendMedia(file.readBytes(), "audio/mp4", file.name)
+                                file.delete()
+                            }
+                        }
+                    )
                 }
 
                 if (isUploadingMedia) {
@@ -606,7 +681,8 @@ fun MessageScreen(
                         label = "sendScale"
                     )
 
-                    val canSend = messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia
+                    val showMic = messageContent.isBlank() && !isEditing && !isUploadingMedia && !isRecordingVoice
+                    val canSend = (messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia) || showMic
                     val sendAlpha = if (canSend) 1f else 0.70f
 
                     Box(
@@ -657,6 +733,10 @@ fun MessageScreen(
                                     isEditing = false
                                     selectedMessage = null
                                     viewModel.endEdit()
+                                } else if (showMic) {
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) startVoice() else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel.onSendMessageUser()
@@ -665,8 +745,8 @@ fun MessageScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
+                            imageVector = if (showMic) Icons.Default.Mic else Icons.AutoMirrored.Filled.Send,
+                            contentDescription = if (showMic) "Record voice message" else "Send",
                             tint = Color.White,
                             modifier = Modifier.size(19.dp)
                         )
@@ -750,7 +830,16 @@ fun MessageScreen(
                             previous.userId == message.userId &&
                             sentAt != null && previousSentAt != null && sentAt - previousSentAt < 5 * 60_000L
 
-                        Column(modifier = Modifier.fillMaxWidth().animateItem().padding(top = if (continuesGroup) 0.dp else 8.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateItem()
+                                .padding(top = if (continuesGroup) 0.dp else 8.dp)
+                                .background(
+                                    if (search.highlightedId == message.id) CoralStart.copy(alpha = 0.10f) else Color.Transparent,
+                                    RoundedCornerShape(12.dp)
+                                )
+                        ) {
                         if (startsNewDay) {
                             ChatDateSeparator(timestamp = sentAt!!)
                         }
@@ -901,7 +990,10 @@ fun MessageScreen(
                                                 }
                                             )
                                         }
-                                        message.mediaUrl?.let { mediaUrl ->
+                                        message.mediaUrl?.takeIf { isVoiceMediaUrl(it) }?.let { voiceUrl ->
+                                            VoiceMessagePlayer(url = voiceUrl, onDarkBubble = isOwnMessage)
+                                        }
+                                        message.mediaUrl?.takeUnless { isVoiceMediaUrl(it) }?.let { mediaUrl ->
                                             SubcomposeAsyncImage(
                                                 model = ImageRequest.Builder(context).data(mediaUrl).crossfade(true).build(),
                                                 contentDescription = "Shared image",
@@ -985,6 +1077,17 @@ fun MessageScreen(
                                                     }
                                                 )
                                             }
+                                            if (message.id > 0 && message.threadRootId == null) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Reply in thread", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        threadRoot = message
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                )
+                                            }
                                             if (message.content.isNotBlank()) {
                                                 DropdownMenuItem(
                                                     text = { Text("Copy", color = Ink) },
@@ -1006,6 +1109,27 @@ fun MessageScreen(
                                                         selectedMessage = null
                                                     },
                                                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                )
+                                                val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("CHANNEL", message.id) in savedKeys
+                                                DropdownMenuItem(
+                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        selectedMessage = null
+                                                        coroutineScope.launch {
+                                                            savedStore.toggle("CHANNEL", message.id)
+                                                                .onSuccess { saved -> AppToast.show(if (saved) "Saved" else "Removed from saved") }
+                                                                .onFailure { AppToast.error("Couldn't update saved. Check your connection.") }
+                                                        }
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
+                                                            contentDescription = null,
+                                                            tint = CoralStart,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
                                                 )
                                             }
                                             if (message.id > 0) {
@@ -1099,6 +1223,29 @@ fun MessageScreen(
                                     onToggle = { emoji -> viewModel.toggleReaction(message.id, emoji) }
                                 )
 
+                                threadSummaries[message.id]?.let { summary ->
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(top = 4.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(IndigoStart.copy(alpha = 0.08f))
+                                            .clickable { threadRoot = message }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = listOfNotNull(
+                                                if (summary.count == 1) "1 reply" else "${summary.count} replies",
+                                                summary.lastReplyAt?.let(::chatTime)
+                                            ).joinToString(" · "),
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = IndigoStart
+                                        )
+                                    }
+                                }
+
                                 if (message.id > 0 && message.id == messages?.lastOrNull()?.id) {
                                     seenByLabel(readStates.values, message, currentUserId)?.let { label ->
                                         Text(
@@ -1118,6 +1265,15 @@ fun MessageScreen(
                     } // else
                 } // when
             } // Crossfade
+            if (search.isOpen) {
+                ChatSearchBar(
+                    state = search,
+                    matchCount = searchMatches.size,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(2f)
+                )
+            }
             JumpToLatestButton(
                 visible = !messages.isNullOrEmpty() && awayFromLatest,
                 unseenCount = jumpToLatest.unseenCount,

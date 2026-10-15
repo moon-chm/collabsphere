@@ -58,5 +58,6 @@ data class MessageEntity(
     /** When the text was last changed after sending; null if never edited. */
     val editedAt: Long? = null,
     /** When it was sent. Locally created messages stamp it now; the server's value replaces it on sync. */
-    val createdAt: Long? = System.currentTimeMillis()
+    val createdAt: Long? = System.currentTimeMillis(),
+    val threadRootId: Int? = null
 )

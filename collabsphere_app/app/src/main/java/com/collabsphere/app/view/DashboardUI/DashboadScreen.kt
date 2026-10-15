@@ -1,5 +1,6 @@
 package com.collabsphere.app.view
 
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -82,7 +83,8 @@ fun DashboardScreen(
     onJoinByCode          : ((String) -> Unit)? = null,
     joinByCodeStatus      : String? = null,
     onClearJoinByCodeStatus: (() -> Unit)? = null,
-    onOpenWorkspaceTasks  : (WorkspaceEntity) -> Unit = {}
+    onOpenWorkspaceTasks  : (WorkspaceEntity) -> Unit = {},
+    onSavedMessagesClick  : () -> Unit = {}
 ) {
     // ── All original state preserved ──
 
@@ -453,6 +455,10 @@ fun DashboardScreen(
                 onOpenTasks = onOpenWorkspaceTasks,
                 onNotificationsClick = onNotificationsClick
             )
+
+            Spacer(Modifier.height(12.dp))
+
+            SavedMessagesRow(onClick = onSavedMessagesClick)
 
             Spacer(Modifier.height(16.dp))
 
@@ -1096,5 +1102,47 @@ private fun JoinWorkspaceByCodeDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SavedMessagesRow(onClick: () -> Unit) {
+    val store = org.koin.compose.koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
+    val items by store.items.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { store.refresh() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .skeuoFloatingCard(cornerRadius = 18.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(CoralStart.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Bookmark, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = "Saved messages",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Ink,
+            modifier = Modifier.weight(1f)
+        )
+        if (items.isNotEmpty()) {
+            Text(
+                text = items.size.toString(),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = Muted
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp))
     }
 }

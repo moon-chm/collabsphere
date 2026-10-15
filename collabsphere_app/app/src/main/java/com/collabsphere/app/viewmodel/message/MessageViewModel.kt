@@ -290,6 +290,31 @@ class MessageViewModel(
         }
     }
 
+    val threadSummaries: StateFlow<Map<Int, com.collabsphere.app.model.message.ThreadSummary>> =
+        repo.getThreadSummaries(loggedWorkspaceId, loggedChannelId)
+            .map { rows -> rows.associateBy { it.rootId } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    fun threadReplies(rootId: Int) = repo.getThreadReplies(rootId)
+
+    fun sendThreadReply(rootId: Int, content: String) {
+        val text = content.trim()
+        if (text.isEmpty()) return
+        viewModelScope.launch {
+            repo.sendMessageToUser(
+                MessageEntity(
+                    userId = loggedUserId,
+                    workspaceId = loggedWorkspaceId,
+                    channelId = loggedChannelId,
+                    userName = loggedUserName,
+                    content = text,
+                    status = MessageStatus.Delivered,
+                    threadRootId = rootId
+                )
+            )
+        }
+    }
+
     private val _firstUnreadAfterId = MutableStateFlow<Int?>(null)
     val firstUnreadAfterId = _firstUnreadAfterId.asStateFlow()
     private var lastMarkedReadId = 0

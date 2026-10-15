@@ -1,5 +1,15 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -215,5 +225,90 @@ fun lastSeenLabel(lastSeen: Long, now: Long = System.currentTimeMillis()): Strin
         isSameChatDay(lastSeen, now) -> "Last seen today at ${chatTime(lastSeen)}"
         isSameChatDay(lastSeen, now - 86_400_000L) -> "Last seen yesterday at ${chatTime(lastSeen)}"
         else -> "Last seen ${chatDayLabel(lastSeen)}"
+    }
+}
+
+class ChatSearchState {
+    var isOpen by mutableStateOf(false)
+    var query by mutableStateOf("")
+    var position by mutableIntStateOf(0)
+    var highlightedId by mutableStateOf<Int?>(null)
+
+    fun close() {
+        isOpen = false
+        query = ""
+        position = 0
+        highlightedId = null
+    }
+}
+
+@Composable
+fun rememberChatSearchState(key: Any?): ChatSearchState = remember(key) { ChatSearchState() }
+
+fun <T> chatSearchMatches(items: List<T>, query: String, text: (T) -> String): List<Int> {
+    val q = query.trim()
+    if (q.length < 2) return emptyList()
+    return items.indices.filter { text(items[it]).contains(q, ignoreCase = true) }
+}
+
+@Composable
+fun ChatSearchBar(
+    state: ChatSearchState,
+    matchCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .height(50.dp)
+            .skeuoInset(cornerRadius = 25.dp, depth = 3.dp, symmetric = true, shadowStrength = FieldInsetShadow)
+            .background(SurfaceRaised.copy(alpha = 0.6f), RoundedCornerShape(25.dp))
+            .padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = state.query,
+            onValueChange = {
+                state.query = it
+                state.position = 0
+            },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+            cursorBrush = SolidColor(CoralStart),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (state.query.isEmpty()) {
+                        Text("Search in chat", style = MaterialTheme.typography.bodyLarge, color = Ink.copy(alpha = 0.40f))
+                    }
+                    inner()
+                }
+            }
+        )
+        if (state.query.trim().length >= 2) {
+            Text(
+                text = if (matchCount == 0) "No results" else "${state.position + 1} of $matchCount",
+                style = MaterialTheme.typography.labelMedium,
+                color = Muted,
+                maxLines = 1
+            )
+        }
+        IconButton(onClick = { if (matchCount > 0) state.position = (state.position + 1) % matchCount }, enabled = matchCount > 1) {
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Older match", tint = if (matchCount > 1) Ink else Muted.copy(alpha = 0.4f))
+        }
+        IconButton(onClick = { if (matchCount > 0) state.position = (state.position - 1 + matchCount) % matchCount }, enabled = matchCount > 1) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Newer match", tint = if (matchCount > 1) Ink else Muted.copy(alpha = 0.4f))
+        }
+        IconButton(onClick = { state.close() }) {
+            Icon(Icons.Default.Close, contentDescription = "Close search", tint = Muted)
+        }
     }
 }

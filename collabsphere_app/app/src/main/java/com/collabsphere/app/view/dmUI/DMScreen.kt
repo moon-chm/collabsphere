@@ -1,5 +1,17 @@
 package com.collabsphere.app.view.dmUI
 
+import com.collabsphere.app.view.components.VoiceMessagePlayer
+import com.collabsphere.app.view.components.VoiceRecorder
+import com.collabsphere.app.view.components.VoiceRecordingBar
+import com.collabsphere.app.view.components.isVoiceMediaUrl
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.BookmarkRemove
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.ui.zIndex
+import androidx.compose.material.icons.filled.Search
+import com.collabsphere.app.view.components.ChatSearchBar
+import com.collabsphere.app.view.components.chatSearchMatches
+import com.collabsphere.app.view.components.rememberChatSearchState
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.PushPin
 import com.collabsphere.app.view.components.ForwardDialog
@@ -129,7 +141,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.collabsphere.app.view.components.UserListSkeleton
 
-private val REACTION_EMOJIS = listOf("👍", "❤️", "😂", "🚀", "👀")
 
 private fun formatDmDateHeader(timestamp: Long): String {
     val messageCal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
@@ -245,6 +256,7 @@ fun DMScreen(
     val onlineUserIds by viewModel.onlineUserIds.collectAsStateWithLifecycle()
     val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
+    val myReactedEmojis by viewModel.myReactedEmojis.collectAsStateWithLifecycle()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
     val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
     val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
@@ -268,13 +280,29 @@ fun DMScreen(
     var showActionMenu by remember { mutableStateOf(false) }
     var showReactionPickerFor by remember { mutableStateOf<DmEntity?>(null) }
     var forwardTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    val savedStore = org.koin.compose.koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
+    val savedKeys by savedStore.keys.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { savedStore.refresh() }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     var showPartnerProfileDialog by remember { mutableStateOf(false) }
 
     val lazyListState = rememberLazyListState()
     val context = LocalContext.current
-
     val currentPartnerId = activeChatPartner?.id
+    val voiceRecorder = remember { VoiceRecorder(context) }
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    val startVoice = {
+        if (voiceRecorder.start()) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            isRecordingVoice = true
+        } else {
+            AppToast.error("Couldn't start recording")
+        }
+    }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startVoice() else AppToast.show("Allow microphone access to record voice messages")
+    }
+    DisposableEffect(Unit) { onDispose { voiceRecorder.cancel() } }
     val currentMembersList = workspaceMembers
     val isPartnerTyping = activeChatPartner?.let { it.id in typingPartnerIds } ?: false
     var replyingTo by remember { mutableStateOf<DmEntity?>(null) }
@@ -394,6 +422,18 @@ fun DMScreen(
     LaunchedEffect(awayFromLatest) { if (!awayFromLatest) jumpToLatest.reset() }
     var initialScrollDoneFor by remember { mutableStateOf<Int?>(null) }
     var lastCountedMessageId by remember(activeChatPartner?.id) { mutableStateOf<Int?>(null) }
+    val search = rememberChatSearchState(activeChatPartner?.id)
+    val searchMatches = remember(messages, search.query) { chatSearchMatches(messages, search.query) { it.dm_content } }
+    val searchTargetIndex = searchMatches.getOrNull(searchMatches.size - 1 - search.position)
+    LaunchedEffect(searchTargetIndex, search.isOpen) {
+        val index = searchTargetIndex
+        if (!search.isOpen || index == null) {
+            search.highlightedId = null
+            return@LaunchedEffect
+        }
+        search.highlightedId = messages.getOrNull(index)?.id
+        lazyListState.animateScrollToItem(index + if (isLoadingOlder) 1 else 0)
+    }
 
     LaunchedEffect(firstUnreadId) {
         val id = firstUnreadId ?: return@LaunchedEffect
@@ -738,88 +778,20 @@ fun DMScreen(
 
     // Emoji reaction picker popup
     showReactionPickerFor?.let { targetMessage ->
-        Dialog(onDismissRequest = { showReactionPickerFor = null }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
-                    .drawWithCache {
-                        onDrawBehind {
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.22f),
-                            topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(24.dp.toPx())
-                        )
-                        drawRoundRect(
-                            color = ShadowLight.copy(alpha = 0.85f),
-                            topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(24.dp.toPx())
-                        )
-                        drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                        }
-                    }
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "React to message",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Muted
+        com.collabsphere.app.view.components.ReactionPickerDialog(
+            selectedEmojis = myReactedEmojis[targetMessage.id].orEmpty(),
+            onPick = { emoji ->
+                activeChatPartner?.let { partner ->
+                    viewModel.toggleReaction(
+                        messageId = targetMessage.id,
+                        emoji = emoji,
+                        workspaceId = workspaceId,
+                        receiverId = partner.id
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val partner = activeChatPartner
-                        REACTION_EMOJIS.forEach { emoji ->
-                            val myReactionMap = reactions[targetMessage.id]
-                            val isReacted = myReactionMap?.containsKey(emoji) == true
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                        if (isReacted) {
-                                            drawCircle(
-                                                color = CoralStart.copy(alpha = 0.25f),
-                                                radius = size.minDimension / 2f
-                                            )
-                                        }
-                                        drawCircle(
-                                            color = ShadowDark.copy(alpha = 0.14f),
-                                            radius = size.minDimension / 2f,
-                                            center = Offset(center.x + 1.dp.toPx(), center.y + 2.dp.toPx())
-                                        )
-                                        drawCircle(
-                                            color = if (isReacted) CoralStart.copy(alpha = 0.15f) else SurfaceRaised,
-                                            radius = size.minDimension / 2f
-                                        )
-                                        }
-                                    }
-                                    .clip(CircleShape)
-                                    .clickable {
-                                        if (partner != null) {
-                                            viewModel.toggleReaction(
-                                                messageId = targetMessage.id,
-                                                emoji = emoji,
-                                                workspaceId = workspaceId,
-                                                receiverId = partner.id
-                                            )
-                                        }
-                                        showReactionPickerFor = null
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = emoji, fontSize = 24.sp)
-                            }
-                        }
-                    }
                 }
-            }
-        }
+            },
+            onDismiss = { showReactionPickerFor = null }
+        )
     }
 
     AnimatedContent(
@@ -1123,6 +1095,13 @@ fun DMScreen(
                             }
 
                             // Info action button
+                            IconButton(onClick = { if (search.isOpen) search.close() else search.isOpen = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search in conversation",
+                                    tint = if (search.isOpen) CoralStart else Muted
+                                )
+                            }
                             IconButton(
                                 onClick = { showPartnerProfileDialog = true },
                                 modifier = Modifier
@@ -1328,7 +1307,12 @@ fun DMScreen(
                                     SwipeToReply(
                                         enabled = message.id > 0,
                                         onReply = { replyingTo = message },
-                                        modifier = Modifier.animateItem()
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .background(
+                                                if (search.highlightedId == message.id) CoralStart.copy(alpha = 0.12f) else Color.Transparent,
+                                                RoundedCornerShape(12.dp)
+                                            )
                                     ) {
                                     if (isOwnMessage) {
                                         // Outgoing message (Aligned End)
@@ -1404,7 +1388,9 @@ fun DMScreen(
                                                             )
                                                         }
                                                         // Media image
-                                                        if (hasMedia) {
+                                                        if (hasMedia && isVoiceMediaUrl(message.mediaUrl)) {
+                                                            VoiceMessagePlayer(url = message.mediaUrl!!, onDarkBubble = isOwnMessage)
+                                                        } else if (hasMedia) {
                                                             SubcomposeAsyncImage(
                                                                 model = ImageRequest.Builder(context)
                                                                     .data(message.mediaUrl)
@@ -1552,6 +1538,27 @@ fun DMScreen(
                                                                         selectedMessage = null
                                                                     },
                                                                     leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                                val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("DM", message.id) in savedKeys
+                                                                DropdownMenuItem(
+                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                                    onClick = {
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                        replyScope.launch {
+                                                                            savedStore.toggle("DM", message.id)
+                                                                                .onSuccess { saved -> AppToast.show(if (saved) "Saved" else "Removed from saved") }
+                                                                                .onFailure { AppToast.error("Couldn't update saved. Check your connection.") }
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(
+                                                                            if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
+                                                                            contentDescription = null,
+                                                                            tint = CoralStart,
+                                                                            modifier = Modifier.size(20.dp)
+                                                                        )
+                                                                    }
                                                                 )
                                                             }
                                                             DropdownMenuItem(
@@ -1766,7 +1773,9 @@ fun DMScreen(
                                                             )
                                                         }
                                                         // Media image
-                                                        if (hasMedia) {
+                                                        if (hasMedia && isVoiceMediaUrl(message.mediaUrl)) {
+                                                            VoiceMessagePlayer(url = message.mediaUrl!!, onDarkBubble = isOwnMessage)
+                                                        } else if (hasMedia) {
                                                             SubcomposeAsyncImage(
                                                                 model = ImageRequest.Builder(context)
                                                                     .data(message.mediaUrl)
@@ -1899,6 +1908,27 @@ fun DMScreen(
                                                                     },
                                                                     leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                                 )
+                                                                val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("DM", message.id) in savedKeys
+                                                                DropdownMenuItem(
+                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                                    onClick = {
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                        replyScope.launch {
+                                                                            savedStore.toggle("DM", message.id)
+                                                                                .onSuccess { saved -> AppToast.show(if (saved) "Saved" else "Removed from saved") }
+                                                                                .onFailure { AppToast.error("Couldn't update saved. Check your connection.") }
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(
+                                                                            if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
+                                                                            contentDescription = null,
+                                                                            tint = CoralStart,
+                                                                            modifier = Modifier.size(20.dp)
+                                                                        )
+                                                                    }
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -1989,6 +2019,15 @@ fun DMScreen(
                                 modifier = Modifier.align(Alignment.TopCenter)
                             )
                         }
+                        if (search.isOpen) {
+                            ChatSearchBar(
+                                state = search,
+                                matchCount = searchMatches.size,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .zIndex(2f)
+                            )
+                        }
                         JumpToLatestButton(
                             visible = messages.isNotEmpty() && awayFromLatest,
                             unseenCount = jumpToLatest.unseenCount,
@@ -2068,6 +2107,34 @@ fun DMScreen(
                         }
 
                         // Media upload progress bar
+                        if (isRecordingVoice) {
+                            VoiceRecordingBar(
+                                recorder = voiceRecorder,
+                                onCancel = {
+                                    voiceRecorder.cancel()
+                                    isRecordingVoice = false
+                                },
+                                onSend = {
+                                    val file = voiceRecorder.stop()
+                                    isRecordingVoice = false
+                                    if (file == null) {
+                                        AppToast.show("Hold on a little longer to record")
+                                    } else {
+                                        viewModel.sendMediaMessage(
+                                            baseUrl = baseUrl,
+                                            workspaceId = workspaceId,
+                                            senderId = currentUserId.toInt(),
+                                            receiverId = partner.id,
+                                            fileBytes = file.readBytes(),
+                                            mimeType = "audio/mp4",
+                                            fileName = file.name
+                                        )
+                                        file.delete()
+                                    }
+                                }
+                            )
+                        }
+
                         AnimatedVisibility(
                             visible = isUploadingMedia,
                             enter = fadeIn(),
@@ -2190,7 +2257,8 @@ fun DMScreen(
                                 // Send / Update Button
                                 val sendInteractionSource = remember { MutableInteractionSource() }
                                 val isSendPressed by sendInteractionSource.collectIsPressedAsState()
-                                val canSend = typedText.trim().isNotEmpty() && !isUploadingMedia && !isSendingMessage
+                                val showMic = typedText.isBlank() && editingMessage == null && !isUploadingMedia && !isRecordingVoice
+                                val canSend = (typedText.trim().isNotEmpty() && !isUploadingMedia && !isSendingMessage) || showMic
                                 val sendScale by animateFloatAsState(
                                     targetValue = if (isSendPressed) 0.90f else if (canSend) 1f else 0.88f,
                                     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
@@ -2217,7 +2285,11 @@ fun DMScreen(
                                             interactionSource = sendInteractionSource,
                                             indication = null
                                         ) {
-                                            if (typedText.trim().isNotEmpty()) {
+                                            if (showMic) {
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                                                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                                                ) startVoice() else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                                            } else if (typedText.trim().isNotEmpty()) {
                                                 val textToSend = typedText.trim()
                                                 val currentlyEditing = editingMessage
                                                 if (currentlyEditing != null) {
@@ -2234,8 +2306,16 @@ fun DMScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (editingMessage != null) Icons.Default.Check else Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = if (editingMessage != null) "Update Message" else "Send Message",
+                                        imageVector = when {
+                                            editingMessage != null -> Icons.Default.Check
+                                            showMic -> Icons.Default.Mic
+                                            else -> Icons.AutoMirrored.Filled.Send
+                                        },
+                                        contentDescription = when {
+                                            editingMessage != null -> "Update Message"
+                                            showMic -> "Record voice message"
+                                            else -> "Send Message"
+                                        },
                                         tint = Color.White,
                                         modifier = Modifier.size(19.dp)
                                     )

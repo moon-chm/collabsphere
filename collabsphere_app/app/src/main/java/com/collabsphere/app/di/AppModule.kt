@@ -75,7 +75,7 @@ val databaseModule = module {
         )
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42, AppDatabase.MIGRATION_42_43, AppDatabase.MIGRATION_43_44, AppDatabase.MIGRATION_44_45, AppDatabase.MIGRATION_45_46, AppDatabase.MIGRATION_46_47, AppDatabase.MIGRATION_47_48)
+            .addMigrations(AppDatabase.MIGRATION_35_36, AppDatabase.MIGRATION_36_37, AppDatabase.MIGRATION_37_38, AppDatabase.MIGRATION_38_39, AppDatabase.MIGRATION_39_40, AppDatabase.MIGRATION_40_41, AppDatabase.MIGRATION_41_42, AppDatabase.MIGRATION_42_43, AppDatabase.MIGRATION_43_44, AppDatabase.MIGRATION_44_45, AppDatabase.MIGRATION_45_46, AppDatabase.MIGRATION_46_47, AppDatabase.MIGRATION_47_48, AppDatabase.MIGRATION_48_49)
             .build()
     }
 
@@ -175,6 +175,7 @@ val networkModule = module {
     single { ChannelApiService(get(named("RegularHttpClient"))) }
     single { NoteApiService(get(named("RegularHttpClient"))) }
     single { MessageApiService(get(named("RegularHttpClient"))) }
+    single { com.collabsphere.app.model.message.SavedMessagesStore(get()) }
     single { DmApiService(get(named("WebSocketHttpClient"))) }
     single { MediaApiService() }
     single { FileApiService(get(named("RegularHttpClient"))) }

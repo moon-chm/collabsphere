@@ -1561,6 +1561,7 @@ fun Application.configureRouting() {
             // Workspace contribution analytics — plugins/routes/AnalyticsRoutes.kt
             rateLimit(RateLimitName("api")) {
                 analyticsRoutes()
+                savedMessagesRoutes()
             }
 
 
@@ -1743,7 +1744,7 @@ fun Application.configureRouting() {
                                                 actorId = savedMessageDto.senderId,
                                                 type = "DM",
                                                 title = "$senderUsername sent you a message",
-                                                body = savedMessageDto.content.take(200),
+                                                body = savedMessageDto.content.ifBlank { mediaNotificationLabel(savedMessageDto.mediaUrl) }.take(200),
                                                 workspaceId = savedMessageDto.workspaceId,
                                                 referenceId = savedMessageDto.id
                                             )

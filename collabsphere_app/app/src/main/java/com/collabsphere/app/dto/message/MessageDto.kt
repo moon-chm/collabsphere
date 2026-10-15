@@ -14,7 +14,8 @@ data class MessageRequest(
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
     val pinnedAt: Long? = null,
-    val idempotencyKey: String? = null
+    val idempotencyKey: String? = null,
+    val threadRootId: Int? = null
 )
 
 @Serializable
@@ -30,7 +31,8 @@ data class MessageResponse(
     val mediaUrl: String? = null,
     val pinnedAt: Long? = null,
     val editedAt: Long? = null,
-    val createdAt: Long? = null
+    val createdAt: Long? = null,
+    val threadRootId: Int? = null
 )
 
 @Serializable
@@ -49,7 +51,8 @@ data class MessageSyncDto(
     val pinnedAt: Long? = null,
     val editedAt: Long? = null,
     /** When the message was sent (older messages report their last update instead). */
-    val createdAt: Long? = null
+    val createdAt: Long? = null,
+    val threadRootId: Int? = null
 )
 
 /** GET /api/message/unread/{workspaceId}: unread messages by others, per channel (zero counts omitted). */
@@ -117,4 +120,28 @@ data class ChannelTypingEvent(
 data class ChannelMessageEvent(
     val action: String = "CHANNEL_MESSAGE_EVENT",
     val message: MessageSyncDto
+)
+
+@Serializable
+data class SaveMessageRequest(
+    val kind: String,
+    val messageId: Int
+)
+
+@Serializable
+data class SavedMessageItem(
+    val kind: String,
+    val messageId: Int,
+    val workspaceId: Int,
+    val workspaceName: String = "",
+    val channelId: Int? = null,
+    val channelName: String? = null,
+    val partnerId: Int? = null,
+    val partnerName: String? = null,
+    val authorId: Int,
+    val authorName: String = "",
+    val content: String = "",
+    val mediaUrl: String? = null,
+    val sentAt: Long,
+    val savedAt: Long
 )

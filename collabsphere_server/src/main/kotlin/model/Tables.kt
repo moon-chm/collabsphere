@@ -183,6 +183,7 @@ object MessageTable : Table("message") {
     // When the message was sent. Null on rows that predate the column (they report updated_at instead;
     // backfilling would bump sync_xid and make every client re-download them).
     val createdAt = long("created_at").nullable().clientDefault { System.currentTimeMillis() }
+    val threadRootId = integer("thread_root_id").nullable()
     // Stable client operation identity lets an offline retry recover a create whose first response
     // was lost without creating another message. Nullable keeps older clients compatible.
     val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
@@ -915,5 +916,18 @@ object MessageHelpfulMarksTable : Table("message_helpful_marks") {
 
     init {
         index(false, markerId, createdAt)
+    }
+}
+
+object SavedMessagesTable : Table("saved_messages") {
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val kind = varchar("kind", 10)
+    val messageId = integer("message_id")
+    val savedAt = long("saved_at")
+
+    override val primaryKey = PrimaryKey(userId, kind, messageId)
+
+    init {
+        index(false, userId, savedAt)
     }
 }

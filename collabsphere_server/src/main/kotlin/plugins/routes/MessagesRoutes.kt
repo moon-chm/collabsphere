@@ -34,7 +34,8 @@ private fun ResultRow.toMessageResponse() = MessageResponse(
     mediaUrl = this[MessageTable.mediaUrl],
     pinnedAt = this[MessageTable.pinnedAt],
     editedAt = this[MessageTable.editedAt],
-    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt]
+    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt],
+    threadRootId = this[MessageTable.threadRootId]
 )
 
 internal fun Route.messagesRoutes() {
@@ -86,6 +87,15 @@ internal fun Route.messagesRoutes() {
                         if (!targetExists) throw RequestRejected(HttpStatusCode.BadRequest, "Reply target is missing, deleted, or in another channel")
                         targetId
                     }
+                    val validThreadRootId = request.threadRootId?.let { rootId ->
+                        val root = MessageTable.selectAll().where {
+                            (MessageTable.id eq rootId) and
+                                    (MessageTable.workspaceId eq request.workspaceId) and
+                                    (MessageTable.channelId eq request.channelId) and
+                                    (MessageTable.isDeleted eq false)
+                        }.singleOrNull() ?: throw RequestRejected(HttpStatusCode.BadRequest, "Thread is missing, deleted, or in another channel")
+                        root[MessageTable.threadRootId] ?: rootId
+                    }
                     // The author name is the account's, never the client-supplied one: otherwise anyone
                     // could post as "Workspace Admin".
                     val authorName = UsersTable.select(UsersTable.username).where { UsersTable.id eq actingUserId }
@@ -97,6 +107,7 @@ internal fun Route.messagesRoutes() {
                         it[MessageTable.userName] = authorName
                         it[MessageTable.content] = request.content
                         it[MessageTable.replyToId] = validReplyToId
+                        it[MessageTable.threadRootId] = validThreadRootId
                         it[MessageTable.mediaUrl] = validMediaUrl
                         it[MessageTable.status] = request.status
                         it[MessageTable.idempotencyKey] = request.idempotencyKey
@@ -128,7 +139,8 @@ internal fun Route.messagesRoutes() {
                         status = request.status,
                         replyToId = validReplyToId,
                         mediaUrl = validMediaUrl,
-                        createdAt = insertResult.resultedValues?.singleOrNull()?.get(MessageTable.createdAt)
+                        createdAt = insertResult.resultedValues?.singleOrNull()?.get(MessageTable.createdAt),
+                        threadRootId = validThreadRootId
                     )
                     created to true
                 }
@@ -150,7 +162,7 @@ internal fun Route.messagesRoutes() {
                             .singleOrNull()?.get(ChannelsTable.channelName)
                     }
 
-                    val notificationBody = request.content.ifBlank { if (newMessage.mediaUrl != null) "📷 Photo" else "" }.take(200)
+                    val notificationBody = request.content.ifBlank { mediaNotificationLabel(newMessage.mediaUrl) }.take(200)
                     // Parse @mentions from content
                     val mentionedUsernames = MENTION_REGEX.findAll(request.content)
                         .map { it.groupValues[1].lowercase() }.toSet()
@@ -175,8 +187,35 @@ internal fun Route.messagesRoutes() {
                             .toSet()
                     }
 
+                    val threadRootId = newMessage.threadRootId
+                    val threadParticipants = if (threadRootId == null) emptySet() else dbQuery {
+                        val rootAuthor = MessageTable.select(MessageTable.userId)
+                            .where { MessageTable.id eq threadRootId }
+                            .singleOrNull()?.get(MessageTable.userId)
+                        val repliers = MessageTable.select(MessageTable.userId)
+                            .where { (MessageTable.threadRootId eq threadRootId) and (MessageTable.isDeleted eq false) }
+                            .map { it[MessageTable.userId] }
+                        (repliers + listOfNotNull(rootAuthor)).toSet() - actingUserId
+                    }
+
                     channelMembers.forEach { (memberId, memberUsername) ->
                         val isMentioned = memberUsername in mentionedUsernames
+                        if (threadRootId != null && !isMentioned) {
+                            if (memberId in threadParticipants) {
+                                createAndPushNotification(
+                                    recipientId = memberId,
+                                    actorId = actingUserId,
+                                    type = "CHANNEL_MESSAGE",
+                                    title = "$senderName replied in a thread",
+                                    body = notificationBody,
+                                    workspaceId = request.workspaceId,
+                                    referenceId = newMessage.id,
+                                    channelId = request.channelId,
+                                    channelName = channelName
+                                )
+                            }
+                            return@forEach
+                        }
                         if (!isMentioned && memberId in mutedMemberIds) return@forEach
                         if (isMentioned) {
                             createAndPushNotification(
@@ -254,7 +293,8 @@ internal fun Route.messagesRoutes() {
                             mediaUrl = it[MessageTable.mediaUrl],
                             pinnedAt = it[MessageTable.pinnedAt],
                             editedAt = it[MessageTable.editedAt],
-                            createdAt = it[MessageTable.createdAt] ?: it[MessageTable.updatedAt]
+                            createdAt = it[MessageTable.createdAt] ?: it[MessageTable.updatedAt],
+                            threadRootId = it[MessageTable.threadRootId]
                         )
                     }
             }
@@ -760,4 +800,10 @@ internal fun Route.messagesRoutes() {
             }
         }
     }
+}
+
+internal fun mediaNotificationLabel(mediaUrl: String?): String = when {
+    mediaUrl == null -> ""
+    mediaUrl.contains("/voice/") -> "🎤 Voice message"
+    else -> "📷 Photo"
 }

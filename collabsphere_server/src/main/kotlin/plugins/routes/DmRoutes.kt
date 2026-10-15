@@ -93,6 +93,7 @@ internal fun Route.dmRoutes() {
     post("/api/media/upload") {
         val actingUserId = call.authenticatedUserId()
         var staged: File? = null
+        var isAudio = false
         try {
             // Checked before anything is read: a declared oversize body is refused outright, and an
             // undeclared (chunked) one is cut off by stageToTempFile the moment it passes the cap.
@@ -101,6 +102,7 @@ internal fun Route.dmRoutes() {
 
             multipart.forEachPart { part ->
                 if (part is PartData.FileItem && staged == null) {
+                    isAudio = part.contentType?.contentType == "audio"
                     staged = part.stageToTempFile(MAX_UPLOAD_BYTES)
                 }
                 part.dispose()
@@ -109,7 +111,8 @@ internal fun Route.dmRoutes() {
             val mediaFile = staged ?: return@post call.respond(HttpStatusCode.BadRequest, "No file provided")
 
             val publicId = "dm_${actingUserId}_${System.currentTimeMillis()}"
-            val uploadedUrl = CloudinaryService.uploadAvatar(mediaFile, publicId)
+            val uploadedUrl = if (isAudio) CloudinaryService.uploadAudio(mediaFile, publicId)
+            else CloudinaryService.uploadAvatar(mediaFile, publicId)
             call.respond(HttpStatusCode.OK, mapOf("url" to uploadedUrl))
         } catch (e: UploadTooLargeException) {
             call.respond(HttpStatusCode.PayloadTooLarge, e.message ?: "File too large")

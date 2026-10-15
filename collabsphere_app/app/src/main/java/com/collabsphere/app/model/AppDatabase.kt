@@ -43,7 +43,7 @@ import com.collabsphere.app.model.vote.TaskVoteProposalEntity
         com.collabsphere.app.model.progression.ProgressionCatalogEntity::class,
         com.collabsphere.app.model.progression.BadgeProgressEntity::class
     ],
-    version = 48,
+    version = 49,
     exportSchema = false
 )
 @TypeConverters(TaskListConverters::class)
@@ -189,6 +189,12 @@ abstract class AppDatabase : RoomDatabase() {
          * Server-authoritative data only — nothing here can grant SP or badges locally.
          */
         /** Migration 46 → 47: "edited" labels for channel messages and DMs, and send times for channel messages. */
+        val MIGRATION_48_49 = object : Migration(48, 49) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN threadRootId INTEGER")
+            }
+        }
+
         val MIGRATION_47_48 = object : Migration(47, 48) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE DM ADD COLUMN pinnedAt INTEGER")

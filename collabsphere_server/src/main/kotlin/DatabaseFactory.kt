@@ -127,7 +127,8 @@ object DatabaseFactory {
                 UserContributionWorkspacesTable,
                 UserGitHubIdentitiesTable,
                 GitHubPrApprovalsTable,
-                MessageHelpfulMarksTable
+                MessageHelpfulMarksTable,
+                SavedMessagesTable
             )
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()

@@ -73,12 +73,14 @@ class MessageRepo(
         status = status.name,
         replyToId = replyToId,
         mediaUrl = mediaUrl,
-        idempotencyKey = idempotencyKey
+        idempotencyKey = idempotencyKey,
+        threadRootId = threadRootId
     )
 
     private fun MessageEntity.toCreateWorkData(localId: Int, idempotencyKey: String) = workDataOf(
         "ACTION_TYPE" to "CREATE",
         "REPLY_TO_ID" to (replyToId ?: 0),
+        "THREAD_ROOT_ID" to (threadRootId ?: 0),
         "MEDIA_URL" to mediaUrl,
         "MESSAGE_ID" to localId,
         "USER_ID" to userId,
@@ -148,6 +150,11 @@ class MessageRepo(
     // Offline-first: emit cached Room data immediately, delta loop keeps it fresh in background.
     fun getMessage(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>> =
         messageDao.getMessageForChannels(workspaceId, channelId)
+
+    fun getThreadReplies(rootId: Int): Flow<List<MessageEntity>> = messageDao.getThreadReplies(rootId)
+
+    fun getThreadSummaries(workspaceId: Int, channelId: Int): Flow<List<ThreadSummary>> =
+        messageDao.getThreadSummaries(workspaceId, channelId)
 
     fun getMessagesPaged(workspaceId: Int, channelId: Int): Flow<PagingData<MessageEntity>> =
         Pager(
@@ -343,7 +350,8 @@ class MessageRepo(
         mediaUrl = mediaUrl,
         pinnedAt = pinnedAt,
         editedAt = editedAt,
-        createdAt = createdAt ?: updatedAt
+        createdAt = createdAt ?: updatedAt,
+        threadRootId = threadRootId
     )
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {

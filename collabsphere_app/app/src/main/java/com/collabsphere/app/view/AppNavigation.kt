@@ -302,6 +302,11 @@ fun AppNavigation(
                             navController.navigate("notifications")
                         }
                     },
+                    onSavedMessagesClick = {
+                        if (navController.currentDestination?.route == "dashboard") {
+                            navController.navigate("saved_messages")
+                        }
+                    },
                     unreadNotificationCount = unreadNotificationCount,
                     onJoinByCode = { code ->
                         workspaceViewModel.joinByCode(code)
@@ -309,6 +314,26 @@ fun AppNavigation(
                     joinByCodeStatus = joinByCodeStatus,
                     onClearJoinByCodeStatus = {
                         workspaceViewModel.clearJoinByCodeStatus()
+                    }
+                )
+            }
+
+            composable("saved_messages") {
+                com.collabsphere.app.view.MessageUI.SavedMessagesScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpen = { item ->
+                        val encoded = { value: String -> URLEncoder.encode(value, StandardCharsets.UTF_8.toString()) }
+                        val channelId = item.channelId
+                        val partnerId = item.partnerId
+                        if (item.kind == "CHANNEL" && channelId != null) {
+                            navController.navigate(
+                                "channel_chat/${item.workspaceId}/$channelId/${encoded(item.channelName ?: "channel")}?userName=${encoded(loggedInUsername)}"
+                            )
+                        } else if (partnerId != null) {
+                            navController.navigate(
+                                "workspace_detailed/${item.workspaceId}/${encoded(item.workspaceName)}?initialTab=4&initialPartnerId=$partnerId"
+                            )
+                        }
                     }
                 )
             }

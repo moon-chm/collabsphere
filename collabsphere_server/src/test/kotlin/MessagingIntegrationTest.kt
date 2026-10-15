@@ -1,5 +1,6 @@
 import com.collabsphere.dto.ChannelUnreadCount
 import com.collabsphere.dto.MessageResponse
+import com.collabsphere.dto.SavedMessageItem
 import com.collabsphere.model.ChannelsTable
 import com.collabsphere.model.UsersTable
 import com.collabsphere.model.WorkspaceMembersTable
@@ -181,5 +182,77 @@ class MessagingIntegrationTest {
 
         val outsider = client.signUp("unread-outsider")
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/message/unread/$ws") { bearerAuth(outsider.token) }.status)
+    }
+
+    @Test
+    fun `saved messages are private, need access to the message and drop deleted ones`() = testApplication {
+        application { module() }
+        val owner = client.signUp("saved-owner")
+        val outsider = client.signUp("saved-outsider")
+        val (ws, channel) = workspaceWithChannel(owner.id)
+        val message = client.send(owner, ws, channel, "keep this")
+
+        suspend fun save(account: Account) = client.post("/api/saved") {
+            bearerAuth(account.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"kind":"CHANNEL","messageId":${message.id}}""")
+        }
+        suspend fun list(account: Account): List<SavedMessageItem> =
+            json.decodeFromString(client.get("/api/saved") { bearerAuth(account.token) }.bodyAsText())
+
+        assertEquals(HttpStatusCode.NotFound, save(outsider).status, "outsiders cannot save another workspace's message")
+        assertEquals(HttpStatusCode.OK, save(owner).status)
+        assertEquals(HttpStatusCode.OK, save(owner).status, "saving twice is harmless")
+
+        val saved = list(owner).single()
+        assertEquals(message.id, saved.messageId)
+        assertEquals(channel, saved.channelId)
+        assertEquals("messaging", saved.workspaceName)
+        assertEquals("keep this", saved.content)
+        assertTrue(list(outsider).isEmpty())
+
+        assertEquals(HttpStatusCode.OK, client.remove(owner, message).status)
+        assertTrue(list(owner).isEmpty(), "deleted messages leave the saved list")
+
+        val second = client.send(owner, ws, channel, "second")
+        client.post("/api/saved") {
+            bearerAuth(owner.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"kind":"CHANNEL","messageId":${second.id}}""")
+        }
+        assertEquals(1, list(owner).size)
+        assertEquals(HttpStatusCode.OK, client.delete("/api/saved/CHANNEL/${second.id}") { bearerAuth(owner.token) }.status)
+        assertTrue(list(owner).isEmpty())
+    }
+
+    @Test
+    fun `thread replies attach to the root, flatten nested replies and stay out of unread counts`() = testApplication {
+        application { module() }
+        val owner = client.signUp("thread-owner")
+        val reader = client.signUp("thread-reader")
+        val (ws, channel) = workspaceWithChannel(owner.id, reader.id)
+        val (_, otherChannel) = workspaceWithChannel(owner.id)
+
+        suspend fun reply(author: Account, rootId: Int, inChannel: Int = channel, content: String) = client.post("/api/message") {
+            bearerAuth(author.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"userId":${author.id},"workspaceId":$ws,"channelId":$inChannel,"userName":"x","content":"$content","status":"Delivered","threadRootId":$rootId}""")
+        }
+
+        val root = client.send(owner, ws, channel, "root")
+        val first = reply(owner, root.id, content = "in thread")
+        assertEquals(HttpStatusCode.Created, first.status, first.bodyAsText())
+        val firstReply = json.decodeFromString<MessageResponse>(first.bodyAsText())
+        assertEquals(root.id, firstReply.threadRootId)
+
+        val nested = json.decodeFromString<MessageResponse>(reply(owner, firstReply.id, content = "nested").bodyAsText())
+        assertEquals(root.id, nested.threadRootId, "replying to a reply stays in the same thread")
+
+        assertEquals(HttpStatusCode.BadRequest, reply(owner, root.id, inChannel = otherChannel, content = "wrong").status)
+
+        val unread = json.decodeFromString<List<ChannelUnreadCount>>(
+            client.get("/api/message/unread/$ws") { bearerAuth(reader.token) }.bodyAsText()
+        ).associate { it.channelId to it.count }
+        assertEquals(1, unread[channel], "only the root counts as unread in the channel")
     }
 }

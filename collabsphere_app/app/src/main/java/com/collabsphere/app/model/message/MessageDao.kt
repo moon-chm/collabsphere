@@ -20,8 +20,18 @@ interface MessageDao {
     @Query("SELECT * FROM message WHERE id = :id LIMIT 1")
     suspend fun getMessageById(id: Int): MessageEntity?
 
-    @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId ORDER BY id ASC")
+    @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId AND threadRootId IS NULL ORDER BY id ASC")
     fun getMessageForChannels(workspaceId: Int, channelId: Int): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM message WHERE threadRootId = :rootId ORDER BY id ASC")
+    fun getThreadReplies(rootId: Int): Flow<List<MessageEntity>>
+
+    @Query("""
+        SELECT threadRootId AS rootId, COUNT(*) AS count, MAX(createdAt) AS lastReplyAt FROM message
+        WHERE workspaceId = :workspaceId AND channelId = :channelId AND threadRootId IS NOT NULL
+        GROUP BY threadRootId
+    """)
+    fun getThreadSummaries(workspaceId: Int, channelId: Int): Flow<List<ThreadSummary>>
 
     @Query("SELECT * FROM message WHERE workspaceId = :workspaceId AND channelId = :channelId ORDER BY id ASC")
     fun getMessagesPaged(workspaceId: Int, channelId: Int): PagingSource<Int, MessageEntity>
@@ -87,3 +97,5 @@ interface MessageDao {
         if (upserts.isNotEmpty()) upsertAll(upserts)
     }
 }
+
+data class ThreadSummary(val rootId: Int, val count: Int, val lastReplyAt: Long?)

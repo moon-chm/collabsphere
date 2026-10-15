@@ -223,7 +223,8 @@ internal fun ResultRow.toMessageSyncResponse() = MessageSyncResponse(
     mediaUrl = this[MessageTable.mediaUrl],
     pinnedAt = this[MessageTable.pinnedAt],
     editedAt = this[MessageTable.editedAt],
-    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt]
+    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt],
+    threadRootId = this[MessageTable.threadRootId]
 )
 
 internal fun messageDeltaSync(workspaceId: Int, channelId: Int, request: SyncRequest): SyncPage<MessageSyncResponse> =
@@ -384,6 +385,7 @@ internal fun channelUnreadCounts(userId: Int, workspaceId: Int): List<ChannelUnr
         FROM message m
         LEFT JOIN channel_read_state rs ON rs.channel_id = m.channel_id AND rs.user_id = ?
         WHERE m.workspace_id = ? AND m.is_deleted = false AND m.user_id <> ?
+          AND m.thread_root_id IS NULL
           AND m.id > COALESCE(rs.last_read_message_id, 0)
         GROUP BY m.channel_id
         """.trimIndent(),
