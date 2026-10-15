@@ -20,5 +20,7 @@ data class DmDto(
     val channelId: Int? = null,
     val isRead: Boolean = false,
     // Only set on /api/dm/sync rows: true means the message was deleted (a tombstone).
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    /** When the sender last changed the text; null if never edited. */
+    val editedAt: Long? = null
 )

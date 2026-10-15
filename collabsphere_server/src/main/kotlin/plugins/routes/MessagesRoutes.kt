@@ -32,7 +32,9 @@ private fun ResultRow.toMessageResponse() = MessageResponse(
     status = this[MessageTable.status],
     replyToId = this[MessageTable.replyToId],
     mediaUrl = this[MessageTable.mediaUrl],
-    pinnedAt = this[MessageTable.pinnedAt]
+    pinnedAt = this[MessageTable.pinnedAt],
+    editedAt = this[MessageTable.editedAt],
+    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt]
 )
 
 internal fun Route.messagesRoutes() {
@@ -125,7 +127,8 @@ internal fun Route.messagesRoutes() {
                         content = request.content,
                         status = request.status,
                         replyToId = validReplyToId,
-                        mediaUrl = validMediaUrl
+                        mediaUrl = validMediaUrl,
+                        createdAt = insertResult.resultedValues?.singleOrNull()?.get(MessageTable.createdAt)
                     )
                     created to true
                 }
@@ -240,7 +243,9 @@ internal fun Route.messagesRoutes() {
                             status = it[MessageTable.status],
                             replyToId = it[MessageTable.replyToId],
                             mediaUrl = it[MessageTable.mediaUrl],
-                            pinnedAt = it[MessageTable.pinnedAt]
+                            pinnedAt = it[MessageTable.pinnedAt],
+                            editedAt = it[MessageTable.editedAt],
+                            createdAt = it[MessageTable.createdAt] ?: it[MessageTable.updatedAt]
                         )
                     }
             }
@@ -276,10 +281,13 @@ internal fun Route.messagesRoutes() {
                         return@dbQuery -2 to null
                     }
                     if (request.content.isBlank() && existing[MessageTable.mediaUrl] == null) return@dbQuery -3 to null
+                    val now = System.currentTimeMillis()
                     MessageTable.update({ MessageTable.id eq messageIdParam }) {
                         it[MessageTable.content] = request.content
                         it[MessageTable.status] = request.status
-                        it[MessageTable.updatedAt] = System.currentTimeMillis()
+                        it[MessageTable.updatedAt] = now
+                        // This endpoint also carries status-only updates; only a text change is an edit.
+                        if (request.content != existing[MessageTable.content]) it[MessageTable.editedAt] = now
                     }
                     1 to MessageTable.selectAll().where { MessageTable.id eq messageIdParam }.single().toMessageResponse()
                 }
@@ -311,23 +319,32 @@ internal fun Route.messagesRoutes() {
                     return@delete
                 }
 
+                // -1 not found (or already deleted), -2 neither the author nor an owner/admin.
                 val updatedRows = dbQuery {
-                    MessageTable.update({
+                    val existing = MessageTable.selectAll().where {
                         (MessageTable.id eq messageIdParam) and
-                                (MessageTable.userId eq actingUserId) and
                                 (MessageTable.workspaceId eq workspaceIdParam) and
-                                (MessageTable.channelId eq channelIdParam)
-                    }) {
+                                (MessageTable.channelId eq channelIdParam) and
+                                (MessageTable.isDeleted eq false)
+                    }.singleOrNull() ?: return@dbQuery -1
+                    // Same rule as notes and channels: the author, or a workspace owner/admin moderating.
+                    val role = workspaceRole(actingUserId, workspaceIdParam) ?: return@dbQuery -2
+                    if (existing[MessageTable.userId] != actingUserId && !WorkspaceRoles.canModerate(role)) {
+                        return@dbQuery -2
+                    }
+                    MessageTable.update({ MessageTable.id eq messageIdParam }) {
                         it[MessageTable.isDeleted] = true
                         it[MessageTable.updatedAt] = System.currentTimeMillis()
                     }
                 }
 
-                if (updatedRows > 0) {
-                    call.respond(HttpStatusCode.OK, true)
-                    broadcastChannelMessageChange(messageIdParam)
-                } else {
-                    call.respond(HttpStatusCode.NotFound, false)
+                when {
+                    updatedRows > 0 -> {
+                        call.respond(HttpStatusCode.OK, true)
+                        broadcastChannelMessageChange(messageIdParam)
+                    }
+                    updatedRows == -2 -> call.respond(HttpStatusCode.Forbidden, false)
+                    else -> call.respond(HttpStatusCode.NotFound, false)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -635,6 +652,25 @@ internal fun Route.messagesRoutes() {
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 call.respond(HttpStatusCode.InternalServerError, "Reactions Error")
+            }
+        }
+
+        // Unread channel messages per channel for the caller: messages by others after their read
+        // position (all of them if they never opened the channel). Feeds the channel-list badges.
+        get("/unread/{workspaceId}") {
+            val workspaceIdParam = call.parameters["workspaceId"]?.toIntOrNull()
+                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid workspaceId")
+            val actingUserId = call.authenticatedUserId()
+            try {
+                val counts = dbReadQuery {
+                    if (!isMember(actingUserId, workspaceIdParam)) return@dbReadQuery null
+                    channelUnreadCounts(actingUserId, workspaceIdParam)
+                }
+                if (counts == null) call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+                else call.respond(HttpStatusCode.OK, counts)
+            } catch (e: Exception) {
+                val failure = classifyFailure(e, logger, "Channel unread counts")
+                call.respond(failure.status, failure.message)
             }
         }
 

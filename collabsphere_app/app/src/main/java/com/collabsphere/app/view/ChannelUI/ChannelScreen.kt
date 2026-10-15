@@ -62,6 +62,13 @@ fun ChannelScreen(
     modifier: Modifier = Modifier
 ) {
     val channels by viewModel.userChannels.collectAsStateWithLifecycle()
+    val unreadCounts by viewModel.unreadCounts.collectAsStateWithLifecycle()
+    // Coming back from a channel (or the app) re-reads the badges, so a channel just read clears.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        // Brief delay: leaving a channel saves its read position just as this screen resumes.
+        viewModel.refreshUnreadCounts(debounceMs = 400L)
+        onPauseOrDispose { }
+    }
     val channelStatus by viewModel.channelStatus.collectAsStateWithLifecycle()
 
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -171,7 +178,11 @@ fun ChannelScreen(
                             items(state, key = { it.id }) { channel ->
                                 SkeuoChannelItem(
                                     channel = channel,
-                                    onChannelClick = { onChannelClick(channel) },
+                                    unreadCount = unreadCounts[channel.id] ?: 0,
+                                    onChannelClick = {
+                                        viewModel.onChannelOpened(channel.id)
+                                        onChannelClick(channel)
+                                    },
                                     onDeleteClick = { channelToDelete = channel },
                                     modifier = Modifier.animateItem()
                                 )
@@ -213,6 +224,7 @@ fun ChannelScreen(
 @Composable
 fun SkeuoChannelItem(
     channel: ChannelEntity,
+    unreadCount: Int = 0,
     onChannelClick: () -> Unit,
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -289,6 +301,12 @@ fun SkeuoChannelItem(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (unreadCount > 0) {
+                    com.collabsphere.app.view.components.UnreadCountBadge(
+                        count = unreadCount,
+                        modifier = Modifier.padding(end = 10.dp)
+                    )
+                }
                 SkeuoActionIconButton(
                     onClick = onDeleteClick,
                     icon = Icons.Default.DeleteOutline,

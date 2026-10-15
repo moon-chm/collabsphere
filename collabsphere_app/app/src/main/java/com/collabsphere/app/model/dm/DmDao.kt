@@ -50,6 +50,18 @@ interface DmDao {
     @Query("UPDATE DM SET dm_content = :newContent WHERE id = :dmId")
     suspend fun updateDmContent(dmId: Int, newContent: String)
 
+    /** A text edit: also stamps editedAt, unless the text is unchanged (then it is not an edit). */
+    @Query("UPDATE DM SET editedAt = CASE WHEN dm_content = :newContent THEN editedAt ELSE :editedAt END, dm_content = :newContent WHERE id = :dmId")
+    suspend fun updateDmEdited(dmId: Int, newContent: String, editedAt: Long)
+
+    /** Unread DMs sent to [currentUserId] in a workspace, per sender — the conversation-list badges. */
+    @Query("""
+        SELECT senderId AS partnerId, COUNT(*) AS count FROM DM
+        WHERE workspaceId = :workspaceId AND receiverId = :currentUserId AND isRead = 0 AND id > 0
+        GROUP BY senderId
+    """)
+    fun unreadCountsByPartner(workspaceId: Int, currentUserId: Int): kotlinx.coroutines.flow.Flow<List<DmUnreadCount>>
+
     @Query("UPDATE DM SET isRead = :isRead WHERE id = :dmId")
     suspend fun updateIsRead(dmId: Int, isRead: Boolean)
 
@@ -71,3 +83,5 @@ interface DmDao {
     @Query("DELETE FROM DM WHERE dm_content = :content AND timestamp = :timestamp AND senderId = :senderId")
     suspend fun deleteDmByContentAndTimestamp(content: String, timestamp: Long, senderId: Int)
 }
+
+data class DmUnreadCount(val partnerId: Int, val count: Int)

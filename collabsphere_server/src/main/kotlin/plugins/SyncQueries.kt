@@ -1,5 +1,6 @@
 package plugins
 
+import com.collabsphere.dto.ChannelUnreadCount
 import com.collabsphere.dto.FileSyncResponse
 import com.collabsphere.dto.MessageSyncResponse
 import com.collabsphere.dto.NotesSyncResponse
@@ -220,7 +221,9 @@ internal fun ResultRow.toMessageSyncResponse() = MessageSyncResponse(
     updatedAt = this[MessageTable.updatedAt],
     replyToId = this[MessageTable.replyToId],
     mediaUrl = this[MessageTable.mediaUrl],
-    pinnedAt = this[MessageTable.pinnedAt]
+    pinnedAt = this[MessageTable.pinnedAt],
+    editedAt = this[MessageTable.editedAt],
+    createdAt = this[MessageTable.createdAt] ?: this[MessageTable.updatedAt]
 )
 
 internal fun messageDeltaSync(workspaceId: Int, channelId: Int, request: SyncRequest): SyncPage<MessageSyncResponse> =
@@ -275,7 +278,8 @@ internal fun ResultRow.toDmSyncDto() = DmDto(
     mediaUrl = this[DirectMessagesTable.mediaUrl],
     isRead = this[DirectMessagesTable.isRead],
     replyToId = this[DirectMessagesTable.replyToId],
-    isDeleted = this[DirectMessagesTable.isDeleted]
+    isDeleted = this[DirectMessagesTable.isDeleted],
+    editedAt = this[DirectMessagesTable.editedAt]
 )
 
 /**
@@ -321,10 +325,11 @@ private fun java.sql.ResultSet.toDmHistoryDto() = DmDto(
     timestamp = getLong("timestamp"),
     mediaUrl = getString("media_url"),
     isRead = getBoolean("is_read"),
-    replyToId = getInt("reply_to_id").takeUnless { wasNull() }
+    replyToId = getInt("reply_to_id").takeUnless { wasNull() },
+    editedAt = getLong("edited_at").takeUnless { wasNull() }
 )
 
-private const val DM_COLUMNS = "id, workspace_id, sender_id, receiver_id, content, timestamp, media_url, is_read, reply_to_id"
+private const val DM_COLUMNS = "id, workspace_id, sender_id, receiver_id, content, timestamp, media_url, is_read, reply_to_id, edited_at"
 
 /**
  * The newest [perConversation] live DMs of each of [userId]'s conversations, oldest first — what a
@@ -367,4 +372,20 @@ internal fun dmCatchUpPage(userId: Int, afterId: Int, limit: Int): List<DmDto> =
         )
     ) { rs ->
         buildList { while (rs.next()) add(rs.toDmHistoryDto()) }
+    } ?: emptyList()
+
+/** Unread channel messages of [userId] in [workspaceId], per channel; channels with none are omitted. */
+internal fun channelUnreadCounts(userId: Int, workspaceId: Int): List<ChannelUnreadCount> =
+    TransactionManager.current().exec(
+        """
+        SELECT m.channel_id, COUNT(*) AS unread
+        FROM message m
+        LEFT JOIN channel_read_state rs ON rs.channel_id = m.channel_id AND rs.user_id = ?
+        WHERE m.workspace_id = ? AND m.is_deleted = false AND m.user_id <> ?
+          AND m.id > COALESCE(rs.last_read_message_id, 0)
+        GROUP BY m.channel_id
+        """.trimIndent(),
+        listOf(IntegerColumnType() to userId, IntegerColumnType() to workspaceId, IntegerColumnType() to userId)
+    ) { rs ->
+        buildList { while (rs.next()) add(ChannelUnreadCount(rs.getInt("channel_id"), rs.getInt("unread"))) }
     } ?: emptyList()

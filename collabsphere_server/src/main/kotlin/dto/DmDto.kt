@@ -21,5 +21,7 @@ data class DmDto(
     val isRead: Boolean = false,
     // Only ever true on rows from /api/dm/sync (a tombstone for a deleted DM). Left at its default
     // everywhere else, so it's omitted from socket frames and older clients never see the field.
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    /** When the sender last changed the text; null if never edited. */
+    val editedAt: Long? = null
 )

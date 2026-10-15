@@ -1,5 +1,9 @@
 package com.collabsphere.app.view.dmUI
 
+import com.collabsphere.app.view.components.JumpToLatestButton
+import com.collabsphere.app.view.components.UnreadCountBadge
+import com.collabsphere.app.view.components.isAwayFromLatest
+import com.collabsphere.app.view.components.rememberJumpToLatestState
 import com.collabsphere.app.view.components.CollabSpinner
 
 import android.net.Uri
@@ -232,6 +236,9 @@ fun DMScreen(
     val isLoadingMembers by viewModel.isLoadingMembers.collectAsStateWithLifecycle()
 
     var activeChatPartner by remember { mutableStateOf<UserEntity?>(null) }
+    val unreadByPartner by remember(workspaceId, currentUserId) {
+        viewModel.unreadCounts(workspaceId, currentUserId.toInt())
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
 
     LaunchedEffect(activeChatPartner) {
         onConversationActiveChange(activeChatPartner != null)
@@ -354,19 +361,44 @@ fun DMScreen(
             .collect { viewModel.loadOlderMessages() }
     }
 
+    val jumpToLatest = rememberJumpToLatestState(activeChatPartner?.id)
+    // Last row of the conversation: messages, plus the "loading older" row above and typing row below.
+    val latestRow = messages.size + (if (isPartnerTyping) 1 else 0) + (if (isLoadingOlder) 1 else 0) - 1
+    val awayFromLatest by remember(latestRow) { derivedStateOf { lazyListState.isAwayFromLatest(latestRow) } }
+    LaunchedEffect(awayFromLatest) { if (!awayFromLatest) jumpToLatest.reset() }
+    var initialScrollDoneFor by remember { mutableStateOf<Int?>(null) }
+    var lastCountedMessageId by remember(activeChatPartner?.id) { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(messages.lastOrNull()?.id, isPartnerTyping) {
-        val totalCount = messages.size + (if (isPartnerTyping) 1 else 0) + (if (isLoadingOlder) 1 else 0)
+        val totalCount = latestRow + 1
         if (totalCount <= 0) return@LaunchedEffect
+        val partnerId = activeChatPartner?.id
+
+        // Opening a conversation lands on the newest message at once instead of animating through it.
+        // Skip a list still showing the previous conversation while the new one loads.
+        val belongsToPartner = messages.lastOrNull()?.let { it.senderId == partnerId || it.receiverId == partnerId } == true
+        if (!belongsToPartner) return@LaunchedEffect
+        if (initialScrollDoneFor != partnerId) {
+            lazyListState.scrollToItem(totalCount - 1)
+            initialScrollDoneFor = partnerId
+            lastCountedMessageId = messages.lastOrNull()?.id
+            return@LaunchedEffect
+        }
 
         val lastVisibleIndex = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
         val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= totalCount - 2
         val isOwnMessage = messages.lastOrNull()?.senderId == currentUserId.toInt()
 
         // Only yank the view to the newest message if the user was already reading near the
-        // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
+        // bottom, or it's their own outgoing message — not while they've scrolled up to read history;
+        // then the jump-to-latest button counts the new message instead.
         if (wasNearBottom || isOwnMessage) {
             lazyListState.animateScrollToItem(totalCount - 1)
+        } else {
+            val newestId = messages.lastOrNull()?.id
+            if (newestId != null && newestId != lastCountedMessageId) jumpToLatest.onNewMessages(1)
         }
+        lastCountedMessageId = messages.lastOrNull()?.id
     }
 
     if (activeChatPartner != null) {
@@ -918,6 +950,7 @@ fun DMScreen(
                                     member = member,
                                     isOnline = isOnline,
                                     isTyping = isTyping,
+                                    unreadCount = unreadByPartner[member.id] ?: 0,
                                     modifier = Modifier.animateItem(),
                                     onClick = {
                                         activeChatPartner = member
@@ -1401,7 +1434,7 @@ fun DMScreen(
                                                             modifier = Modifier.padding(top = 2.dp)
                                                         ) {
                                                             Text(
-                                                                text = formatDmTime(message.timestamp),
+                                                                text = (if (message.editedAt != null) "edited · " else "") + formatDmTime(message.timestamp),
                                                                 fontSize = 10.sp,
                                                                 color = Color.White.copy(alpha = 0.75f)
                                                             )
@@ -1723,7 +1756,7 @@ fun DMScreen(
                                                             modifier = Modifier.padding(top = 2.dp)
                                                         ) {
                                                             Text(
-                                                                text = formatDmTime(message.timestamp),
+                                                                text = (if (message.editedAt != null) "edited · " else "") + formatDmTime(message.timestamp),
                                                                 fontSize = 10.sp,
                                                                 color = Muted
                                                             )
@@ -1839,6 +1872,17 @@ fun DMScreen(
                                 }
                             }
                         }
+                        JumpToLatestButton(
+                            visible = messages.isNotEmpty() && awayFromLatest,
+                            unseenCount = jumpToLatest.unseenCount,
+                            onClick = {
+                                replyScope.launch { lazyListState.animateScrollToItem(latestRow.coerceAtLeast(0)) }
+                                jumpToLatest.reset()
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 16.dp, bottom = 12.dp)
+                        )
                     }
 
                     // ── Input Bar ───────────────────────────────────────────────────────
@@ -2092,6 +2136,7 @@ fun SkeuoMemberRow(
     member: UserEntity,
     isOnline: Boolean = false,
     isTyping: Boolean = false,
+    unreadCount: Int = 0,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -2176,6 +2221,9 @@ fun SkeuoMemberRow(
                         Text(text = member.statusMessage?.takeIf { it.isNotBlank() } ?: "Tap to message", style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp), color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+            }
+            if (unreadCount > 0) {
+                UnreadCountBadge(count = unreadCount, modifier = Modifier.padding(end = 6.dp))
             }
             Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
         }

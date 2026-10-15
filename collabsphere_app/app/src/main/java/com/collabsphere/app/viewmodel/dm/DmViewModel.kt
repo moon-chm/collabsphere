@@ -197,6 +197,8 @@ class DmViewModel(
         }
     }
 
+    fun unreadCounts(workspaceId: Int, userId: Int) = repo.unreadCountsByPartner(workspaceId, userId)
+
     fun loadChatHistory(workspaceId: Int, userId: Int, chatPartnerId: Int, baseUrl: String) {
         currentWorkspaceId = workspaceId
         currentUserId = userId

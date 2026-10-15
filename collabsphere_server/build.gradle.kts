@@ -154,6 +154,7 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
         includeTestsMatching("ProgressionIntegrationTest")
         includeTestsMatching("ApiContractIntegrationTest")
         includeTestsMatching("WorkspaceAnalyticsIntegrationTest")
+        includeTestsMatching("MessagingIntegrationTest")
     }
 
     doFirst {

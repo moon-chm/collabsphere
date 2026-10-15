@@ -178,6 +178,11 @@ object MessageTable : Table("message") {
     val pinnedAt = long("pinned_at").nullable()
     val pinnedByUserId = integer("pinned_by_user_id").nullable()
     val status = varchar("status", 50)
+    // Set when the text is changed after sending (drives the "edited" label); null if never edited.
+    val editedAt = long("edited_at").nullable()
+    // When the message was sent. Null on rows that predate the column (they report updated_at instead;
+    // backfilling would bump sync_xid and make every client re-download them).
+    val createdAt = long("created_at").nullable().clientDefault { System.currentTimeMillis() }
     // Stable client operation identity lets an offline retry recover a create whose first response
     // was lost without creating another message. Nullable keeps older clients compatible.
     val idempotencyKey = varchar("idempotency_key", 128).nullable().uniqueIndex()
@@ -271,6 +276,8 @@ object DirectMessagesTable : Table("direct_messages") {
     val replyToId = integer("reply_to_id").nullable()
     val isRead = bool("is_read").default(false)
     val timestamp = long("timestamp")
+    // Set when the sender changes the text (drives the "edited" label); null if never edited.
+    val editedAt = long("edited_at").nullable()
     // Soft delete: the row stays as a tombstone (content/media cleared) so a device that was offline
     // when the message was deleted still learns about it through /api/dm/sync.
     val isDeleted = bool("is_deleted").default(false)

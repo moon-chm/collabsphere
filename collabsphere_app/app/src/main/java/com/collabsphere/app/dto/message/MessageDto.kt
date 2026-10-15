@@ -28,7 +28,9 @@ data class MessageResponse(
     val status: String,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val editedAt: Long? = null,
+    val createdAt: Long? = null
 )
 
 @Serializable
@@ -44,7 +46,17 @@ data class MessageSyncDto(
     val updatedAt: Long,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val editedAt: Long? = null,
+    /** When the message was sent (older messages report their last update instead). */
+    val createdAt: Long? = null
+)
+
+/** GET /api/message/unread/{workspaceId}: unread messages by others, per channel (zero counts omitted). */
+@Serializable
+data class ChannelUnreadCount(
+    val channelId: Int,
+    val count: Int
 )
 
 @Serializable

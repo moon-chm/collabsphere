@@ -11,16 +11,53 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.collabsphere.app.ChannelMessageCenter
+import com.collabsphere.app.remote.message.MessageApiService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 class ChannelViewModel(
     private val repo: ChannelRepo,
     private val loggeduserID: Int,
     private val loggedWorkspaceId: Int
-) : ViewModel() {
+) : ViewModel(), KoinComponent {
+
+    private val messageApi: MessageApiService by inject()
+
+    /** Unread messages by others, per channel id (channels with none are absent). */
+    private val _unreadCounts = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val unreadCounts = _unreadCounts.asStateFlow()
+    private var unreadRefreshJob: Job? = null
 
     init {
         viewModelScope.launch {
             repo.startDeltaSyncLoop(loggedWorkspaceId)
+        }
+        // New, edited or deleted channel messages change the counts; batch bursts into one request.
+        viewModelScope.launch {
+            ChannelMessageCenter.incoming.collect { message ->
+                if (message.workspaceId == loggedWorkspaceId && message.userId != loggeduserID) {
+                    refreshUnreadCounts(debounceMs = UNREAD_REFRESH_DEBOUNCE_MS)
+                }
+            }
+        }
+    }
+
+    /** Opening a channel reads it: drop its badge right away instead of waiting for the server. */
+    fun onChannelOpened(channelId: Int) {
+        _unreadCounts.value = _unreadCounts.value - channelId
+    }
+
+    /** Re-reads the badges; the screen calls this whenever it comes back into view. */
+    fun refreshUnreadCounts(debounceMs: Long = 0L) {
+        unreadRefreshJob?.cancel()
+        unreadRefreshJob = viewModelScope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            // Offline or failed: keep the last known badges rather than clearing them.
+            runCatching { messageApi.getUnreadCounts(loggedWorkspaceId) }
+                .onSuccess { rows -> _unreadCounts.value = rows.associate { it.channelId to it.count } }
         }
     }
 
@@ -136,5 +173,9 @@ class ChannelViewModel(
                 _deletingChannelKeys.value = _deletingChannelKeys.value - key
             }
         }
+    }
+
+    private companion object {
+        const val UNREAD_REFRESH_DEBOUNCE_MS = 600L
     }
 }

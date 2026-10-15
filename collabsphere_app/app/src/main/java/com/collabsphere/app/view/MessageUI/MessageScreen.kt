@@ -15,6 +15,13 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.collabsphere.app.view.components.ChatDateSeparator
+import com.collabsphere.app.view.components.JumpToLatestButton
+import com.collabsphere.app.view.components.chatTime
+import com.collabsphere.app.view.components.isAwayFromLatest
+import com.collabsphere.app.view.components.isSameChatDay
+import com.collabsphere.app.view.components.rememberJumpToLatestState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -120,6 +127,16 @@ fun MessageScreen(
     val mutes by muteRepo.mutes.collectAsStateWithLifecycle()
     val isChannelMuted = MuteRepo.isChannelMuted(mutes, viewModel.currentWorkspaceId, viewModel.currentChannelId)
     LaunchedEffect(Unit) { muteRepo.refresh() }
+    val workspaceApi = koinInject<com.collabsphere.app.remote.workspace.WorkspaceApiService>()
+    var canModerate by remember { mutableStateOf(false) }
+    LaunchedEffect(viewModel.currentWorkspaceId) {
+        val myRole = runCatching { workspaceApi.getWorkspaceMembers(viewModel.currentWorkspaceId) }
+            .getOrNull()
+            ?.firstOrNull { it.userId == viewModel.currentUserId }
+            ?.role
+        canModerate = myRole == "OWNER" || myRole == "ADMIN"
+    }
+    var confirmDeleteFor by remember { mutableStateOf<MessageEntity?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -150,6 +167,12 @@ fun MessageScreen(
     var isEditing by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
+    val jumpToLatest = rememberJumpToLatestState(viewModel.currentChannelId)
+    // The newest message's row: the "loading older" spinner row sits above the messages when shown.
+    val latestRow = (messages?.lastIndex ?: -1) + if (isLoadingOlder) 1 else 0
+    val awayFromLatest by remember(latestRow) { derivedStateOf { listState.isAwayFromLatest(latestRow) } }
+    LaunchedEffect(awayFromLatest) { if (!awayFromLatest) jumpToLatest.reset() }
+    var initialScrollDone by remember { mutableStateOf(false) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex <= 2 && listState.isScrollInProgress }
             .distinctUntilChanged()
@@ -159,16 +182,57 @@ fun MessageScreen(
     LaunchedEffect(messages?.lastOrNull()?.id) {
         val msgs = messages ?: return@LaunchedEffect
         if (msgs.isEmpty()) return@LaunchedEffect
+        val target = msgs.lastIndex + if (isLoadingOlder) 1 else 0
+
+        // Opening the chat lands on the newest message at once instead of animating through history.
+        if (!initialScrollDone) {
+            listState.scrollToItem(target)
+            initialScrollDone = true
+            return@LaunchedEffect
+        }
 
         val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
         val wasNearBottom = lastVisibleIndex == null || lastVisibleIndex >= msgs.size - 2
         val isOwnMessage = msgs.last().userId == currentUserId
 
         // Only yank the view to the newest message if the user was already reading near the
-        // bottom, or it's their own outgoing message — not while they've scrolled up to read history.
+        // bottom, or it's their own outgoing message — not while they've scrolled up to read history;
+        // then the jump-to-latest button counts it instead.
         if (wasNearBottom || isOwnMessage) {
-            listState.animateScrollToItem(msgs.lastIndex + if (isLoadingOlder) 1 else 0)
+            listState.animateScrollToItem(target)
+        } else {
+            jumpToLatest.onNewMessages(1)
         }
+    }
+
+    confirmDeleteFor?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteFor = null },
+            containerColor = SurfaceRaised,
+            title = {
+                Text(
+                    "Delete message?",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Ink
+                )
+            },
+            text = {
+                Text(
+                    "This removes ${target.userName}'s message for everyone in the channel.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Muted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.onDeleteMessage(target.id)
+                    confirmDeleteFor = null
+                }) { Text("Delete", color = Destructive, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteFor = null }) { Text("Cancel", color = Muted) }
+            }
+        )
     }
 
     fullscreenImageUrl?.let { imageUrl ->
@@ -467,7 +531,7 @@ fun MessageScreen(
                                             val currentMsg = selectedMessage
                                             if (currentMsg != null) {
                                                 viewModel.changeStatus(
-                                                    currentMsg.copy(content = messageContent.trim()),
+                                                    currentMsg.copy(content = messageContent.trim(), editedAt = System.currentTimeMillis()),
                                                     currentMsg.status
                                                 )
                                             }
@@ -548,7 +612,7 @@ fun MessageScreen(
                                     val currentMsg = selectedMessage
                                     if (currentMsg != null) {
                                         viewModel.changeStatus(
-                                            currentMsg.copy(content = messageContent.trim()),
+                                            currentMsg.copy(content = messageContent.trim(), editedAt = System.currentTimeMillis()),
                                             currentMsg.status
                                         )
                                     }
@@ -636,13 +700,17 @@ fun MessageScreen(
                             }
                         }
                     }
-                    items(messages ?: emptyList(), key = { it.id ?: it.hashCode() }) { message ->
+                    itemsIndexed(messages ?: emptyList(), key = { _, it -> it.id ?: it.hashCode() }) { index, message ->
                         val isOwnMessage = message.userId == currentUserId
+                        val sentAt = message.createdAt
+                        val previousSentAt = messages?.getOrNull(index - 1)?.createdAt
 
+                        Column(modifier = Modifier.fillMaxWidth().animateItem()) {
+                        if (sentAt != null && (previousSentAt == null || !isSameChatDay(previousSentAt, sentAt))) {
+                            ChatDateSeparator(timestamp = sentAt)
+                        }
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateItem(),
+                            modifier = Modifier.fillMaxWidth(),
                             contentAlignment = if (isOwnMessage) Alignment.CenterEnd else Alignment.CenterStart
                         ) {
                             Column(
@@ -651,8 +719,12 @@ fun MessageScreen(
                             ) {
                                 // Author tag
                                 Text(
-                                    text = (if (isOwnMessage) "You" else message.userName) +
-                                        if (message.pinnedAt != null) " · Pinned" else "",
+                                    text = listOfNotNull(
+                                        if (isOwnMessage) "You" else message.userName,
+                                        sentAt?.let(::chatTime),
+                                        if (message.editedAt != null) "edited" else null,
+                                        if (message.pinnedAt != null) "Pinned" else null
+                                    ).joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -912,11 +984,14 @@ fun MessageScreen(
                                                         )
                                                     }
                                                 )
+                                            }
+                                            if (isOwnMessage || (canModerate && message.id > 0)) {
                                                 DropdownMenuItem(
                                                     text = { Text("Delete", color = Destructive) },
                                                     onClick = {
                                                         showActionMenu = false
-                                                        message.id?.let { viewModel.onDeleteMessage(it) }
+                                                        if (isOwnMessage) viewModel.onDeleteMessage(message.id)
+                                                        else confirmDeleteFor = message
                                                         selectedMessage = null
                                                     },
                                                     leadingIcon = {
@@ -950,11 +1025,23 @@ fun MessageScreen(
                                 }
                             }
                         }
+                        } // Column (day separator + row)
                     }
                 } // LazyColumn
                     } // else
                 } // when
             } // Crossfade
+            JumpToLatestButton(
+                visible = !messages.isNullOrEmpty() && awayFromLatest,
+                unseenCount = jumpToLatest.unseenCount,
+                onClick = {
+                    coroutineScope.launch { listState.animateScrollToItem(latestRow.coerceAtLeast(0)) }
+                    jumpToLatest.reset()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            )
         } // Box
     } // Scaffold
 } // MessageScreen function

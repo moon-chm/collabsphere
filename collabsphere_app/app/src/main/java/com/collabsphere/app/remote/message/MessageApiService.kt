@@ -14,12 +14,16 @@ import com.collabsphere.app.dto.message.MessageRequest
 import com.collabsphere.app.dto.message.PinRequest
 import com.collabsphere.app.dto.message.MessageResponse
 import com.collabsphere.app.dto.message.MessageSyncDto
+import com.collabsphere.app.dto.message.ChannelUnreadCount
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 
 class MessageApiService(private val client: HttpClient) {
+
+    suspend fun getUnreadCounts(workspaceId: Int): List<ChannelUnreadCount> =
+        client.get("$baseUrl/unread/$workspaceId").requireSuccess().body()
 
     private val baseUrl: String get() = "${AppConfig.BASE_URL}/api/message"
 

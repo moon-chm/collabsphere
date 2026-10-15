@@ -181,7 +181,8 @@ internal fun ResultRow.toDmHistoryDto() = DmDto(
     timestamp = this[DirectMessagesTable.timestamp],
     mediaUrl = this[DirectMessagesTable.mediaUrl],
     isRead = this[DirectMessagesTable.isRead],
-    replyToId = this[DirectMessagesTable.replyToId]
+    replyToId = this[DirectMessagesTable.replyToId],
+    editedAt = this[DirectMessagesTable.editedAt]
 )
 
 
@@ -1745,6 +1746,7 @@ fun Application.configureRouting() {
                                         // recipient â€” never the client-supplied receiverId, which could point at anyone.
                                         val isValidRequest = messageId != null && messageId != 0 &&
                                             (isDelete || dmDto.content.length <= DmRules.MAX_CONTENT_LENGTH)
+                                        val editedAt = System.currentTimeMillis()
                                         val targetReceiverId: Int? = if (!isValidRequest) null else dbQuery {
                                             val existing = DirectMessagesTable.selectAll().where { DirectMessagesTable.id eq messageId }.singleOrNull()
                                                 ?: return@dbQuery null
@@ -1762,12 +1764,19 @@ fun Application.configureRouting() {
                                                 if (existing[DirectMessagesTable.isDeleted]) return@dbQuery null
                                                 DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
                                                     it[content] = dmDto.content
+                                                    if (dmDto.content != existing[DirectMessagesTable.content]) {
+                                                        it[DirectMessagesTable.editedAt] = editedAt
+                                                    }
                                                 }
                                             }
                                             existing[DirectMessagesTable.receiverId]
                                         }
                                         if (targetReceiverId != null) {
-                                            val payload = dmDto.copy(senderId = userIdParam.toInt(), receiverId = targetReceiverId)
+                                            val payload = dmDto.copy(
+                                                senderId = userIdParam.toInt(),
+                                                receiverId = targetReceiverId,
+                                                editedAt = if (isDelete) null else editedAt
+                                            )
                                             val payloadJson = Json.encodeToString(DmDto.serializer(), payload)
                                             sendToUser(targetReceiverId.toLong(), payloadJson)
                                             if (this.isActive) {

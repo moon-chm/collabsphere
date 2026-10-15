@@ -43,7 +43,7 @@ import com.collabsphere.app.model.vote.TaskVoteProposalEntity
         com.collabsphere.app.model.progression.ProgressionCatalogEntity::class,
         com.collabsphere.app.model.progression.BadgeProgressEntity::class
     ],
-    version = 46,
+    version = 47,
     exportSchema = false
 )
 @TypeConverters(TaskListConverters::class)
@@ -188,6 +188,15 @@ abstract class AppDatabase : RoomDatabase() {
          * Migration 45 → 46: offline cache for career progression (summary, catalog, badge progress).
          * Server-authoritative data only — nothing here can grant SP or badges locally.
          */
+        /** Migration 46 → 47: "edited" labels for channel messages and DMs, and send times for channel messages. */
+        val MIGRATION_46_47 = object : Migration(46, 47) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE message ADD COLUMN editedAt INTEGER")
+                database.execSQL("ALTER TABLE message ADD COLUMN createdAt INTEGER")
+                database.execSQL("ALTER TABLE DM ADD COLUMN editedAt INTEGER")
+            }
+        }
+
         val MIGRATION_45_46 = object : Migration(45, 46) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("""

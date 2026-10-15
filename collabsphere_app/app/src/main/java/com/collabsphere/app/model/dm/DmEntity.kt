@@ -26,5 +26,7 @@ data class DmEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val mediaUrl: String? = null,
     val isRead: Boolean = false,
-    val replyToId: Int? = null
+    val replyToId: Int? = null,
+    /** When the sender last changed the text; null if never edited. */
+    val editedAt: Long? = null
 )

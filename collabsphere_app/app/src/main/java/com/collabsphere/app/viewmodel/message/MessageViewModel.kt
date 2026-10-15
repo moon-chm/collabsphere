@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel.message
 
+import kotlinx.coroutines.flow.onEach
 import com.collabsphere.app.model.SyncPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -216,6 +217,13 @@ class MessageViewModel(
     override fun onCleared() {
         val finalDraft = if (isEditingMessage) draftBeforeEdit else _messageContent.value
         com.collabsphere.app.MyApplication.appScope.launch { draftStore.save(draftKey, finalDraft) }
+        // Leaving within the debounce window must still mark the channel read, or its unread badge sticks.
+        val unflushedReadId = pendingReadId
+        if (unflushedReadId > lastMarkedReadId) {
+            com.collabsphere.app.MyApplication.appScope.launch {
+                repo.markRead(loggedWorkspaceId, loggedChannelId, unflushedReadId)
+            }
+        }
         if (isTypingSent) {
             isTypingSent = false
             com.collabsphere.app.MyApplication.appScope.launch { repo.sendTyping(loggedWorkspaceId, loggedChannelId, false) }
@@ -270,6 +278,8 @@ class MessageViewModel(
     private val _readStates = MutableStateFlow<Map<Int, ChannelReadState>>(emptyMap())
     val readStates = _readStates.asStateFlow()
     private var lastMarkedReadId = 0
+    // Newest message seen on screen, waiting out the read-mark debounce; flushed if the screen closes first.
+    @Volatile private var pendingReadId = 0
 
     init {
         viewModelScope.launch {
@@ -301,6 +311,7 @@ class MessageViewModel(
             repo.getMessage(loggedWorkspaceId, loggedChannelId)
                 .map { list -> list.maxOfOrNull { it.id }?.takeIf { it > 0 } ?: 0 }
                 .filter { it > lastMarkedReadId }
+                .onEach { pendingReadId = it }
                 .debounce(READ_MARK_DEBOUNCE_MS)
                 .collect { newestId ->
                     if (newestId > lastMarkedReadId) {

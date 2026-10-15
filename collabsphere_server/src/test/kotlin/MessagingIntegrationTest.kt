@@ -1,0 +1,185 @@
+import com.collabsphere.dto.ChannelUnreadCount
+import com.collabsphere.dto.MessageResponse
+import com.collabsphere.model.ChannelsTable
+import com.collabsphere.model.UsersTable
+import com.collabsphere.model.WorkspaceMembersTable
+import com.collabsphere.model.WorkspacesTable
+import com.collabsphere.module
+import dto.LoginResponse
+import io.ktor.client.HttpClient
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.server.testing.*
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
+import java.util.UUID
+import kotlin.test.*
+
+/** Channel messaging through auth and real Postgres: moderation, edit stamps, send times and unread counts. */
+class MessagingIntegrationTest {
+
+    private val json = Json { ignoreUnknownKeys = true }
+    private val createdUserIds = mutableSetOf<Int>()
+    private val createdWorkspaceIds = mutableSetOf<Int>()
+    private val createdEmails = mutableSetOf<String>()
+
+    private data class Account(val id: Int, val token: String)
+
+    private suspend fun HttpClient.signUp(userName: String): Account {
+        val email = "messaging-${UUID.randomUUID()}@example.com"
+        createdEmails += email
+        post("/api/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"$email","password":"password123","userName":"$userName"}""")
+        }
+        transaction { UsersTable.update({ UsersTable.email eq email }) { it[isEmailVerified] = true } }
+        val login = post("/api/login") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"email":"$email","password":"password123"}""")
+        }
+        val response = json.decodeFromString<LoginResponse>(login.bodyAsText())
+        createdUserIds += response.id
+        return Account(response.id, response.token!!)
+    }
+
+    /** Owner first; every other account joins as a plain member. Returns (workspaceId, channelId). */
+    private fun workspaceWithChannel(owner: Int, vararg members: Int): Pair<Int, Int> {
+        val ids = transaction {
+            val ws = WorkspacesTable.insert {
+                it[userId] = owner
+                it[workspaceName] = "messaging"
+                it[workspaceOwner] = "messaging"
+                it[workspacePassword] = ""
+            }[WorkspacesTable.id]
+            (listOf(owner) + members.toList()).forEach { m ->
+                WorkspaceMembersTable.insert { it[workspaceId] = ws; it[userId] = m }
+            }
+            val channel = ChannelsTable.insert {
+                it[userId] = owner
+                it[channelName] = "general-${UUID.randomUUID().toString().take(8)}"
+                it[workspaceId] = ws
+                it[description] = ""
+            }[ChannelsTable.id]
+            ws to channel
+        }
+        createdWorkspaceIds += ids.first
+        return ids
+    }
+
+    @AfterTest
+    fun cleanUpFixtureRows() {
+        transaction {
+            if (createdWorkspaceIds.isNotEmpty()) WorkspacesTable.deleteWhere { WorkspacesTable.id inList createdWorkspaceIds }
+            if (createdEmails.isNotEmpty()) UsersTable.deleteWhere { UsersTable.email inList createdEmails }
+            if (createdUserIds.isNotEmpty()) UsersTable.deleteWhere { UsersTable.id inList createdUserIds }
+        }
+    }
+
+    private suspend fun HttpClient.send(author: Account, ws: Int, channel: Int, content: String): MessageResponse {
+        val response = post("/api/message") {
+            bearerAuth(author.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":0,"userId":${author.id},"workspaceId":$ws,"channelId":$channel,"userName":"x","content":"$content","status":"Delivered"}""")
+        }
+        assertEquals(HttpStatusCode.Created, response.status, response.bodyAsText())
+        return json.decodeFromString(response.bodyAsText())
+    }
+
+    private suspend fun HttpClient.edit(author: Account, message: MessageResponse, content: String, status: String = "Delivered") =
+        put("/api/message/${message.id}") {
+            bearerAuth(author.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"id":${message.id},"userId":${author.id},"workspaceId":${message.workspaceId},"channelId":${message.channelId},"userName":"x","content":"$content","status":"$status"}""")
+        }
+
+    private suspend fun HttpClient.remove(actor: Account, message: MessageResponse) =
+        delete("/api/message/${message.id}/${actor.id}/${message.workspaceId}/${message.channelId}") { bearerAuth(actor.token) }
+
+    @Test
+    fun `owners and admins may delete anyone's channel message, plain members only their own`() = testApplication {
+        application { module() }
+        val owner = client.signUp("msg-owner")
+        val admin = client.signUp("msg-admin")
+        val member = client.signUp("msg-member")
+        val (ws, channel) = workspaceWithChannel(owner.id, admin.id, member.id)
+        transaction {
+            WorkspaceMembersTable.update({
+                (WorkspaceMembersTable.workspaceId eq ws) and (WorkspaceMembersTable.userId eq admin.id)
+            }) { it[role] = "ADMIN" }
+        }
+
+        val byOwner = client.send(owner, ws, channel, "owner says hi")
+        assertEquals(HttpStatusCode.Forbidden, client.remove(member, byOwner).status, "a member cannot delete someone else's message")
+
+        val byMember1 = client.send(member, ws, channel, "spam one")
+        val byMember2 = client.send(member, ws, channel, "spam two")
+        assertEquals(HttpStatusCode.OK, client.remove(owner, byMember1).status)
+        assertEquals(HttpStatusCode.OK, client.remove(admin, byMember2).status)
+        assertEquals(HttpStatusCode.NotFound, client.remove(owner, byMember1).status, "already deleted")
+
+        val own = client.send(member, ws, channel, "mine")
+        assertEquals(HttpStatusCode.OK, client.remove(member, own).status)
+    }
+
+    @Test
+    fun `messages carry their send time and only text changes mark them edited`() = testApplication {
+        application { module() }
+        val author = client.signUp("msg-author")
+        val (ws, channel) = workspaceWithChannel(author.id)
+        val before = System.currentTimeMillis()
+
+        val sent = client.send(author, ws, channel, "first")
+        assertNotNull(sent.createdAt)
+        assertTrue(sent.createdAt!! >= before)
+        assertNull(sent.editedAt)
+
+        val statusOnly = client.edit(author, sent, "first", status = "Seen")
+        assertEquals(HttpStatusCode.OK, statusOnly.status, statusOnly.bodyAsText())
+        assertNull(json.decodeFromString<MessageResponse>(statusOnly.bodyAsText()).editedAt, "a status change is not an edit")
+
+        val edited = json.decodeFromString<MessageResponse>(client.edit(author, sent, "second").bodyAsText())
+        assertEquals("second", edited.content)
+        assertNotNull(edited.editedAt)
+        assertEquals(sent.createdAt, edited.createdAt, "editing keeps the send time")
+    }
+
+    @Test
+    fun `unread counts are per channel, exclude your own messages and follow your read position`() = testApplication {
+        application { module() }
+        val owner = client.signUp("unread-owner")
+        val reader = client.signUp("unread-reader")
+        val (ws, channel) = workspaceWithChannel(owner.id, reader.id)
+
+        val m1 = client.send(owner, ws, channel, "one")
+        client.send(owner, ws, channel, "two")
+        client.send(owner, ws, channel, "three")
+        client.send(reader, ws, channel, "my own")
+
+        suspend fun unread(account: Account): Map<Int, Int> {
+            val response = client.get("/api/message/unread/$ws") { bearerAuth(account.token) }
+            assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+            return json.decodeFromString<List<ChannelUnreadCount>>(response.bodyAsText()).associate { it.channelId to it.count }
+        }
+
+        assertEquals(3, unread(reader)[channel])
+        assertEquals(1, unread(owner)[channel], "the reader's message is unread for the owner")
+
+        val mark = client.post("/api/message/read/$ws/$channel") {
+            bearerAuth(reader.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"lastReadMessageId":${m1.id + 1}}""")
+        }
+        assertTrue(mark.status.isSuccess(), mark.bodyAsText())
+        assertEquals(1, unread(reader)[channel])
+
+        val outsider = client.signUp("unread-outsider")
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/message/unread/$ws") { bearerAuth(outsider.token) }.status)
+    }
+}

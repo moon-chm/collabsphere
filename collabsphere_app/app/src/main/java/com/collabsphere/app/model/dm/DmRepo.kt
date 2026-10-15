@@ -1,4 +1,5 @@
 package com.collabsphere.app.model.dm
+import kotlinx.coroutines.flow.map
 import android.util.Log
 
 import androidx.work.*
@@ -263,7 +264,7 @@ class DmRepo(
         if (message.action == "UPDATE_MESSAGE") {
             val id = message.id
             if (id != null && id != 0) {
-                dmDao.updateDmContent(id, message.content)
+                dmDao.updateDmEdited(id, message.content, message.editedAt ?: System.currentTimeMillis())
             }
             return
         }
@@ -281,7 +282,8 @@ class DmRepo(
                     timestamp = message.timestamp,
                     mediaUrl = message.mediaUrl,
                     isRead = false,
-                    replyToId = message.replyToId
+                    replyToId = message.replyToId,
+                    editedAt = message.editedAt
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
@@ -301,7 +303,8 @@ class DmRepo(
                 timestamp = message.timestamp,
                 mediaUrl = message.mediaUrl,
                 isRead = message.isRead,
-                replyToId = message.replyToId
+                replyToId = message.replyToId,
+                editedAt = message.editedAt
             )
             dmDao.sendDm(historyEntity)
             return
@@ -318,7 +321,8 @@ class DmRepo(
                     timestamp = message.timestamp,
                     mediaUrl = message.mediaUrl,
                     isRead = false,
-                    replyToId = message.replyToId
+                    replyToId = message.replyToId,
+                    editedAt = message.editedAt
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
@@ -337,13 +341,14 @@ class DmRepo(
             timestamp = message.timestamp,
             mediaUrl = message.mediaUrl,
             isRead = false,
-            replyToId = message.replyToId
+            replyToId = message.replyToId,
+            editedAt = message.editedAt
         )
         dmDao.sendDm(localEntity)
     }
 
     suspend fun updateDm(dmId: Int, workspaceId: Int, senderId: Int, receiverId: Int, newContent: String) {
-        dmDao.updateDmContent(dmId, newContent)
+        dmDao.updateDmEdited(dmId, newContent, System.currentTimeMillis())
         val socketMessage = DmDto(
             action = "UPDATE_MESSAGE",
             workspaceId = workspaceId,
@@ -470,8 +475,14 @@ class DmRepo(
         timestamp = timestamp,
         mediaUrl = mediaUrl,
         isRead = isRead,
-        replyToId = replyToId
+        replyToId = replyToId,
+        editedAt = editedAt
     )
+
+    /** Unread DMs to [currentUserId] in [workspaceId], keyed by sender — the conversation-list badges. */
+    fun unreadCountsByPartner(workspaceId: Int, currentUserId: Int): kotlinx.coroutines.flow.Flow<Map<Int, Int>> =
+        dmDao.unreadCountsByPartner(workspaceId, currentUserId)
+            .map { rows -> rows.associate { it.partnerId to it.count } }
 
     suspend fun disconnectChat() {
         apiService.disconnect()

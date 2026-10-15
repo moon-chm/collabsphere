@@ -38,6 +38,10 @@ interface MessageDao {
     @Query("DELETE FROM message WHERE id = :messageId AND userId = :userId AND workspaceId = :workspaceId AND channelId = :channelId")
     suspend fun deleteMessage(messageId: Int, userId: Int, workspaceId: Int, channelId: Int): Int
 
+    /** Any author's message: owners/admins may delete others' messages (the server enforces who may). */
+    @Query("DELETE FROM message WHERE id = :messageId AND workspaceId = :workspaceId AND channelId = :channelId")
+    suspend fun deleteMessageInChannel(messageId: Int, workspaceId: Int, channelId: Int): Int
+
     @Query("UPDATE message SET id = :newId, syncStatus = 'SYNCED' WHERE id = :oldId")
     suspend fun updateMessageId(oldId: Int, newId: Int)
 

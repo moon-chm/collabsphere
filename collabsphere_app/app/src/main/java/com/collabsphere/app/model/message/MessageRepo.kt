@@ -165,7 +165,8 @@ class MessageRepo(
                 val status = apiService.deleteMessage(messageId, userId, workspaceId, channelId)
                 when (SyncPolicy.forStatus(status.value, isDelete = true)) {
                     SyncDecision.DONE -> {
-                        messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
+                        // By id: an owner/admin may have deleted someone else's message.
+                        messageDao.deleteByIds(listOf(messageId))
                         true
                     }
                     SyncDecision.RETRY, SyncDecision.RETRY_AFTER_REFRESH -> throw ApiStatusException(status.value)
@@ -175,7 +176,7 @@ class MessageRepo(
             } catch (e: Exception) {
                 Log.e("MessageRepo", "Operation failed", e)
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                val deletedRows = messageDao.deleteMessage(messageId, userId, workspaceId, channelId)
+                val deletedRows = messageDao.deleteMessageInChannel(messageId, workspaceId, channelId)
                 val syncData = workDataOf(
                     "ACTION_TYPE" to "DELETE",
                     "MESSAGE_ID" to messageId,
@@ -200,8 +201,8 @@ class MessageRepo(
                 content = message.content,
                 status = message.status.name
             )
-            apiService.updateMessage(messageId = message.id, request = request)
-            messageDao.updateMessage(message)
+            val saved = apiService.updateMessage(messageId = message.id, request = request)
+            messageDao.updateMessage(message.copy(editedAt = saved.editedAt ?: message.editedAt))
             true
         } catch (e: Exception) {
             Log.e("MessageRepo", "Operation failed", e)
@@ -334,7 +335,9 @@ class MessageRepo(
         status = MessageStatus.valueOf(status),
         replyToId = replyToId,
         mediaUrl = mediaUrl,
-        pinnedAt = pinnedAt
+        pinnedAt = pinnedAt,
+        editedAt = editedAt,
+        createdAt = createdAt ?: updatedAt
     )
 
     suspend fun startDeltaSyncLoop(workspaceId: Int, channelId: Int) = withContext(Dispatchers.IO) {

@@ -28,7 +28,9 @@ data class MessageResponse(
     val status: String,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val editedAt: Long? = null,
+    val createdAt: Long? = null
 )
 
 @Serializable
@@ -44,7 +46,10 @@ data class MessageSyncResponse(
     val updatedAt: Long,
     val replyToId: Int? = null,
     val mediaUrl: String? = null,
-    val pinnedAt: Long? = null
+    val pinnedAt: Long? = null,
+    val editedAt: Long? = null,
+    /** When the message was sent (falls back to its last update for messages older than this field). */
+    val createdAt: Long? = null
 )
 
 @Serializable
@@ -105,4 +110,10 @@ data class ChannelTypingEvent(
 data class ChannelMessageEvent(
     val action: String = "CHANNEL_MESSAGE_EVENT",
     val message: MessageSyncResponse
+)
+
+@Serializable
+data class ChannelUnreadCount(
+    val channelId: Int,
+    val count: Int
 )
