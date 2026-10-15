@@ -279,7 +279,8 @@ internal fun ResultRow.toDmSyncDto() = DmDto(
     isRead = this[DirectMessagesTable.isRead],
     replyToId = this[DirectMessagesTable.replyToId],
     isDeleted = this[DirectMessagesTable.isDeleted],
-    editedAt = this[DirectMessagesTable.editedAt]
+    editedAt = this[DirectMessagesTable.editedAt],
+    pinnedAt = this[DirectMessagesTable.pinnedAt]
 )
 
 /**
@@ -326,10 +327,11 @@ private fun java.sql.ResultSet.toDmHistoryDto() = DmDto(
     mediaUrl = getString("media_url"),
     isRead = getBoolean("is_read"),
     replyToId = getInt("reply_to_id").takeUnless { wasNull() },
-    editedAt = getLong("edited_at").takeUnless { wasNull() }
+    editedAt = getLong("edited_at").takeUnless { wasNull() },
+    pinnedAt = getLong("pinned_at").takeUnless { wasNull() }
 )
 
-private const val DM_COLUMNS = "id, workspace_id, sender_id, receiver_id, content, timestamp, media_url, is_read, reply_to_id, edited_at"
+private const val DM_COLUMNS = "id, workspace_id, sender_id, receiver_id, content, timestamp, media_url, is_read, reply_to_id, edited_at, pinned_at"
 
 /**
  * The newest [perConversation] live DMs of each of [userId]'s conversations, oldest first — what a

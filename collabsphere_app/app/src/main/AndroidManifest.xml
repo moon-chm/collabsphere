@@ -24,6 +24,15 @@
             android:exported="false" />
 
         <receiver
+            android:name=".remote.message.ChannelNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.collabsphere.app.ACTION_CHANNEL_REPLY" />
+                <action android:name="com.collabsphere.app.ACTION_CHANNEL_MARK_READ" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".remote.dm.DmNotificationReplyReceiver"
             android:exported="false">
             <intent-filter>

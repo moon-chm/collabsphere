@@ -42,7 +42,7 @@ class DmViewModelTest {
     fun `rapid repeated media sends dispatch only one request while first is pending`() = runTest(dispatcher) {
         val requestStarted = CompletableDeferred<Unit>()
         val finishRequest = CompletableDeferred<Unit>()
-        coEvery { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             requestStarted.complete(Unit)
             finishRequest.await()
         }
@@ -59,12 +59,12 @@ class DmViewModelTest {
         assertTrue(viewModel.isUploadingMedia.value)
         runCurrent()
         requestStarted.await()
-        coVerify(exactly = 1) { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any(), any()) }
 
         finishRequest.complete(Unit)
         runCurrent()
         assertFalse(viewModel.isUploadingMedia.value)
-        coVerify(exactly = 1) { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { repo.sendMediaDm(any(), any(), any(), any(), any(), any(), any(), any()) }
     }
 
     @Test

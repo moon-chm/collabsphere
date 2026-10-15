@@ -1,5 +1,6 @@
 package com.collabsphere.app.viewmodel.message
 
+import org.koin.core.component.inject
 import kotlinx.coroutines.flow.onEach
 import com.collabsphere.app.model.SyncPolicy
 import androidx.lifecycle.ViewModel
@@ -42,7 +43,7 @@ class MessageViewModel(
     private val loggedChannelId: Int,
     private val loggedUserName: String,
     private val draftStore: DraftStore
-) : ViewModel() {
+) : ViewModel(), org.koin.core.component.KoinComponent {
 
     val currentUserId: Int = loggedUserId
     val currentWorkspaceId: Int = loggedWorkspaceId
@@ -278,6 +279,17 @@ class MessageViewModel(
     private val _readStates = MutableStateFlow<Map<Int, ChannelReadState>>(emptyMap())
     val readStates = _readStates.asStateFlow()
 
+    private val notificationHelper: com.collabsphere.app.NotificationHelper by inject()
+
+    fun onScreenVisible(visible: Boolean) {
+        if (visible) {
+            notificationHelper.activeChannelId = loggedChannelId
+            notificationHelper.dismissChannel(loggedChannelId)
+        } else if (notificationHelper.activeChannelId == loggedChannelId) {
+            notificationHelper.activeChannelId = null
+        }
+    }
+
     private val _firstUnreadAfterId = MutableStateFlow<Int?>(null)
     val firstUnreadAfterId = _firstUnreadAfterId.asStateFlow()
     private var lastMarkedReadId = 0
@@ -328,6 +340,13 @@ class MessageViewModel(
 
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia = _isUploadingMedia.asStateFlow()
+    private val _uploadProgress = MutableStateFlow(0f)
+    val uploadProgress = _uploadProgress.asStateFlow()
+    private var uploadJob: kotlinx.coroutines.Job? = null
+
+    fun cancelUpload() {
+        uploadJob?.cancel()
+    }
     private val _isSendingMessage = MutableStateFlow(false)
     val isSendingMessage = _isSendingMessage.asStateFlow()
 
@@ -341,9 +360,10 @@ class MessageViewModel(
             return
         }
         _isUploadingMedia.value = true
+        _uploadProgress.value = 0f
         val caption = _messageContent.value.trim()
         val replyToId = _replyingTo.value?.id?.takeIf { it > 0 }
-        viewModelScope.launch {
+        uploadJob = viewModelScope.launch {
             try {
                 val message = MessageEntity(
                     userId = loggedUserId,
@@ -354,7 +374,7 @@ class MessageViewModel(
                     status = MessageStatus.Delivered,
                     replyToId = replyToId
                 )
-                repo.sendMediaMessage(message, fileBytes, mimeType, fileName)
+                repo.sendMediaMessage(message, fileBytes, mimeType, fileName) { _uploadProgress.value = it }
                     .onSuccess {
                         if (_messageContent.value.trim() == caption) {
                             _messageContent.value = ""

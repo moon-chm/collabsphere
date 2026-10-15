@@ -62,6 +62,9 @@ interface DmDao {
     """)
     fun unreadCountsByPartner(workspaceId: Int, currentUserId: Int): kotlinx.coroutines.flow.Flow<List<DmUnreadCount>>
 
+    @Query("UPDATE DM SET pinnedAt = :pinnedAt WHERE id = :dmId")
+    suspend fun updatePinned(dmId: Int, pinnedAt: Long?)
+
     @Query("UPDATE DM SET isRead = :isRead WHERE id = :dmId")
     suspend fun updateIsRead(dmId: Int, isRead: Boolean)
 

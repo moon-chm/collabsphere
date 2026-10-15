@@ -12,7 +12,13 @@ class MediaApiService {
      * Uploads a file/image to the server's Cloudinary proxy endpoint.
      * Returns the secure Cloudinary URL on success.
      */
-    suspend fun uploadMedia(baseUrl: String, fileBytes: ByteArray, mimeType: String, fileName: String): String {
+    suspend fun uploadMedia(
+        baseUrl: String,
+        fileBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+        onProgress: (Float) -> Unit = {}
+    ): String {
         val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
         val boundary = "Boundary${System.currentTimeMillis()}"
         val token = AuthTokenHolder.token ?: throw IllegalStateException("Not authenticated")
@@ -34,8 +40,24 @@ class MediaApiService {
                 doInput = true
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                setFixedLengthStreamingMode(body.size)
             }
-            conn.outputStream.use { it.write(body) }
+            val job = coroutineContext[kotlinx.coroutines.Job]
+            try {
+                conn.outputStream.use { out ->
+                    var written = 0
+                    while (written < body.size) {
+                        if (job?.isActive == false) throw kotlinx.coroutines.CancellationException("Upload cancelled")
+                        val chunk = minOf(UPLOAD_CHUNK_BYTES, body.size - written)
+                        out.write(body, written, chunk)
+                        written += chunk
+                        onProgress(written.toFloat() / body.size)
+                    }
+                }
+            } catch (e: Exception) {
+                conn.disconnect()
+                throw e
+            }
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
                 val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
@@ -47,5 +69,9 @@ class MediaApiService {
                 error("Media upload failed ($responseCode): $err")
             }
         }
+    }
+
+    private companion object {
+        const val UPLOAD_CHUNK_BYTES = 16 * 1024
     }
 }

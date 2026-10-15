@@ -206,3 +206,14 @@ fun UnreadCountBadge(count: Int, modifier: Modifier = Modifier) {
         )
     }
 }
+
+fun lastSeenLabel(lastSeen: Long, now: Long = System.currentTimeMillis()): String {
+    val minutes = (now - lastSeen) / 60_000L
+    return when {
+        minutes < 1 -> "Last seen just now"
+        minutes < 60 -> "Last seen $minutes min ago"
+        isSameChatDay(lastSeen, now) -> "Last seen today at ${chatTime(lastSeen)}"
+        isSameChatDay(lastSeen, now - 86_400_000L) -> "Last seen yesterday at ${chatTime(lastSeen)}"
+        else -> "Last seen ${chatDayLabel(lastSeen)}"
+    }
+}

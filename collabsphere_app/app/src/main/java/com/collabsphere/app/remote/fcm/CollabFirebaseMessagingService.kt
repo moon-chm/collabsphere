@@ -102,14 +102,18 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
                         val notificationResponse = NotificationResponse(
                             id = notifId,
                             recipientId = recipientId,
+                            actorId = data["actor_id"]?.toIntOrNull(),
                             title = title,
                             body = body,
                             type = type,
                             workspaceId = workspaceId,
+                            referenceId = data["reference_id"]?.toIntOrNull(),
                             actorUsername = actorUsername,
                             actorAvatarUrl = actorAvatarUrl,
                             isRead = false,
-                            createdAt = createdAt
+                            createdAt = createdAt,
+                            channelId = data["channel_id"]?.toIntOrNull(),
+                            channelName = data["channel_name"]
                         )
                         notificationHelper.showGenericNotification(notificationResponse)
                     }

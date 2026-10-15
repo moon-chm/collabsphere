@@ -1,5 +1,10 @@
 package com.collabsphere.app.view.dmUI
 
+import androidx.compose.material.icons.automirrored.filled.Forward
+import androidx.compose.material.icons.filled.PushPin
+import com.collabsphere.app.view.components.ForwardDialog
+import com.collabsphere.app.view.components.ForwardPerson
+import com.collabsphere.app.view.components.PinnedMessagesBanner
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -241,6 +246,7 @@ fun DMScreen(
     val typingPartnerIds by viewModel.typingPartnerIds.collectAsStateWithLifecycle()
     val reactions by viewModel.reactions.collectAsStateWithLifecycle()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
     val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
     val isLoadingMembers by viewModel.isLoadingMembers.collectAsStateWithLifecycle()
 
@@ -261,6 +267,7 @@ fun DMScreen(
     var editingMessage by remember { mutableStateOf<DmEntity?>(null) }
     var showActionMenu by remember { mutableStateOf(false) }
     var showReactionPickerFor by remember { mutableStateOf<DmEntity?>(null) }
+    var forwardTarget by remember { mutableStateOf<Pair<String, String?>?>(null) }
     var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
     var showPartnerProfileDialog by remember { mutableStateOf(false) }
 
@@ -318,6 +325,13 @@ fun DMScreen(
         }
     }
     val isPartnerOnline = activeChatPartner?.let { it.id in onlineUserIds } ?: false
+    val userRepo = org.koin.compose.koinInject<com.collabsphere.app.model.UserRepo>()
+    var partnerLastSeen by remember(activeChatPartner?.id) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(activeChatPartner?.id, isPartnerOnline) {
+        val partnerId = activeChatPartner?.id ?: return@LaunchedEffect
+        if (isPartnerOnline) return@LaunchedEffect
+        partnerLastSeen = userRepo.getPublicProfile(partnerId).getOrNull()?.lastSeen
+    }
 
     // Image/file picker
     val mediaPicker = rememberLauncherForActivityResult(
@@ -433,6 +447,18 @@ fun DMScreen(
     // Full-screen image viewer
     fullscreenImageUrl?.let { imgUrl ->
         FullScreenImageViewer(url = imgUrl, onDismiss = { fullscreenImageUrl = null })
+    }
+
+    forwardTarget?.let { (content, mediaUrl) ->
+        ForwardDialog(
+            workspaceId = workspaceId,
+            currentUserId = currentUserId.toInt(),
+            currentUserName = workspaceMembers.firstOrNull { it.id == currentUserId.toInt() }?.userName ?: "",
+            people = workspaceMembers.map { ForwardPerson(it.id, it.userName) },
+            content = content,
+            mediaUrl = mediaUrl,
+            onDismiss = { forwardTarget = null }
+        )
     }
 
     // Partner Profile Card dialog
@@ -1085,7 +1111,12 @@ fun DMScreen(
                                             Text(text = "Online", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Mint)
                                         } else {
                                             Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Muted.copy(alpha = 0.5f)))
-                                            Text(text = "Offline", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Muted)
+                                            Text(
+                                                text = partnerLastSeen?.let { com.collabsphere.app.view.components.lastSeenLabel(it) } ?: "Offline",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                                color = Muted,
+                                                maxLines = 1
+                                            )
                                         }
                                     }
                                 }
@@ -1217,7 +1248,12 @@ fun DMScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .fadingScrollEdges(listState = lazyListState, top = 20.dp, bottom = 20.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                contentPadding = PaddingValues(
+                                    start = 14.dp,
+                                    end = 14.dp,
+                                    top = if (messages.any { it.pinnedAt != null }) 72.dp else 10.dp,
+                                    bottom = 10.dp
+                                ),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 if (isLoadingOlder) {
@@ -1496,6 +1532,26 @@ fun DMScreen(
                                                                         selectedMessage = null
                                                                     },
                                                                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                            }
+                                                            if (message.id > 0) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Forward", color = Ink) },
+                                                                    onClick = {
+                                                                        forwardTarget = message.dm_content to message.mediaUrl
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = Ink) },
+                                                                    onClick = {
+                                                                        viewModel.togglePin(message) { feedback -> feedback?.let { AppToast.show(it) } }
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                             }
                                                             DropdownMenuItem(
@@ -1824,6 +1880,26 @@ fun DMScreen(
                                                                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                             }
+                                                            if (message.id > 0) {
+                                                                DropdownMenuItem(
+                                                                    text = { Text("Forward", color = Ink) },
+                                                                    onClick = {
+                                                                        forwardTarget = message.dm_content to message.mediaUrl
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = Ink) },
+                                                                    onClick = {
+                                                                        viewModel.togglePin(message) { feedback -> feedback?.let { AppToast.show(it) } }
+                                                                        showActionMenu = false
+                                                                        selectedMessage = null
+                                                                    },
+                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1903,6 +1979,15 @@ fun DMScreen(
                                     }
                                 }
                             }
+                        }
+                        val pinnedDms = messages.filter { it.pinnedAt != null }.sortedByDescending { it.pinnedAt }
+                        pinnedDms.firstOrNull()?.let { latestPin ->
+                            PinnedMessagesBanner(
+                                preview = latestPin.dm_content.ifBlank { "Attachment" },
+                                count = pinnedDms.size,
+                                onClick = { scrollToMessage(latestPin.id) },
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
                         }
                         JumpToLatestButton(
                             visible = messages.isNotEmpty() && awayFromLatest,
@@ -1988,10 +2073,9 @@ fun DMScreen(
                             enter = fadeIn(),
                             exit = fadeOut()
                         ) {
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth().height(3.dp),
-                                color = CoralStart,
-                                trackColor = CoralStart.copy(alpha = 0.15f)
+                            com.collabsphere.app.view.components.UploadProgressBar(
+                                progress = uploadProgress,
+                                onCancel = viewModel::cancelUpload
                             )
                         }
 

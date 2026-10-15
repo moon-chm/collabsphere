@@ -23,5 +23,6 @@ data class DmDto(
     // everywhere else, so it's omitted from socket frames and older clients never see the field.
     val isDeleted: Boolean = false,
     /** When the sender last changed the text; null if never edited. */
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    val pinnedAt: Long? = null
 )

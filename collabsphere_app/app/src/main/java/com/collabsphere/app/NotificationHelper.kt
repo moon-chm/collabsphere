@@ -44,6 +44,11 @@ class NotificationHelper(
     // actually find and drop a specific message instead of only ever seeing a never-empty list.
     private val conversationHistory = ConcurrentHashMap<Int, MutableList<Pair<Int, NotificationCompat.MessagingStyle.Message>>>()
     private val partnerNames = ConcurrentHashMap<Int, String>()
+    private val channelHistory = ConcurrentHashMap<Int, MutableList<NotificationCompat.MessagingStyle.Message>>()
+    private val channelMeta = ConcurrentHashMap<Int, NotificationResponse>()
+
+    @Volatile
+    var activeChannelId: Int? = null
 
     init {
         createNotificationChannel()
@@ -119,6 +124,13 @@ class NotificationHelper(
         recentGenericNotifications[dedupeKey] = now
         if (recentGenericNotifications.size > 20) {
             recentGenericNotifications.clear()
+        }
+
+        val channelIdForThread = notification.channelId
+        if (channelIdForThread != null && (notification.type == "CHANNEL_MESSAGE" || notification.type == "MENTION")) {
+            if (MyApplication.isAppForeground && activeChannelId == channelIdForThread) return
+            showChannelNotification(notification, channelIdForThread)
+            return
         }
 
         val targetTab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
@@ -300,6 +312,9 @@ class NotificationHelper(
         val markReadIntent = Intent(context, DmNotificationReplyReceiver::class.java).apply {
             action = DmNotificationReplyReceiver.ACTION_MARK_READ
             putExtra(DmNotificationReplyReceiver.EXTRA_NOTIFICATION_ID, dm.senderId)
+            putExtra(DmNotificationReplyReceiver.EXTRA_WORKSPACE_ID, dm.workspaceId)
+            putExtra(DmNotificationReplyReceiver.EXTRA_SENDER_ID, dm.senderId)
+            putExtra(DmNotificationReplyReceiver.EXTRA_CURRENT_USER_ID, dm.receiverId)
         }
         val markReadPendingIntent = PendingIntent.getBroadcast(
             context,
@@ -351,6 +366,7 @@ class NotificationHelper(
 
         try {
             notificationManager.notify(notificationId, builder.build())
+            postDmSummary()
             Log.d("NotificationHelper", "Notification posted for $senderName (message id=${dm.id})")
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed posting notification", e)
@@ -459,6 +475,165 @@ class NotificationHelper(
     fun dismissNotification(partnerId: Int) {
         conversationHistory.remove(partnerId)
         notificationManager.cancel(partnerId)
+        if (conversationHistory.isEmpty()) notificationManager.cancel(DM_SUMMARY_ID)
+    }
+
+    private fun postDmSummary() {
+        val count = conversationHistory.size
+        if (count == 0) return
+        val summary = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_stat_collabsphere)
+            .setContentTitle("CollabSphere")
+            .setContentText(if (count == 1) "New direct message" else "Messages from $count people")
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("Direct messages"))
+            .setGroup("collabsphere_dms")
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setColor(0xFFF0633D.toInt())
+            .build()
+        runCatching { notificationManager.notify(DM_SUMMARY_ID, summary) }
+    }
+
+    private fun showChannelNotification(notification: NotificationResponse, channelId: Int) {
+        val workspaceId = notification.workspaceId ?: return
+        val actorName = notification.actorUsername ?: "Someone"
+        val channelLabel = notification.channelName?.let { "#$it" } ?: "Channel"
+        channelMeta[channelId] = notification
+
+        val actor = Person.Builder()
+            .setName(actorName)
+            .setKey("u${notification.actorId ?: actorName}")
+            .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(actorName)))
+            .build()
+        val me = Person.Builder().setName("You").setKey(notification.recipientId.toString()).build()
+
+        val history = channelHistory.getOrPut(channelId) { mutableListOf() }
+        val text = if (notification.type == "MENTION") "@ ${notification.body}" else notification.body
+        synchronized(history) {
+            history.add(NotificationCompat.MessagingStyle.Message(text, notification.createdAt, actor))
+            if (history.size > 8) history.removeAt(0)
+        }
+        postChannelThread(channelId, me, channelLabel, notification, alert = true)
+    }
+
+    fun recordChannelReply(channelId: Int, replyText: String) {
+        val meta = channelMeta[channelId] ?: return
+        val me = Person.Builder().setName("You").setKey(meta.recipientId.toString()).build()
+        val history = channelHistory.getOrPut(channelId) { mutableListOf() }
+        synchronized(history) {
+            history.add(NotificationCompat.MessagingStyle.Message(replyText, System.currentTimeMillis(), me))
+        }
+        postChannelThread(channelId, me, meta.channelName?.let { "#$it" } ?: "Channel", meta, alert = false)
+    }
+
+    fun dismissChannel(channelId: Int) {
+        channelHistory.remove(channelId)
+        channelMeta.remove(channelId)
+        notificationManager.cancel(CHANNEL_NOTIFICATION_BASE + channelId)
+        if (channelHistory.isEmpty()) notificationManager.cancel(CHANNEL_SUMMARY_ID)
+    }
+
+    private fun postChannelThread(
+        channelId: Int,
+        me: Person,
+        channelLabel: String,
+        meta: NotificationResponse,
+        alert: Boolean
+    ) {
+        val workspaceId = meta.workspaceId ?: return
+        val requestBase = CHANNEL_NOTIFICATION_BASE + channelId * 4
+        val style = NotificationCompat.MessagingStyle(me)
+            .setConversationTitle(channelLabel)
+            .setGroupConversation(true)
+        channelHistory[channelId]?.let { history -> synchronized(history) { history.forEach(style::addMessage) } }
+
+        val clickIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("from_notification", true)
+            putExtra("workspace_id", workspaceId)
+            putExtra("target_tab", 0)
+            putExtra("notification_id", meta.id)
+            putExtra("partner_name", channelLabel)
+        }
+        val clickPending = PendingIntent.getActivity(
+            context, requestBase, clickIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        fun receiverIntent(action: String) = Intent(context, com.collabsphere.app.remote.message.ChannelNotificationReceiver::class.java).apply {
+            this.action = action
+            putExtra(com.collabsphere.app.remote.message.ChannelNotificationReceiver.EXTRA_WORKSPACE_ID, workspaceId)
+            putExtra(com.collabsphere.app.remote.message.ChannelNotificationReceiver.EXTRA_CHANNEL_ID, channelId)
+            putExtra(com.collabsphere.app.remote.message.ChannelNotificationReceiver.EXTRA_CURRENT_USER_ID, meta.recipientId)
+            putExtra(com.collabsphere.app.remote.message.ChannelNotificationReceiver.EXTRA_LAST_MESSAGE_ID, meta.referenceId ?: -1)
+        }
+        val mutableFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val replyAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send,
+            "Reply",
+            PendingIntent.getBroadcast(
+                context, requestBase + 1,
+                receiverIntent(com.collabsphere.app.remote.message.ChannelNotificationReceiver.ACTION_REPLY),
+                mutableFlags
+            )
+        )
+            .addRemoteInput(
+                RemoteInput.Builder(com.collabsphere.app.remote.message.ChannelNotificationReceiver.KEY_TEXT_REPLY)
+                    .setLabel("Reply in $channelLabel…")
+                    .build()
+            )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
+        val markReadAction = NotificationCompat.Action.Builder(
+            android.R.drawable.checkbox_on_background,
+            "Mark as Read",
+            PendingIntent.getBroadcast(
+                context, requestBase + 2,
+                receiverIntent(com.collabsphere.app.remote.message.ChannelNotificationReceiver.ACTION_MARK_READ),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+
+        val builder = NotificationCompat.Builder(context, genericChannelId)
+            .setSmallIcon(R.drawable.ic_stat_collabsphere)
+            .setStyle(style)
+            .setContentTitle(channelLabel)
+            .setContentText(meta.body)
+            .setContentIntent(clickPending)
+            .setPriority(if (alert) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(!alert)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setColor(0xFFF0633D.toInt())
+            .setGroup(CHANNEL_GROUP)
+            .addAction(replyAction)
+            .addAction(markReadAction)
+
+        val summary = NotificationCompat.Builder(context, genericChannelId)
+            .setSmallIcon(R.drawable.ic_stat_collabsphere)
+            .setContentTitle("CollabSphere")
+            .setContentText(if (channelHistory.size == 1) "New channel activity" else "Activity in ${channelHistory.size} channels")
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("Channels"))
+            .setGroup(CHANNEL_GROUP)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setColor(0xFFF0633D.toInt())
+            .build()
+
+        try {
+            notificationManager.notify(CHANNEL_NOTIFICATION_BASE + channelId, builder.build())
+            notificationManager.notify(CHANNEL_SUMMARY_ID, summary)
+        } catch (e: Exception) {
+            Log.e("NotificationHelper", "Failed posting channel notification", e)
+        }
     }
 
     /**
@@ -509,5 +684,12 @@ class NotificationHelper(
         canvas.drawText(initial, sizePx / 2f, (sizePx / 2f) - yOffset, textPaint)
 
         return bitmap
+    }
+
+    private companion object {
+        const val DM_SUMMARY_ID = 1_999_999
+        const val CHANNEL_SUMMARY_ID = 3_999_999
+        const val CHANNEL_NOTIFICATION_BASE = 3_000_000
+        const val CHANNEL_GROUP = "collabsphere_channels"
     }
 }

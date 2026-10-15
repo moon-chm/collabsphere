@@ -241,10 +241,16 @@ class MessageRepo(
         return oldestLoaded == null || remote.id >= oldestLoaded
     }
 
-    suspend fun sendMediaMessage(message: MessageEntity, fileBytes: ByteArray, mimeType: String, fileName: String): Result<Unit> =
+    suspend fun sendMediaMessage(
+        message: MessageEntity,
+        fileBytes: ByteArray,
+        mimeType: String,
+        fileName: String,
+        onProgress: (Float) -> Unit = {}
+    ): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val mediaUrl = mediaApiService.uploadMedia(AppConfig.BASE_URL, fileBytes, mimeType, fileName)
+                val mediaUrl = mediaApiService.uploadMedia(AppConfig.BASE_URL, fileBytes, mimeType, fileName, onProgress)
                 sendMessageToUser(message.copy(mediaUrl = mediaUrl))
                 Unit
             }

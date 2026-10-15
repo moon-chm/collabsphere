@@ -1,5 +1,8 @@
 package com.collabsphere.app.view.MessageUI
 
+import androidx.compose.material.icons.automirrored.filled.Forward
+import com.collabsphere.app.view.components.ForwardDialog
+import com.collabsphere.app.view.components.ForwardPerson
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -127,6 +130,7 @@ fun MessageScreen(
     var reactionPickerFor by remember { mutableStateOf<MessageEntity?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val isUploadingMedia by viewModel.isUploadingMedia.collectAsStateWithLifecycle()
+    val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
     val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val readStates by viewModel.readStates.collectAsStateWithLifecycle()
@@ -137,15 +141,20 @@ fun MessageScreen(
     LaunchedEffect(Unit) { muteRepo.refresh() }
     val workspaceApi = koinInject<com.collabsphere.app.remote.workspace.WorkspaceApiService>()
     var canModerate by remember { mutableStateOf(false) }
+    var forwardPeople by remember { mutableStateOf<List<ForwardPerson>>(emptyList()) }
+    var forwardTarget by remember { mutableStateOf<MessageEntity?>(null) }
     LaunchedEffect(viewModel.currentWorkspaceId) {
-        val myRole = runCatching { workspaceApi.getWorkspaceMembers(viewModel.currentWorkspaceId) }
-            .getOrNull()
-            ?.firstOrNull { it.userId == viewModel.currentUserId }
-            ?.role
+        val members = runCatching { workspaceApi.getWorkspaceMembers(viewModel.currentWorkspaceId) }.getOrNull().orEmpty()
+        forwardPeople = members.map { ForwardPerson(it.userId, it.userName) }
+        val myRole = members.firstOrNull { it.userId == viewModel.currentUserId }?.role
         canModerate = myRole == "OWNER" || myRole == "ADMIN"
     }
     var confirmDeleteFor by remember { mutableStateOf<MessageEntity?>(null) }
     val haptics = LocalHapticFeedback.current
+    androidx.lifecycle.compose.LifecycleResumeEffect(viewModel) {
+        viewModel.onScreenVisible(true)
+        onPauseOrDispose { viewModel.onScreenVisible(false) }
+    }
     val clipboard = LocalClipboardManager.current
     val firstUnreadAfterId by viewModel.firstUnreadAfterId.collectAsStateWithLifecycle()
     val dividerMessageId = remember(firstUnreadAfterId, messages?.firstOrNull()?.id) {
@@ -260,6 +269,19 @@ fun MessageScreen(
 
     fullscreenImageUrl?.let { imageUrl ->
         FullScreenImageViewer(url = imageUrl, onDismiss = { fullscreenImageUrl = null })
+    }
+
+    forwardTarget?.let { target ->
+        ForwardDialog(
+            workspaceId = viewModel.currentWorkspaceId,
+            currentUserId = viewModel.currentUserId,
+            currentUserName = target.userName.takeIf { target.userId == viewModel.currentUserId }
+                ?: forwardPeople.firstOrNull { it.userId == viewModel.currentUserId }?.name.orEmpty(),
+            people = forwardPeople,
+            content = target.content,
+            mediaUrl = target.mediaUrl,
+            onDismiss = { forwardTarget = null }
+        )
     }
 
     if (showPinnedDialog) {
@@ -461,6 +483,14 @@ fun MessageScreen(
                             )
                         }
                     }
+                }
+
+                if (isUploadingMedia) {
+                    com.collabsphere.app.view.components.UploadProgressBar(
+                        progress = uploadProgress,
+                        onCancel = viewModel::cancelUpload,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
                 }
 
                 typingLabel(typingUsers)?.let { label ->
@@ -965,6 +995,17 @@ fun MessageScreen(
                                                         selectedMessage = null
                                                     },
                                                     leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                )
+                                            }
+                                            if (message.id > 0) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Forward", color = Ink) },
+                                                    onClick = {
+                                                        showActionMenu = false
+                                                        forwardTarget = message
+                                                        selectedMessage = null
+                                                    },
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (message.id > 0) {

@@ -45,6 +45,19 @@ fun PinnedMessagesBanner(
     count: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
+) = PinnedMessagesBanner(
+    preview = "${latest.userName}: ${latest.pinnedPreview()}",
+    count = count,
+    onClick = onClick,
+    modifier = modifier
+)
+
+@Composable
+fun PinnedMessagesBanner(
+    preview: String,
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
@@ -65,7 +78,7 @@ fun PinnedMessagesBanner(
                 color = CoralStart
             )
             Text(
-                text = "${latest.userName}: ${latest.pinnedPreview()}",
+                text = preview,
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink,
                 maxLines = 1,

@@ -160,9 +160,10 @@ class DmRepo(
         receiverId: Int,
         fileBytes: ByteArray,
         mimeType: String,
-        fileName: String
+        fileName: String,
+        onProgress: (Float) -> Unit = {}
     ) {
-        val mediaUrl = mediaApiService.uploadMedia(baseUrl, fileBytes, mimeType, fileName)
+        val mediaUrl = mediaApiService.uploadMedia(baseUrl, fileBytes, mimeType, fileName, onProgress)
         sendRealtimeDm(
             workspaceId = workspaceId,
             senderId = senderId,
@@ -203,6 +204,25 @@ class DmRepo(
     }
 
     /** Tell the server we've read all messages from chatPartnerId */
+    suspend fun setPinned(dm: DmEntity, pinned: Boolean) {
+        dmDao.updatePinned(dm.id, if (pinned) System.currentTimeMillis() else null)
+        try {
+            apiService.sendDm(
+                DmDto(
+                    action = if (pinned) "PIN_MESSAGE" else "UNPIN_MESSAGE",
+                    id = dm.id,
+                    workspaceId = dm.workspaceId,
+                    senderId = dm.senderId,
+                    receiverId = dm.receiverId
+                )
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            dmDao.updatePinned(dm.id, dm.pinnedAt)
+            throw e
+        }
+    }
+
     suspend fun firstUnreadId(workspaceId: Int, currentUserId: Int, partnerId: Int): Int? =
         dmDao.firstUnreadId(workspaceId, currentUserId, partnerId)
 
@@ -264,6 +284,12 @@ class DmRepo(
             return
         }
 
+        if (message.action == "PIN_UPDATE") {
+            val id = message.id
+            if (id != null && id != 0) dmDao.updatePinned(id, message.pinnedAt)
+            return
+        }
+
         if (message.action == "UPDATE_MESSAGE") {
             val id = message.id
             if (id != null && id != 0) {
@@ -286,7 +312,8 @@ class DmRepo(
                     mediaUrl = message.mediaUrl,
                     isRead = false,
                     replyToId = message.replyToId,
-                    editedAt = message.editedAt
+                    editedAt = message.editedAt,
+                    pinnedAt = message.pinnedAt
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
@@ -307,7 +334,8 @@ class DmRepo(
                 mediaUrl = message.mediaUrl,
                 isRead = message.isRead,
                 replyToId = message.replyToId,
-                editedAt = message.editedAt
+                editedAt = message.editedAt,
+                pinnedAt = message.pinnedAt
             )
             dmDao.sendDm(historyEntity)
             return
@@ -325,7 +353,8 @@ class DmRepo(
                     mediaUrl = message.mediaUrl,
                     isRead = false,
                     replyToId = message.replyToId,
-                    editedAt = message.editedAt
+                    editedAt = message.editedAt,
+                    pinnedAt = message.pinnedAt
                 )
                 dmDao.deleteDmByContentAndTimestamp(message.content, message.timestamp, message.senderId)
                 dmDao.sendDm(localEntity)
@@ -345,7 +374,8 @@ class DmRepo(
             mediaUrl = message.mediaUrl,
             isRead = false,
             replyToId = message.replyToId,
-            editedAt = message.editedAt
+            editedAt = message.editedAt,
+            pinnedAt = message.pinnedAt
         )
         dmDao.sendDm(localEntity)
     }
@@ -479,7 +509,8 @@ class DmRepo(
         mediaUrl = mediaUrl,
         isRead = isRead,
         replyToId = replyToId,
-        editedAt = editedAt
+        editedAt = editedAt,
+        pinnedAt = pinnedAt
     )
 
     /** Unread DMs to [currentUserId] in [workspaceId], keyed by sender — the conversation-list badges. */

@@ -240,7 +240,11 @@ object FcmService {
         body: String,
         workspaceId: Int?,
         actorUsername: String?,
-        actorAvatarUrl: String?
+        actorAvatarUrl: String?,
+        referenceId: Int? = null,
+        channelId: Int? = null,
+        channelName: String? = null,
+        actorId: Int? = null
     ) {
         if (!isInitialized) return
         scope.launch {
@@ -259,6 +263,10 @@ object FcmService {
                 workspaceId?.let { put("workspace_id", it.toString()) }
                 actorUsername?.let { put("actor_username", it) }
                 actorAvatarUrl?.let { put("actor_avatar_url", it) }
+                referenceId?.let { put("reference_id", it.toString()) }
+                channelId?.let { put("channel_id", it.toString()) }
+                channelName?.let { put("channel_name", it) }
+                actorId?.let { put("actor_id", it.toString()) }
             }
             val result = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
             if (result.sentCount > 0) logger.info("[FCM] Generic push '$title' to userId=$recipientUserId: ${result.sentCount}/${tokens.size} devices")

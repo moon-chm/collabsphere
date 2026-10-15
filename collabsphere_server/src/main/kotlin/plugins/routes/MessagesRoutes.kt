@@ -144,6 +144,11 @@ internal fun Route.messagesRoutes() {
                         UsersTable.selectAll().where { UsersTable.id eq actingUserId }.singleOrNull()
                     }
                     val senderName = senderRow?.get(UsersTable.username) ?: "Someone"
+                    val channelName = dbQuery {
+                        ChannelsTable.select(ChannelsTable.channelName)
+                            .where { ChannelsTable.id eq request.channelId }
+                            .singleOrNull()?.get(ChannelsTable.channelName)
+                    }
 
                     val notificationBody = request.content.ifBlank { if (newMessage.mediaUrl != null) "📷 Photo" else "" }.take(200)
                     // Parse @mentions from content
@@ -181,7 +186,9 @@ internal fun Route.messagesRoutes() {
                                 title = "$senderName mentioned you",
                                 body = notificationBody,
                                 workspaceId = request.workspaceId,
-                                referenceId = newMessage.id
+                                referenceId = newMessage.id,
+                                channelId = request.channelId,
+                                channelName = channelName
                             )
                         } else {
                             createAndPushNotification(
@@ -191,7 +198,9 @@ internal fun Route.messagesRoutes() {
                                 title = "New message from $senderName",
                                 body = notificationBody,
                                 workspaceId = request.workspaceId,
-                                referenceId = newMessage.id
+                                referenceId = newMessage.id,
+                                channelId = request.channelId,
+                                channelName = channelName
                             )
                         }
                     }

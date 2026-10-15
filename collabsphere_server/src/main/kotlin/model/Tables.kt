@@ -278,6 +278,7 @@ object DirectMessagesTable : Table("direct_messages") {
     val timestamp = long("timestamp")
     // Set when the sender changes the text (drives the "edited" label); null if never edited.
     val editedAt = long("edited_at").nullable()
+    val pinnedAt = long("pinned_at").nullable()
     // Soft delete: the row stays as a tombstone (content/media cleared) so a device that was offline
     // when the message was deleted still learns about it through /api/dm/sync.
     val isDeleted = bool("is_deleted").default(false)

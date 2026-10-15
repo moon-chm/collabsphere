@@ -54,6 +54,13 @@ class DmViewModel(
     // ── Media upload progress ─────────────────────────────────────────────────────
     private val _isUploadingMedia = MutableStateFlow(false)
     val isUploadingMedia: StateFlow<Boolean> = _isUploadingMedia.asStateFlow()
+    private val _uploadProgress = MutableStateFlow(0f)
+    val uploadProgress: StateFlow<Float> = _uploadProgress.asStateFlow()
+    private var uploadJob: kotlinx.coroutines.Job? = null
+
+    fun cancelUpload() {
+        uploadJob?.cancel()
+    }
     private val _isSendingMessage = MutableStateFlow(false)
     val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
 
@@ -200,6 +207,16 @@ class DmViewModel(
         }
     }
 
+    fun togglePin(dm: DmEntity, onResult: (String?) -> Unit) {
+        if (dm.id <= 0) return
+        viewModelScope.launch {
+            val pinning = dm.pinnedAt == null
+            runCatching { repo.setPinned(dm, pinning) }
+                .onSuccess { onResult(if (pinning) "Message pinned" else "Message unpinned") }
+                .onFailure { onResult("Couldn't update the pin. Check your connection.") }
+        }
+    }
+
     fun unreadCounts(workspaceId: Int, userId: Int) = repo.unreadCountsByPartner(workspaceId, userId)
 
     fun loadChatHistory(workspaceId: Int, userId: Int, chatPartnerId: Int, baseUrl: String) {
@@ -211,6 +228,7 @@ class DmViewModel(
         _isLoadingOlder.value = false
         hasMoreOlder = true
         _firstUnreadId.value = null
+        notificationHelper.dismissNotification(chatPartnerId)
 
         val intent = Intent(context, DmWebSocketService::class.java).apply {
             putExtra("UPDATE_PARTNER_ID", chatPartnerId)
@@ -355,9 +373,12 @@ class DmViewModel(
     ) {
         if (_isUploadingMedia.value || _isSendingMessage.value) return
         _isUploadingMedia.value = true
-        viewModelScope.launch {
+        _uploadProgress.value = 0f
+        uploadJob = viewModelScope.launch {
             try {
-                repo.sendMediaDm(baseUrl, workspaceId, senderId, receiverId, fileBytes, mimeType, fileName)
+                repo.sendMediaDm(baseUrl, workspaceId, senderId, receiverId, fileBytes, mimeType, fileName) {
+                    _uploadProgress.value = it
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

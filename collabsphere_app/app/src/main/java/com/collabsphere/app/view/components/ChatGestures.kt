@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -244,4 +246,37 @@ private fun saveImage(context: Context, url: String) {
         (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
     }.onSuccess { AppToast.show("Saving image…") }
         .onFailure { AppToast.error("Couldn't save the image") }
+}
+
+@Composable
+fun UploadProgressBar(progress: Float, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceRaised)
+            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.CloudUpload, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = if (progress >= 1f) "Processing…" else "Uploading… ${(progress * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Ink
+            )
+            Spacer(Modifier.height(4.dp))
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = CoralStart,
+                trackColor = CoralStart.copy(alpha = 0.15f)
+            )
+        }
+        IconButton(onClick = onCancel, enabled = progress < 1f) {
+            Icon(Icons.Default.Close, contentDescription = "Cancel upload", tint = Muted, modifier = Modifier.size(18.dp))
+        }
+    }
 }

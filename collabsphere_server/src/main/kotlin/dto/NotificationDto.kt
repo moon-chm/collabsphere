@@ -17,7 +17,9 @@ data class NotificationResponse(
     val workspaceId: Int?,
     val referenceId: Int?,
     val isRead: Boolean,
-    val createdAt: Long
+    val createdAt: Long,
+    val channelId: Int? = null,
+    val channelName: String? = null
 )
 
 // ── Badge count: total + unread ───────────────────────────────────────────────

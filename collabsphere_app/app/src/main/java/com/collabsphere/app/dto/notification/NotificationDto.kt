@@ -15,7 +15,9 @@ data class NotificationResponse(
     val workspaceId: Int? = null,
     val referenceId: Int? = null,
     val isRead: Boolean,
-    val createdAt: Long
+    val createdAt: Long,
+    val channelId: Int? = null,
+    val channelName: String? = null
 )
 
 @Serializable

@@ -36,8 +36,22 @@ class DmNotificationReplyReceiver : BroadcastReceiver(), KoinComponent {
 
         when (intent.action) {
             ACTION_MARK_READ -> {
-                if (notificationId != -1) {
-                    notificationManager.cancel(notificationId)
+                val workspaceId = intent.getIntExtra(EXTRA_WORKSPACE_ID, -1)
+                val partnerId = intent.getIntExtra(EXTRA_SENDER_ID, -1)
+                val currentUserId = intent.getIntExtra(EXTRA_CURRENT_USER_ID, -1)
+                if (partnerId != -1) notificationHelper.dismissNotification(partnerId)
+                else if (notificationId != -1) notificationManager.cancel(notificationId)
+                if (workspaceId != -1 && partnerId != -1 && currentUserId != -1) {
+                    val pendingResult = goAsync()
+                    com.collabsphere.app.MyApplication.appScope.launch {
+                        try {
+                            dmRepo.markConversationRead(workspaceId, currentUserId, partnerId)
+                        } catch (e: Exception) {
+                            Log.e("DmReplyReceiver", "Failed to mark conversation read", e)
+                        } finally {
+                            pendingResult.finish()
+                        }
+                    }
                 }
             }
             ACTION_REPLY -> {

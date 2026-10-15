@@ -28,5 +28,6 @@ data class DmEntity(
     val isRead: Boolean = false,
     val replyToId: Int? = null,
     /** When the sender last changed the text; null if never edited. */
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    val pinnedAt: Long? = null
 )

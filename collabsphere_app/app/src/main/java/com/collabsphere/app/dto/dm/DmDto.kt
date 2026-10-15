@@ -22,5 +22,6 @@ data class DmDto(
     // Only set on /api/dm/sync rows: true means the message was deleted (a tombstone).
     val isDeleted: Boolean = false,
     /** When the sender last changed the text; null if never edited. */
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    val pinnedAt: Long? = null
 )

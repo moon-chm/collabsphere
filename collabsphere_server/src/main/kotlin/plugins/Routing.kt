@@ -182,7 +182,8 @@ internal fun ResultRow.toDmHistoryDto() = DmDto(
     mediaUrl = this[DirectMessagesTable.mediaUrl],
     isRead = this[DirectMessagesTable.isRead],
     replyToId = this[DirectMessagesTable.replyToId],
-    editedAt = this[DirectMessagesTable.editedAt]
+    editedAt = this[DirectMessagesTable.editedAt],
+    pinnedAt = this[DirectMessagesTable.pinnedAt]
 )
 
 
@@ -234,7 +235,9 @@ internal suspend fun createAndPushNotification(
     workspaceId: Int? = null,
     referenceId: Int? = null,
     dedupeKey: String? = null,
-    dispatchPush: Boolean = true
+    dispatchPush: Boolean = true,
+    channelId: Int? = null,
+    channelName: String? = null
 ): NotificationResponse {
     val notification = dbQuery {
         val actorRow = actorId?.let {
@@ -279,7 +282,9 @@ internal suspend fun createAndPushNotification(
             workspaceId = workspaceId,
             referenceId = referenceId,
             isRead = notificationRow[NotificationsTable.isRead],
-            createdAt = notificationRow[NotificationsTable.createdAt]
+            createdAt = notificationRow[NotificationsTable.createdAt],
+            channelId = channelId,
+            channelName = channelName
         )
     }
     val frame = NotificationPushFrame(notification = notification)
@@ -307,7 +312,11 @@ internal suspend fun createAndPushNotification(
                 body = notification.body,
                 workspaceId = notification.workspaceId,
                 actorUsername = notification.actorUsername,
-                actorAvatarUrl = notification.actorAvatarUrl
+                actorAvatarUrl = notification.actorAvatarUrl,
+                referenceId = notification.referenceId,
+                channelId = channelId,
+                channelName = channelName,
+                actorId = actorId
             )
         }
     }
@@ -1864,6 +1873,30 @@ fun Application.configureRouting() {
                                                 sendToUser(targetReceiverId.toLong(), reactJson)
                                                 if (this.isActive) this.send(Frame.Text(reactJson))
                                             }
+                                        }
+                                    } else if (dmDto.action == "PIN_MESSAGE" || dmDto.action == "UNPIN_MESSAGE") {
+                                        val messageId = dmDto.id ?: 0
+                                        val pinnedAt = if (dmDto.action == "PIN_MESSAGE") System.currentTimeMillis() else null
+                                        val pinOutcome = if (messageId == 0) null else dbQuery {
+                                            val existing = DirectMessagesTable.selectAll()
+                                                .where { (DirectMessagesTable.id eq messageId) and (DirectMessagesTable.isDeleted eq false) }
+                                                .singleOrNull()
+                                                ?: return@dbQuery null
+                                            val partnerId = DmRules.partnerOf(
+                                                senderId = existing[DirectMessagesTable.senderId],
+                                                receiverId = existing[DirectMessagesTable.receiverId],
+                                                actingUserId = userIdParam.toInt()
+                                            ) ?: return@dbQuery null
+                                            DirectMessagesTable.update({ DirectMessagesTable.id eq messageId }) {
+                                                it[DirectMessagesTable.pinnedAt] = pinnedAt
+                                            }
+                                            existing.toDmHistoryDto().copy(action = "PIN_UPDATE", pinnedAt = pinnedAt) to partnerId
+                                        }
+                                        if (pinOutcome != null) {
+                                            val (payload, partnerId) = pinOutcome
+                                            val pinJson = Json.encodeToString(DmDto.serializer(), payload)
+                                            sendToUser(partnerId.toLong(), pinJson)
+                                            if (this.isActive) this.send(Frame.Text(pinJson))
                                         }
                                     } else if (dmDto.action == "MARK_READ") {
                                         val wsId = dmDto.workspaceId
