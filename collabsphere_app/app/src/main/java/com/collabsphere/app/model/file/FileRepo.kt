@@ -154,6 +154,7 @@ class FileRepo(
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_FILES)
             var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -192,7 +193,7 @@ class FileRepo(
                 System.err.println("Exception encountered during workspace file polling updates loop:")
                 Log.e("FileRepo", "Operation failed", e)
             }
-            delay(pollingBackoff.delayAfter(syncSucceeded))
+            com.collabsphere.app.model.SyncSignals.awaitNext(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_FILES, seenSyncVersion, pollingBackoff.delayAfter(syncSucceeded), syncSucceeded)
         }
         } finally {
             BackgroundSyncRegistry.unregister(registryKey, syncJob)

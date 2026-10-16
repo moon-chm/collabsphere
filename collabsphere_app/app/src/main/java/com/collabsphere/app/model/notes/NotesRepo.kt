@@ -64,6 +64,7 @@ class NotesRepo(
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_NOTES)
             var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -104,7 +105,7 @@ class NotesRepo(
             } catch (e: Exception) {
                 Log.e("NotesRepo", "Delta sync iteration error", e)
             }
-            delay(pollingBackoff.delayAfter(syncSucceeded))
+            com.collabsphere.app.model.SyncSignals.awaitNext(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_NOTES, seenSyncVersion, pollingBackoff.delayAfter(syncSucceeded), syncSucceeded)
         }
         } finally {
             BackgroundSyncRegistry.unregister(registryKey, syncJob)

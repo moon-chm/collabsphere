@@ -25,7 +25,9 @@ class SessionManager(
     private val appDatabase: AppDatabase,
     private val userPreferences: UserPreferences,
     private val workManager: WorkManager,
-    private val loginApiService: LoginApiService
+    private val loginApiService: LoginApiService,
+    private val swrCache: com.collabsphere.app.model.SwrCache? = null,
+    private val memberDirectory: com.collabsphere.app.model.workspace.MemberDirectory? = null
 ) {
     /** Clear the previous account's jobs, tokens, and Room rows before accepting a different user. */
     suspend fun prepareForAuthenticatedUser(userId: Int) {
@@ -55,7 +57,21 @@ class SessionManager(
         withContext(Dispatchers.IO) {
             appDatabase.clearAllTables()
         }
+        clearOnDeviceCaches()
         userPreferences.clearPreferences()
+    }
+
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
+    private suspend fun clearOnDeviceCaches() {
+        runCatching { swrCache?.clearAll() }
+        memberDirectory?.clearMemory()
+        com.collabsphere.app.model.UserRepo.clearProfileMemory()
+        runCatching { com.collabsphere.app.model.media.VoiceNoteCache.clear() }
+        runCatching {
+            val loader = coil.Coil.imageLoader(context)
+            loader.memoryCache?.clear()
+            withContext(Dispatchers.IO) { loader.diskCache?.clear() }
+        }
     }
 
     private companion object {

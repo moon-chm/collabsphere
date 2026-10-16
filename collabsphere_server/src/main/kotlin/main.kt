@@ -214,4 +214,5 @@ fun Application.module() {
     configureGitHubRoutes()
     startTaskReminderScheduler()
     startScheduledMessageDispatcher()
+    plugins.WorkspaceSyncNotifier.start(this)
 }

@@ -64,8 +64,9 @@ class DmApiService(
         val wsUrl = cleanBaseUrl.replace("http://", "ws://").replace("https://", "wss://")
 
         try {
+            com.collabsphere.app.model.SyncSignals.onDisconnected()
             val newSession = client.webSocketSession {
-                url("$wsUrl/ws/dm?sinceId=$sinceId&caps=channel")
+                url("$wsUrl/ws/dm?sinceId=$sinceId&caps=channel,sync")
                 // Token is automatically injected by DynamicTokenPlugin
                 // AuthTokenHolder.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
@@ -160,6 +161,22 @@ class DmApiService(
                             continue
                         }
 
+                        if (actionField == "SYNC_READY") {
+                            com.collabsphere.app.model.SyncSignals.onReady()
+                            continue
+                        }
+
+                        if (actionField == "WORKSPACE_SYNC") {
+                            try {
+                                com.collabsphere.app.model.SyncSignals.onEvent(
+                                    lenientJson.decodeFromString(com.collabsphere.app.model.WorkspaceSyncEvent.serializer(), textPayload)
+                                )
+                            } catch (e: Exception) {
+                                Log.w("DM_DEBUG", "Failed to decode workspace sync event", e)
+                            }
+                            continue
+                        }
+
                         if (actionField == "CHANNEL_MESSAGE_EVENT") {
                             try {
                                 val event = lenientJson.decodeFromString(ChannelMessageEvent.serializer(), textPayload)
@@ -175,6 +192,7 @@ class DmApiService(
                     }
                 }
                 sessionMutex.withLock { session = null }
+                com.collabsphere.app.model.SyncSignals.onDisconnected()
                 throw IllegalStateException("WebSocket incoming channel closed by remote host")
             } catch (e: Exception) {
                 if (e is java.net.SocketException || e is kotlinx.coroutines.CancellationException || e.message?.contains("Software caused connection abort") == true) {
@@ -183,6 +201,7 @@ class DmApiService(
                     Log.e("DM_DEBUG", "Exception inside websocket incoming iteration loop", e)
                 }
                 sessionMutex.withLock { session = null }
+                com.collabsphere.app.model.SyncSignals.onDisconnected()
                 throw e
             }
         }

@@ -151,6 +151,7 @@ class TaskRepo(
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(1_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_TASKS)
             var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -198,7 +199,7 @@ class TaskRepo(
             } catch (e: Exception) {
                 Log.e("TaskRepo", "Delta sync iteration error", e)
             }
-            delay(pollingBackoff.delayAfter(syncSucceeded))
+            com.collabsphere.app.model.SyncSignals.awaitNext(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_TASKS, seenSyncVersion, pollingBackoff.delayAfter(syncSucceeded), syncSucceeded)
         }
         } finally {
             BackgroundSyncRegistry.unregister(registryKey, syncJob)

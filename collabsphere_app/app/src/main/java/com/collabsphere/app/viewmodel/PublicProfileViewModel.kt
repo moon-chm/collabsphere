@@ -34,12 +34,14 @@ class PublicProfileViewModel(
 
     fun load() {
         viewModelScope.launch {
-            _isLoading.value = true
             _notFound.value = false
+            val cached = repo.cachedPublicProfile(targetUserId)
+            if (cached != null) _profile.value = cached
+            _isLoading.value = cached == null
 
             repo.getPublicProfile(targetUserId)
                 .onSuccess { _profile.value = it }
-                .onFailure { _notFound.value = true }
+                .onFailure { if (_profile.value == null) _notFound.value = true }
 
             repo.getBlockedUsers()
                 .onSuccess { blocked -> _isBlocked.value = blocked.any { it.id == targetUserId } }

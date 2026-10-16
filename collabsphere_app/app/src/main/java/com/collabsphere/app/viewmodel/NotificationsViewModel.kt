@@ -16,7 +16,10 @@ import kotlinx.coroutines.launch
  * Held at the app-navigation level (like DashboardViewModel) so its unread count survives
  * navigation and stays live for the Dashboard badge, not just while the inbox screen is open.
  */
-class NotificationsViewModel(private val repo: NotificationRepo) : ViewModel() {
+class NotificationsViewModel(
+    private val repo: NotificationRepo,
+    private val cache: com.collabsphere.app.model.SwrCache? = null
+) : ViewModel() {
 
     private val _notifications = MutableStateFlow<List<NotificationResponse>>(emptyList())
     val notifications: StateFlow<List<NotificationResponse>> = _notifications.asStateFlow()
@@ -67,6 +70,14 @@ class NotificationsViewModel(private val repo: NotificationRepo) : ViewModel() {
 
     fun loadNotifications() {
         viewModelScope.launch {
+            if (_notifications.value.isEmpty()) {
+                cache?.read(CACHE_KEY, pageSerializer)?.let { saved ->
+                    if (_notifications.value.isEmpty()) {
+                        _notifications.value = saved.value.filterNot { it.id in pendingRemovals }
+                        _hasMore.value = saved.value.size >= PAGE_SIZE
+                    }
+                }
+            }
             _isLoading.value = true
             fetchFirstPage()
             _isLoading.value = false
@@ -101,6 +112,7 @@ class NotificationsViewModel(private val repo: NotificationRepo) : ViewModel() {
             .onSuccess { page ->
                 _notifications.value = page.filterNot { it.id in pendingRemovals }
                 _hasMore.value = page.size >= PAGE_SIZE
+                cache?.write(CACHE_KEY, pageSerializer, page)
             }
             .onFailure { error ->
                 val msg = error.message ?: ""
@@ -194,7 +206,10 @@ class NotificationsViewModel(private val repo: NotificationRepo) : ViewModel() {
         }
     }
 
+    private val pageSerializer = kotlinx.serialization.builtins.ListSerializer(NotificationResponse.serializer())
+
     private companion object {
         const val PAGE_SIZE = 50
+        const val CACHE_KEY = "notifications_first_page"
     }
 }

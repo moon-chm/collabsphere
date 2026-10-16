@@ -26,7 +26,8 @@ sealed interface AnalyticsUiState {
 
 class WorkspaceAnalyticsViewModel(
     private val api: WorkspaceApiService,
-    private val workspaceId: Int
+    private val workspaceId: Int,
+    private val diskCache: com.collabsphere.app.model.SwrCache? = null
 ) : ViewModel() {
 
     private val _range = MutableStateFlow(AnalyticsRange.MONTH)
@@ -58,15 +59,24 @@ class WorkspaceAnalyticsViewModel(
         val cached = cache[range]
         _state.value = if (cached != null) AnalyticsUiState.Loaded(cached, isRefreshing = true) else AnalyticsUiState.Loading
         loadJob = viewModelScope.launch {
+            val diskKey = "workspace_insights_${workspaceId}_${range.key}"
+            if (cached == null) {
+                diskCache?.read(diskKey, WorkspaceAnalyticsResponse.serializer())?.let { saved ->
+                    cache[range] = saved.value
+                    _state.value = AnalyticsUiState.Loaded(saved.value, isRefreshing = true)
+                }
+            }
             try {
                 val data = api.getAnalytics(workspaceId, range.key)
                 cache[range] = data
                 _state.value = AnalyticsUiState.Loaded(data)
+                diskCache?.write(diskKey, WorkspaceAnalyticsResponse.serializer(), data)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Keep showing what we had; only an empty screen turns into an error.
-                _state.value = if (cached != null) AnalyticsUiState.Loaded(cached)
+                val fallback = cache[range]
+                _state.value = if (fallback != null) AnalyticsUiState.Loaded(fallback)
                 else AnalyticsUiState.Error("Couldn't load insights. Check your connection and try again.")
             }
         }

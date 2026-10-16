@@ -110,7 +110,10 @@ class NotificationAvatars(private val context: Context) {
 
     private val loader by lazy {
         ImageLoader.Builder(context)
-            .components { add(SvgDecoder.Factory()) }
+            .components {
+                add(com.collabsphere.app.model.media.CloudinarySizingInterceptor())
+                add(SvgDecoder.Factory())
+            }
             .allowHardware(false)
             .build()
     }

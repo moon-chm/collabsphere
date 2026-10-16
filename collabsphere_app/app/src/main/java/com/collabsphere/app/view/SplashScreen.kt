@@ -50,17 +50,17 @@ fun SplashScreen(
 
     val animatedLogoScale by animateFloatAsState(
         targetValue = logoScale,
-        animationSpec = tween(durationMillis = 800, easing = EaseOutBack),
+        animationSpec = tween(durationMillis = 650, easing = EaseOutBack),
         label = "logoScale"
     )
     val animatedLogoAlpha by animateFloatAsState(
         targetValue = logoAlpha,
-        animationSpec = tween(durationMillis = 800),
+        animationSpec = tween(durationMillis = 650),
         label = "logoAlpha"
     )
     val animatedLogoOffsetY by animateFloatAsState(
         targetValue = logoOffsetY,
-        animationSpec = tween(durationMillis = 800, easing = EaseInOutQuad),
+        animationSpec = tween(durationMillis = 650, easing = EaseInOutQuad),
         label = "logoOffset"
     )
 
@@ -81,24 +81,24 @@ fun SplashScreen(
         // Step 1: scale and fade in
         logoScale = 1f
         logoAlpha = 1f
-        delay(800)
+        delay(650)
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        delay(200)
+        delay(150)
 
         // Step 2: move slightly up
         logoOffsetY = -100f
 
         // Step 3: while shifting up, type text
-        delay(300)
+        delay(250)
 
         for (i in textToType.indices) {
             typedText = textToType.substring(0, i + 1)
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            delay(100)
+            delay(75)
         }
 
         // Wait a bit to admire the result
-        delay(500)
+        delay(400)
         
         onSplashFinished()
     }

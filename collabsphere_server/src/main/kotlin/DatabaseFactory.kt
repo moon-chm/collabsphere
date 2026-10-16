@@ -18,6 +18,8 @@ object DatabaseFactory {
 
     lateinit var writeDatabase: Database
         private set
+    lateinit var writeDataSource: HikariDataSource
+        private set
     
     lateinit var readDatabase: Database
         private set
@@ -35,7 +37,7 @@ object DatabaseFactory {
             envPoolSizeKey = "DB_MAX_POOL_SIZE",
             defaultPoolSize = 10
         )
-        val writeDataSource = HikariDataSource(writeConfig).apply {
+        writeDataSource = HikariDataSource(writeConfig).apply {
             metricRegistry = io.micrometer.core.instrument.Metrics.globalRegistry
         }
         writeDatabase = Database.connect(writeDataSource)

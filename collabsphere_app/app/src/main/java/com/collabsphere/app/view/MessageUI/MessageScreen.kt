@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.MessageUI
 
+import kotlinx.coroutines.flow.catch
 import com.collabsphere.app.view.components.ScheduleSendDialog
 import com.collabsphere.app.view.components.ScheduledMessagesChip
 import com.collabsphere.app.view.components.ScheduledMessagesDialog
@@ -173,7 +174,6 @@ fun MessageScreen(
     val mutes by muteRepo.mutes.collectAsStateWithLifecycle()
     val isChannelMuted = MuteRepo.isChannelMuted(mutes, viewModel.currentWorkspaceId, viewModel.currentChannelId)
     LaunchedEffect(Unit) { muteRepo.refresh() }
-    val workspaceApi = koinInject<com.collabsphere.app.remote.workspace.WorkspaceApiService>()
     var canModerate by remember { mutableStateOf(false) }
     var forwardPeople by remember { mutableStateOf<List<ForwardPerson>>(emptyList()) }
     var forwardTarget by remember { mutableStateOf<MessageEntity?>(null) }
@@ -189,11 +189,15 @@ fun MessageScreen(
     val savedStore = koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
     val savedKeys by savedStore.keys.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { savedStore.refresh() }
+    val memberDirectory = koinInject<com.collabsphere.app.model.workspace.MemberDirectory>()
     LaunchedEffect(viewModel.currentWorkspaceId) {
-        val members = runCatching { workspaceApi.getWorkspaceMembers(viewModel.currentWorkspaceId) }.getOrNull().orEmpty()
-        forwardPeople = members.map { ForwardPerson(it.userId, it.userName) }
-        val myRole = members.firstOrNull { it.userId == viewModel.currentUserId }?.role
-        canModerate = myRole == "OWNER" || myRole == "ADMIN"
+        memberDirectory.observe(viewModel.currentWorkspaceId)
+            .catch { }
+            .collect { members ->
+                forwardPeople = members.map { ForwardPerson(it.userId, it.userName) }
+                val myRole = members.firstOrNull { it.userId == viewModel.currentUserId }?.role
+                canModerate = myRole == "OWNER" || myRole == "ADMIN"
+            }
     }
     var confirmDeleteFor by remember { mutableStateOf<MessageEntity?>(null) }
     val commitmentRepo = koinInject<com.collabsphere.app.model.commitment.CommitmentRepo>()
@@ -236,7 +240,10 @@ fun MessageScreen(
                 runCatching {
                     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                    bytes?.let { Triple(it, mimeType, "channel_image_${System.currentTimeMillis()}") }
+                    bytes?.let {
+                        val prepared = com.collabsphere.app.model.media.ImageCompressor.prepare(it, mimeType)
+                        Triple(prepared.bytes, prepared.mimeType, "channel_image_${System.currentTimeMillis()}")
+                    }
                 }.getOrNull()
             }
             if (payload == null) {

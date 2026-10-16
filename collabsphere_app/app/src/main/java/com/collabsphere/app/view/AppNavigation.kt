@@ -706,6 +706,7 @@ fun AppNavigation(
                     rawWorkspaceName
                 }
                 val workspaceApiService = koinInject<WorkspaceApiService>()
+                val swrCache = koinInject<com.collabsphere.app.model.SwrCache>()
                 val insightsViewModel: WorkspaceAnalyticsViewModel = viewModel(
                     viewModelStoreOwner = backStackEntry,
                     key = "workspace_insights_$workspaceId",
@@ -714,7 +715,8 @@ fun AppNavigation(
                         override fun <T : ViewModel> create(modelClass: Class<T>): T {
                             return WorkspaceAnalyticsViewModel(
                                 api = workspaceApiService,
-                                workspaceId = workspaceId
+                                workspaceId = workspaceId,
+                                diskCache = swrCache
                             ) as T
                         }
                     }

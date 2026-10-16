@@ -25,6 +25,21 @@ internal object SyncSchema {
         "task_vote_proposals"
     )
 
+    const val NOTIFY_CHANNEL = "collab_sync"
+
+    data class NotifyTarget(val table: String, val workspaceColumn: String, val scope: String, val affectedUserColumn: String? = null)
+
+    /** Tables whose changes are announced to connected clients so they can sync at once instead of polling. */
+    val NOTIFY_TARGETS = listOf(
+        NotifyTarget("task", "workspace_id", "tasks"),
+        NotifyTarget("notes", "workspace_id", "notes"),
+        NotifyTarget("local_files", "workspace_id", "files"),
+        NotifyTarget("channels", "workspace_id", "channels"),
+        NotifyTarget("task_vote_proposals", "workspace_id", "votes"),
+        NotifyTarget("workspace_members", "workspace_id", "workspace", affectedUserColumn = "user_id"),
+        NotifyTarget("workspace", "id", "workspace")
+    )
+
     fun install(tx: Transaction) {
         // Before the triggers exist, so the backfill doesn't mark every file row as changed.
         backfillFileStorageKeys(tx)
@@ -96,6 +111,41 @@ internal object SyncSchema {
                 "SELECT workspace_id, user_id, true, (extract(epoch from clock_timestamp()) * 1000)::bigint " +
                 "FROM workspace_members ON CONFLICT (workspace_id, user_id) DO NOTHING"
         )
+
+        tx.exec(
+            """
+            CREATE OR REPLACE FUNCTION collab_notify_sync() RETURNS trigger AS ${'$'}${'$'}
+            DECLARE
+                row_data jsonb;
+                workspace_ref text;
+                affected_user text;
+            BEGIN
+                IF TG_OP = 'DELETE' THEN
+                    row_data := to_jsonb(OLD);
+                ELSE
+                    row_data := to_jsonb(NEW);
+                END IF;
+                workspace_ref := row_data ->> TG_ARGV[0];
+                IF workspace_ref IS NULL THEN
+                    RETURN NULL;
+                END IF;
+                IF TG_NARGS > 2 THEN
+                    affected_user := row_data ->> TG_ARGV[2];
+                END IF;
+                PERFORM pg_notify('$NOTIFY_CHANNEL', workspace_ref || ':' || TG_ARGV[1] || COALESCE(':' || affected_user, ''));
+                RETURN NULL;
+            END;
+            ${'$'}${'$'} LANGUAGE plpgsql
+            """.trimIndent()
+        )
+        for (target in NOTIFY_TARGETS) {
+            val args = listOfNotNull(target.workspaceColumn, target.scope, target.affectedUserColumn).joinToString(", ") { "'$it'" }
+            tx.exec(
+                "CREATE OR REPLACE TRIGGER ${target.table}_notify_sync " +
+                    "AFTER INSERT OR UPDATE OR DELETE ON ${target.table} " +
+                    "FOR EACH ROW EXECUTE FUNCTION collab_notify_sync($args)"
+            )
+        }
 
         // After a dump/restore onto another cluster, rows can carry transaction ids from the old
         // cluster that are ahead of this one's counter — they'd match every future cursor and be

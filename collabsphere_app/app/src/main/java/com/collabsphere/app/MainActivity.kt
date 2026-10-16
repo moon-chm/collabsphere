@@ -1,5 +1,8 @@
 package com.collabsphere.app
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -45,6 +48,7 @@ data class NotificationDeepLink(
 class MainActivity : ComponentActivity() {
 
     private val userPreferences: UserPreferences by inject()
+    private val startupPrefetcher: com.collabsphere.app.model.StartupPrefetcher by inject()
     private val notificationHelper: NotificationHelper by inject()
 
     private val loginViewModel: LoginViewModel by viewModel()
@@ -112,6 +116,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         checkAndRequestNotificationPermission()
+        if (savedInstanceState == null) {
+            startupPrefetcher.start()
+            lifecycleScope.launch {
+                if (userPreferences.userIdFlow.first() > 0) notificationsViewModel.loadNotifications()
+            }
+        }
 
         setContent {
             CollabSphereTheme(darkTheme = false) {

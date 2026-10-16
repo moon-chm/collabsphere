@@ -76,6 +76,7 @@ class WorkspaceRepo(
             // Suspends here entirely (no polling/wakeups) while backgrounded, resumes instantly
             // the moment the app returns to foreground — then goes straight to a fetch below.
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(null, com.collabsphere.app.model.SyncSignals.SCOPE_WORKSPACE)
             var syncSucceeded = false
             try {
                 val position = dataStore.readSyncPosition(syncKey)
@@ -120,7 +121,7 @@ class WorkspaceRepo(
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("WorkspaceRepo", "Delta sync iteration error", e)
             }
-            delay(pollingBackoff.delayAfter(syncSucceeded))
+            com.collabsphere.app.model.SyncSignals.awaitNext(null, com.collabsphere.app.model.SyncSignals.SCOPE_WORKSPACE, seenSyncVersion, pollingBackoff.delayAfter(syncSucceeded), syncSucceeded)
         }
         } finally {
             BackgroundSyncRegistry.unregister(registryKey, syncJob)

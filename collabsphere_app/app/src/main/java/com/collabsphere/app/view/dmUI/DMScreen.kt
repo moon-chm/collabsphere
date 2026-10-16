@@ -109,6 +109,7 @@ import com.collabsphere.app.view.components.isStalePending
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -465,19 +466,28 @@ fun DMScreen(
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            val partner = activeChatPartner ?: return@let
-            val bytes = context.contentResolver.openInputStream(it)?.readBytes() ?: return@let
-            val mimeType = context.contentResolver.getType(it) ?: "image/jpeg"
-            val fileName = it.lastPathSegment ?: "dm_media_${System.currentTimeMillis()}"
+        val picked = uri ?: return@rememberLauncherForActivityResult
+        val partner = activeChatPartner ?: return@rememberLauncherForActivityResult
+        replyScope.launch {
+            val prepared = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(picked)?.use { it.readBytes() } ?: return@runCatching null
+                    val mimeType = context.contentResolver.getType(picked) ?: "image/jpeg"
+                    com.collabsphere.app.model.media.ImageCompressor.prepare(bytes, mimeType)
+                }.getOrNull()
+            }
+            if (prepared == null) {
+                AppToast.error("Couldn't read that file.")
+                return@launch
+            }
             viewModel.sendMediaMessage(
                 baseUrl = baseUrl,
                 workspaceId = workspaceId,
                 senderId = currentUserId.toInt(),
                 receiverId = partner.id,
-                fileBytes = bytes,
-                mimeType = mimeType,
-                fileName = fileName
+                fileBytes = prepared.bytes,
+                mimeType = prepared.mimeType,
+                fileName = picked.lastPathSegment ?: "dm_media_${System.currentTimeMillis()}"
             )
         }
     }

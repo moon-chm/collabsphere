@@ -152,6 +152,7 @@ class DmWebSocketService : Service() {
                     }
                 } catch (e: Exception) {
                     isWebSocketConnected = false
+                    com.collabsphere.app.model.SyncSignals.onDisconnected()
                     if (!isActive) break
                     Log.w("DM_SERVICE", "WebSocket disconnected: ${e.message}. Retrying in ${backoffMs}ms...")
                 }

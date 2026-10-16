@@ -319,9 +319,11 @@ class UserRepo(
         }
     }
 
+    fun cachedPublicProfile(userId: Int): PublicProfileResponse? = profileMemory[userId]
+
     suspend fun getPublicProfile(userId: Int): Result<PublicProfileResponse> {
         return try {
-            Result.success(apiService.getPublicProfile(userId))
+            Result.success(apiService.getPublicProfile(userId).also { profileMemory[userId] = it })
         } catch (e: Exception) {
             Log.e("UserRepo", "Operation failed", e)
             Result.failure(e)
@@ -373,5 +375,11 @@ class UserRepo(
             Log.e("UserRepo", "Operation failed", e)
             Result.failure(e)
         }
+    }
+
+    companion object {
+        private val profileMemory = java.util.concurrent.ConcurrentHashMap<Int, PublicProfileResponse>()
+
+        fun clearProfileMemory() = profileMemory.clear()
     }
 }

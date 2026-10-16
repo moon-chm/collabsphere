@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.collabsphere.app.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 
 fun isVoiceMediaUrl(url: String?): Boolean =
@@ -191,6 +192,11 @@ object VoicePlayback {
             setOnPreparedListener {
                 prepared = true
                 runCatching { it.start() }.onSuccess { this@VoicePlayback.isPlaying = true }
+                if (com.collabsphere.app.model.media.VoiceNoteCache.cachedFile(url) == null) {
+                    com.collabsphere.app.MyApplication.appScope.launch {
+                        com.collabsphere.app.model.media.VoiceNoteCache.download(url)
+                    }
+                }
             }
             setOnCompletionListener {
                 this@VoicePlayback.isPlaying = false
@@ -201,7 +207,7 @@ object VoicePlayback {
                 true
             }
             runCatching {
-                setDataSource(url)
+                setDataSource(com.collabsphere.app.model.media.VoiceNoteCache.playbackSource(url))
                 prepareAsync()
             }.onFailure { stop() }
         }

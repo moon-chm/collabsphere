@@ -137,6 +137,7 @@ class ChannelRepo(
         val pollingBackoff = com.collabsphere.app.model.SyncPollingBackoff(5_000)
         while (isActive) {
             com.collabsphere.app.MyApplication.isAppForegroundFlow.first { it }
+            val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_CHANNELS)
             var syncSucceeded = false
             try {
                 val syncKey = getSyncKey(workspaceId)
@@ -176,7 +177,7 @@ class ChannelRepo(
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("ChannelRepo", "Operation failed", e)
             }
-            delay(pollingBackoff.delayAfter(syncSucceeded))
+            com.collabsphere.app.model.SyncSignals.awaitNext(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_CHANNELS, seenSyncVersion, pollingBackoff.delayAfter(syncSucceeded), syncSucceeded)
         }
         } finally {
             BackgroundSyncRegistry.unregister(registryKey, syncJob)

@@ -251,7 +251,8 @@ object GitHubAuthEvents {
 private const val SYNC_POLL_INTERVAL_MS = 3_000L
 
 class GitHubViewModel(
-    private val client: HttpClient
+    private val client: HttpClient,
+    private val diskCache: com.collabsphere.app.model.SwrCache? = null
 ) : ViewModel() {
 
     private val _analytics = MutableStateFlow<GitHubAnalyticsResponse?>(null)
@@ -331,7 +332,9 @@ class GitHubViewModel(
                 _analyticsLoadFailed.value = false
                 val result = response.body<GitHubAnalyticsResponse>()
                 _analytics.value = result
+                val cacheKey = analyticsCacheKey(workspaceId)
                 _selectedRepoId.value = result.repositoryId
+                diskCache?.write(cacheKey, GitHubAnalyticsResponse.serializer(), result)
                 if (!result.isConnected && result.hasConnection && result.canManage) {
                     fetchAvailableRepos(workspaceId)
                 }
@@ -363,7 +366,12 @@ class GitHubViewModel(
 
     fun loadAnalytics(workspaceId: Int) {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (_analytics.value == null) {
+                diskCache?.read(analyticsCacheKey(workspaceId), GitHubAnalyticsResponse.serializer())?.let { saved ->
+                    if (_analytics.value == null) _analytics.value = saved.value
+                }
+            }
+            _isLoading.value = _analytics.value == null
             fetchAnalytics(workspaceId)
             _isLoading.value = false
         }
@@ -559,6 +567,8 @@ class GitHubViewModel(
     fun cancelAddRepo() {
         _isPickingRepo.value = false
     }
+
+    private fun analyticsCacheKey(workspaceId: Int) = "github_analytics_${workspaceId}_${_selectedRepoId.value ?: "default"}"
 
     fun retryAnalytics(workspaceId: Int) {
         loadAnalytics(workspaceId)

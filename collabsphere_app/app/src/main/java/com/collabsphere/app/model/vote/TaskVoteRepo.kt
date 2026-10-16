@@ -95,6 +95,8 @@ class TaskVoteRepo(
         }
         try {
             while (coroutineContext.isActive) {
+                val seenSyncVersion = com.collabsphere.app.model.SyncSignals.version(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_VOTES)
+                var syncSucceeded = false
                 try {
                     val lastSync = dataStore.data.first()[getSyncKey(workspaceId)] ?: 0L
                     val syncUpdates = apiService.syncProposals(workspaceId, lastSync)
@@ -106,11 +108,12 @@ class TaskVoteRepo(
                             prefs[getSyncKey(workspaceId)] = maxUpdatedAt
                         }
                     }
+                    syncSucceeded = true
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     Log.w(TAG, "Task vote delta sync failed for workspace $workspaceId: ${e.message}")
                 }
-                delay(4000)
+                com.collabsphere.app.model.SyncSignals.awaitNext(workspaceId, com.collabsphere.app.model.SyncSignals.SCOPE_VOTES, seenSyncVersion, 4_000L, syncSucceeded)
             }
         } finally {
             activeSyncLoops.remove(workspaceId)

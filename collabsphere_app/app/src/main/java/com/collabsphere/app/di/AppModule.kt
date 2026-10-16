@@ -206,13 +206,16 @@ val appModule = module {
     single { androidContext().dataStore }
     single { EncryptedTokenStore(androidContext()) }
     single { UserPreferences(get(), get()) }
-    single { SessionManager(androidContext(), get(), get(), get(), get()) }
+    single { com.collabsphere.app.model.SwrCache(androidContext(), get()) }
+    single { com.collabsphere.app.model.workspace.MemberDirectory(get(), get()) }
+    single { com.collabsphere.app.model.StartupPrefetcher(get(), get(), get()) }
+    single { SessionManager(androidContext(), get(), get(), get(), get(), get(), get()) }
     single { NotificationHelper(androidContext(), get(), get(), get()) }
     single { WorkManager.getInstance(androidContext()) }
     single { com.collabsphere.app.model.DraftStore(get()) }
     single { com.collabsphere.app.model.QuietHoursStore(get()) }
     single { com.collabsphere.app.model.MuteRepo(get()) }
-    single { com.collabsphere.app.model.LinkPreviewRepo(get(named("RegularHttpClient"))) }
+    single { com.collabsphere.app.model.LinkPreviewRepo(get(named("RegularHttpClient")), get()) }
 }
 
 val workerModule = module {
@@ -297,7 +300,7 @@ val viewModelModule = module {
         )
     }
 
-    viewModel { NotificationsViewModel(get()) }
+    viewModel { NotificationsViewModel(get(), get()) }
 
     viewModel { (loggedInUserId: Int, userEmail: String) ->
         ProfileViewModel(
@@ -309,7 +312,7 @@ val viewModelModule = module {
         )
     }
 
-    viewModel { GitHubViewModel(get(named("RegularHttpClient"))) }
+    viewModel { GitHubViewModel(get(named("RegularHttpClient")), get()) }
     viewModel { com.collabsphere.app.viewmodel.GitHubUnfurlViewModel(get(named("RegularHttpClient"))) }
     viewModel { com.collabsphere.app.viewmodel.vote.TaskVoteViewModel(get<com.collabsphere.app.model.vote.TaskVoteRepo>(), get<com.collabsphere.app.UserPreferences>()) }
     viewModel { (userId: Int) -> com.collabsphere.app.viewmodel.progression.ProgressionViewModel(userId, get()) }

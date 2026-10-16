@@ -34,6 +34,7 @@ internal object WebSocketBroker {
     // is safe for the typical read-heavy (deliver) / rare write (connect/disconnect) pattern.
     private val localSessions = ConcurrentHashMap<Long, MutableSet<WebSocketServerSession>>()
     private val channelCapableSessions: MutableSet<WebSocketServerSession> = ConcurrentHashMap.newKeySet()
+    private val syncCapableSessions: MutableSet<WebSocketServerSession> = ConcurrentHashMap.newKeySet()
 
     // ── Redis pub/sub channel prefix ──────────────────────────────────────────
     private const val REDIS_WS_PREFIX = "cs:ws:"  // cs:ws:<userId>
@@ -54,9 +55,15 @@ internal object WebSocketBroker {
     // Session lifecycle
     // ─────────────────────────────────────────────────────────────────────────
 
-    fun addSession(userId: Long, session: WebSocketServerSession, supportsChannelEvents: Boolean = false) {
+    fun addSession(
+        userId: Long,
+        session: WebSocketServerSession,
+        supportsChannelEvents: Boolean = false,
+        supportsSyncEvents: Boolean = false
+    ) {
         localSessions.computeIfAbsent(userId) { CopyOnWriteArraySet() }.add(session)
         if (supportsChannelEvents) channelCapableSessions.add(session)
+        if (supportsSyncEvents) syncCapableSessions.add(session)
         logger.debug("[WS] Session added for userId=$userId supportsChannels=$supportsChannelEvents total=${localSessionCount}")
     }
 
@@ -66,6 +73,7 @@ internal object WebSocketBroker {
             if (sessions.isEmpty()) localSessions.remove(userId)
         }
         channelCapableSessions.remove(session)
+        syncCapableSessions.remove(session)
         logger.debug("[WS] Session removed for userId=$userId remaining=${localSessions[userId]?.size ?: 0}")
     }
 
@@ -100,6 +108,27 @@ internal object WebSocketBroker {
      */
     suspend fun broadcast(userIds: List<Int>, text: String, requireChannelCapable: Boolean = false) {
         userIds.forEach { sendToUser(it.toLong(), text, requireChannelCapable) }
+    }
+
+    /**
+     * Delivers to this instance's sessions that declared the "sync" capability. Every instance
+     * receives database change notifications itself, so this never goes through Redis.
+     */
+    suspend fun deliverToSyncCapable(userId: Long, text: String) {
+        val sessions = localSessions[userId] ?: return
+        for (session in sessions) {
+            if (session !in syncCapableSessions) continue
+            if (!session.isActive) {
+                removeSession(userId, session)
+                continue
+            }
+            try {
+                session.send(Frame.Text(text))
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                removeSession(userId, session)
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -1590,12 +1590,18 @@ fun Application.configureRouting() {
             route("/ws") {
                 webSocket("/dm") {
                     val userIdParam = call.authenticatedUserId().toLong()
-                    val supportsChannelEvents = call.request.queryParameters["caps"]
+                    val capabilities = call.request.queryParameters["caps"]
                         ?.split(",")
-                        ?.any { it.trim() == "channel" } == true
+                        ?.map { it.trim() }
+                        .orEmpty()
+                    val supportsChannelEvents = "channel" in capabilities
+                    val supportsSyncEvents = "sync" in capabilities
 
                     // Register session â€” passes supportsChannelEvents so only one registration happens
-                    WebSocketBroker.addSession(userIdParam, this, supportsChannelEvents = supportsChannelEvents)
+                    WebSocketBroker.addSession(userIdParam, this, supportsChannelEvents = supportsChannelEvents, supportsSyncEvents = supportsSyncEvents)
+                    if (supportsSyncEvents) {
+                        runCatching { send(Frame.Text(WorkspaceSyncNotifier.readyFrame)) }
+                    }
                     var cachedUsername: String? = null
 
                     // Mark user online on WS connect

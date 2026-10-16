@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.WorkspaceUI
 
+import kotlinx.coroutines.flow.catch
 import com.collabsphere.app.view.components.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -83,16 +84,17 @@ fun WorkspaceMembersDialog(
     var reloadKey by remember { mutableStateOf(0) }
     var confirmation by remember { mutableStateOf<PendingConfirmation?>(null) }
 
+    val memberDirectory = koinInject<com.collabsphere.app.model.workspace.MemberDirectory>()
     LaunchedEffect(workspaceId, reloadKey) {
-        runCatching { api.getWorkspaceMembers(workspaceId) }
-            .onSuccess { list ->
+        memberDirectory.observe(workspaceId, forceRefresh = reloadKey > 0)
+            .catch { if (members == null) loadFailed = true }
+            .collect { list ->
                 members = list.sortedWith(
                     compareBy<MemberResponse> { listOf(WorkspaceRoles.OWNER, WorkspaceRoles.ADMIN, WorkspaceRoles.MEMBER).indexOf(it.role) }
                         .thenBy { it.userName.lowercase() }
                 )
                 loadFailed = false
             }
-            .onFailure { loadFailed = true }
     }
 
     val myRole = members?.firstOrNull { it.userId == currentUserId }?.role

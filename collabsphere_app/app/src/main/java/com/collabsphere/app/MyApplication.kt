@@ -55,6 +55,7 @@ class MyApplication : Application(), ImageLoaderFactory {
                     .build()
             }
             .components {
+                add(com.collabsphere.app.model.media.CloudinarySizingInterceptor())
                 add(SvgDecoder.Factory())
             }
             .crossfade(true)
@@ -63,6 +64,8 @@ class MyApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        com.collabsphere.app.model.media.VoiceNoteCache.init(this)
+        com.collabsphere.app.model.SyncSignals.isSocketConnected = { com.collabsphere.app.remote.dm.DmWebSocketService.isWebSocketConnected }
 
         // ProcessLifecycleOwner already solves "is the app in the foreground" correctly (including
         // debouncing the brief onStop/onStart blip between activities during a screen rotation or
@@ -70,6 +73,7 @@ class MyApplication : Application(), ImageLoaderFactory {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 isAppForeground = true
+                com.collabsphere.app.model.SyncSignals.onAppForeground()
                 // Pick up Sphere Points earned elsewhere (e.g. a note a teammate pinned).
                 com.collabsphere.app.model.progression.ProgressionEvents.requestRefresh()
             }
