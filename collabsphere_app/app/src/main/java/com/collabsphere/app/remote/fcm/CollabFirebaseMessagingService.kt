@@ -81,7 +81,8 @@ class CollabFirebaseMessagingService : FirebaseMessagingService() {
                                 receiverId = receiverId,
                                 content = content,
                                 timestamp = timestamp,
-                                action = "RECEIVE_MESSAGE"
+                                action = "RECEIVE_MESSAGE",
+                                urgent = data["urgent"] == "true"
                             )
                             notificationHelper.showDmNotification(dmDto)
                         } else {

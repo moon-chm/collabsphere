@@ -204,7 +204,8 @@ object FcmService {
         workspaceId: Int,
         messageId: Int,
         content: String,
-        timestamp: Long
+        timestamp: Long,
+        urgent: Boolean = false
     ) {
         if (!isInitialized) return
         scope.launch {
@@ -222,7 +223,7 @@ object FcmService {
                 "id" to messageId.toString(),
                 "content" to content,
                 "timestamp" to timestamp.toString()
-            )
+            ) + (if (urgent) mapOf("urgent" to "true") else emptyMap())
             val result = sendAll(tokens, data, AndroidConfig.Priority.HIGH)
             if (result.sentCount > 0) logger.info("[FCM] DM push to userId=$recipientUserId: ${result.sentCount}/${tokens.size} devices")
         }

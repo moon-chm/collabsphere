@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -173,8 +174,8 @@ private fun FocusChip(label: String, selected: Boolean, enabled: Boolean, onClic
 fun PartnerFocusBanner(
     partnerName: String,
     focusUntil: Long,
-    holdMessages: Boolean,
-    onHoldChange: (Boolean) -> Unit,
+    mode: com.collabsphere.app.model.focus.FocusSendMode,
+    onModeChange: (com.collabsphere.app.model.focus.FocusSendMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val now = rememberNow()
@@ -202,14 +203,34 @@ fun PartnerFocusBanner(
                 color = Muted
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val hold = mode == com.collabsphere.app.model.focus.FocusSendMode.HOLD
+            val urgent = mode == com.collabsphere.app.model.focus.FocusSendMode.URGENT
             FocusChoice(
-                label = "Deliver at $freeAt",
-                selected = holdMessages,
+                label = "At $freeAt",
+                selected = hold,
+                modifier = Modifier.weight(1.3f),
+                leading = { Icon(Icons.Outlined.Schedule, contentDescription = null, tint = if (hold) Color.White else IndigoStart, modifier = Modifier.size(14.dp)) }
+            ) { onModeChange(com.collabsphere.app.model.focus.FocusSendMode.HOLD) }
+            FocusChoice(
+                label = "Now",
+                selected = mode == com.collabsphere.app.model.focus.FocusSendMode.NOW,
+                modifier = Modifier.weight(1f)
+            ) { onModeChange(com.collabsphere.app.model.focus.FocusSendMode.NOW) }
+            FocusChoice(
+                label = "Urgent",
+                selected = urgent,
+                accent = com.collabsphere.app.ui.theme.DestructiveStart,
                 modifier = Modifier.weight(1f),
-                leading = { Icon(Icons.Outlined.Schedule, contentDescription = null, tint = if (holdMessages) Color.White else IndigoStart, modifier = Modifier.size(14.dp)) }
-            ) { onHoldChange(true) }
-            FocusChoice(label = "Send now", selected = !holdMessages, modifier = Modifier.weight(1f)) { onHoldChange(false) }
+                leading = { Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = if (urgent) Color.White else com.collabsphere.app.ui.theme.DestructiveStart, modifier = Modifier.size(14.dp)) }
+            ) { onModeChange(com.collabsphere.app.model.focus.FocusSendMode.URGENT) }
+        }
+        if (mode == com.collabsphere.app.model.focus.FocusSendMode.URGENT) {
+            Text(
+                text = "Breaks through their focus. You get 3 a day, so save it for real emergencies.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted
+            )
         }
     }
 }
@@ -219,6 +240,7 @@ private fun FocusChoice(
     label: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    accent: Color = IndigoStart,
     leading: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
@@ -226,8 +248,8 @@ private fun FocusChoice(
     Row(
         modifier = modifier
             .clip(shape)
-            .background(if (selected) IndigoStart else Color.Transparent)
-            .border(1.dp, if (selected) IndigoStart else IndigoStart.copy(alpha = 0.3f), shape)
+            .background(if (selected) accent else Color.Transparent)
+            .border(1.dp, if (selected) accent else accent.copy(alpha = 0.3f), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
@@ -238,7 +260,7 @@ private fun FocusChoice(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (selected) Color.White else IndigoStart,
+            color = if (selected) Color.White else accent,
             maxLines = 1
         )
     }

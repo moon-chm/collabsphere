@@ -237,9 +237,13 @@ internal suspend fun createAndPushNotification(
     dedupeKey: String? = null,
     dispatchPush: Boolean = true,
     channelId: Int? = null,
-    channelName: String? = null
+    channelName: String? = null,
+    urgent: Boolean = false
 ): NotificationResponse {
+    var recipientFocusUntil: Long? = null
     val notification = dbQuery {
+        recipientFocusUntil = UsersTable.select(UsersTable.focusUntil).where { UsersTable.id eq recipientId }
+            .singleOrNull()?.get(UsersTable.focusUntil)
         val actorRow = actorId?.let {
             UsersTable.selectAll().where { UsersTable.id eq it }.singleOrNull()
         }
@@ -292,7 +296,7 @@ internal suspend fun createAndPushNotification(
     sendToUser(recipientId.toLong(), json)
 
     // Durable outbox callers dispatch FCM synchronously so transient failures can be retried.
-    if (dispatchPush) {
+    if (dispatchPush && FocusRules.shouldPush(recipientFocusUntil, System.currentTimeMillis(), urgent)) {
         if (type == "DM") {
             com.collabsphere.util.FcmService.sendDmPush(
                 recipientUserId = recipientId,
@@ -301,7 +305,8 @@ internal suspend fun createAndPushNotification(
                 workspaceId = workspaceId ?: 0,
                 messageId = referenceId ?: 0,
                 content = body,
-                timestamp = notification.createdAt
+                timestamp = notification.createdAt,
+                urgent = urgent
             )
         } else {
             com.collabsphere.util.FcmService.sendGenericPush(

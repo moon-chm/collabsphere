@@ -261,6 +261,8 @@ fun AppNavigation(
                 val workspaceViewModel: WorkspaceViewModel =
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 val joinByCodeStatus by workspaceViewModel.joinByCodeStatus.collectAsStateWithLifecycle()
+                val focusRepo = org.koin.compose.koinInject<com.collabsphere.app.model.focus.FocusRepo>()
+                LaunchedEffect(Unit) { focusRepo.refreshMine() }
 
                 DashboardScreen(
                     viewModel = dashboardViewModel,

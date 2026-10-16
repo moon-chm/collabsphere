@@ -199,7 +199,7 @@ val repositoryModule = module {
     single { NotificationRepo(get()) }
     single { com.collabsphere.app.model.progression.ProgressionRepo(get(), get(), get(), get()) }
     single { com.collabsphere.app.model.commitment.CommitmentRepo(get(), get()) }
-    single { com.collabsphere.app.model.focus.FocusRepo(get()) }
+    single { com.collabsphere.app.model.focus.FocusRepo(get(), get()) }
 }
 
 val appModule = module {
@@ -207,7 +207,7 @@ val appModule = module {
     single { EncryptedTokenStore(androidContext()) }
     single { UserPreferences(get(), get()) }
     single { SessionManager(androidContext(), get(), get(), get(), get()) }
-    single { NotificationHelper(androidContext(), get(), get()) }
+    single { NotificationHelper(androidContext(), get(), get(), get()) }
     single { WorkManager.getInstance(androidContext()) }
     single { com.collabsphere.app.model.DraftStore(get()) }
     single { com.collabsphere.app.model.QuietHoursStore(get()) }

@@ -78,6 +78,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -406,7 +407,7 @@ fun DMScreen(
 
     val focusRepo = org.koin.compose.koinInject<com.collabsphere.app.model.focus.FocusRepo>()
     var partnerFocusUntil by remember(activeChatPartner?.id) { mutableStateOf<Long?>(null) }
-    var holdForFocus by remember(activeChatPartner?.id) { mutableStateOf(true) }
+    var focusSendMode by remember(activeChatPartner?.id) { mutableStateOf(com.collabsphere.app.model.focus.FocusSendMode.HOLD) }
     LaunchedEffect(activeChatPartner?.id, workspaceId) {
         val partnerId = activeChatPartner?.id ?: return@LaunchedEffect
         while (true) {
@@ -416,8 +417,27 @@ fun DMScreen(
     }
     fun dispatchNewMessage(partnerId: Int, text: String) {
         val replyToId = replyingTo?.id?.takeIf { it > 0 }
+        val partnerFocusing = (partnerFocusUntil ?: 0L) > System.currentTimeMillis()
+        if (partnerFocusing && replyToId == null && focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.URGENT) {
+            focusSendMode = com.collabsphere.app.model.focus.FocusSendMode.HOLD
+            replyScope.launch {
+                when (val result = focusRepo.sendUrgent(workspaceId, partnerId, text)) {
+                    is com.collabsphere.app.model.focus.UrgentResult.Sent ->
+                        AppToast.show("Urgent message sent · ${result.remainingToday} left today")
+                    is com.collabsphere.app.model.focus.UrgentResult.LimitReached -> {
+                        AppToast.error(result.message)
+                        if (typedText.isBlank()) typedText = text
+                    }
+                    is com.collabsphere.app.model.focus.UrgentResult.Failed -> {
+                        AppToast.error(result.message)
+                        if (typedText.isBlank()) typedText = text
+                    }
+                }
+            }
+            return
+        }
         val holdUntil = partnerFocusUntil?.takeIf {
-            holdForFocus && replyToId == null && it > System.currentTimeMillis() + 30_000L
+            focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.HOLD && replyToId == null && it > System.currentTimeMillis() + 30_000L
         }
         if (holdUntil == null) {
             viewModel.sendMessage(id = 0, workspaceId = workspaceId, senderId = currentUserId.toInt(), receiverId = partnerId, content = text, replyToId = replyToId)
@@ -2216,8 +2236,8 @@ fun DMScreen(
                             com.collabsphere.app.view.components.PartnerFocusBanner(
                                 partnerName = partner.userName,
                                 focusUntil = until,
-                                holdMessages = holdForFocus,
-                                onHoldChange = { holdForFocus = it },
+                                mode = focusSendMode,
+                                onModeChange = { focusSendMode = it },
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                             )
                         }
@@ -2452,8 +2472,12 @@ fun DMScreen(
                                     val sendInteractionSource = remember { MutableInteractionSource() }
                                     val isSendPressed by sendInteractionSource.collectIsPressedAsState()
                                     val showMic = typedText.isBlank() && editingMessage == null && !isUploadingMedia && !isRecordingVoice
-                                    val willHold = editingMessage == null && holdForFocus && replyingTo == null &&
+                                    val willHold = editingMessage == null && replyingTo == null &&
+                                        focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.HOLD &&
                                         (partnerFocusUntil ?: 0L) > System.currentTimeMillis() + 30_000L
+                                    val willUrgent = editingMessage == null && replyingTo == null &&
+                                        focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.URGENT &&
+                                        (partnerFocusUntil ?: 0L) > System.currentTimeMillis()
                                     val canSend = (typedText.trim().isNotEmpty() && !isUploadingMedia && !isSendingMessage) || editingMessage != null || showMic
                                     val sendScale by animateFloatAsState(
                                         targetValue = if (isSendPressed) 0.90f else 1f,
@@ -2530,12 +2554,14 @@ fun DMScreen(
                                                 editingMessage != null -> Icons.Default.Check
                                                 showMic -> Icons.Default.Mic
                                                 willHold -> Icons.Outlined.Schedule
+                                                willUrgent -> Icons.Outlined.NotificationsActive
                                                 else -> Icons.AutoMirrored.Filled.Send
                                             },
                                             contentDescription = when {
                                                 editingMessage != null -> "Update message"
                                                 showMic -> "Record voice message"
                                                 willHold -> "Deliver when they're free"
+                                                willUrgent -> "Send as urgent"
                                                 else -> "Send message"
                                             },
                                             tint = Color.White,

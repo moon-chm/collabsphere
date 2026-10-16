@@ -14,3 +14,7 @@ data class HoldMessageRequest(
     val receiverId: Int,
     val content: String
 )
+
+@Serializable
+data class UrgentMessageResult(val messageId: Int, val remainingToday: Int)
+

@@ -52,4 +52,21 @@ class FocusRulesTest {
         assertNotNull(FocusRules.contentRejection("x".repeat(4001)))
         assertNull(FocusRules.contentRejection("ping me after"))
     }
+
+    @Test
+    fun `pushes are skipped while the recipient focuses unless urgent`() {
+        assertEquals(true, FocusRules.shouldPush(null, now, urgent = false))
+        assertEquals(true, FocusRules.shouldPush(now - 1, now, urgent = false))
+        assertEquals(false, FocusRules.shouldPush(now + hour, now, urgent = false))
+        assertEquals(true, FocusRules.shouldPush(now + hour, now, urgent = true))
+    }
+
+    @Test
+    fun `urgent allowance counts down and never goes negative`() {
+        assertEquals(3, FocusRules.urgentRemaining(0))
+        assertEquals(1, FocusRules.urgentRemaining(2))
+        assertEquals(0, FocusRules.urgentRemaining(3))
+        assertEquals(0, FocusRules.urgentRemaining(9))
+    }
 }
+

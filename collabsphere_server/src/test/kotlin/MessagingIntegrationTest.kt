@@ -432,5 +432,34 @@ class MessagingIntegrationTest {
         assertEquals(listOf("Continue “Refactor sync worker”"), draft.today)
         assertFalse(draft.githubLinked)
     }
+
+    @Test
+    fun `urgent DMs are delivered immediately and capped at three a day`() = testApplication {
+        application { module() }
+        val sender = client.signUp("urgent-sender")
+        val receiver = client.signUp("urgent-receiver")
+        val outsider = client.signUp("urgent-outsider")
+        val (ws, _) = workspaceWithChannel(sender.id, receiver.id)
+
+        suspend fun urgent(account: Account, content: String) = client.post("/api/focus/urgent") {
+            bearerAuth(account.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"workspaceId":$ws,"receiverId":${receiver.id},"content":"$content"}""")
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, urgent(outsider, "let me in").status)
+        val remaining = (1..3).map {
+            val response = urgent(sender, "prod is down $it")
+            assertEquals(HttpStatusCode.Created, response.status, response.bodyAsText())
+            json.decodeFromString<com.collabsphere.dto.UrgentMessageResult>(response.bodyAsText()).remainingToday
+        }
+        assertEquals(listOf(2, 1, 0), remaining)
+        assertEquals(HttpStatusCode.TooManyRequests, urgent(sender, "prod is down 4").status)
+        transaction {
+            assertEquals(3L, DirectMessagesTable.selectAll().where {
+                (DirectMessagesTable.senderId eq sender.id) and (DirectMessagesTable.isUrgent eq true)
+            }.count())
+        }
+    }
 }
 

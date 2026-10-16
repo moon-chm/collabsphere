@@ -19,6 +19,14 @@ internal object FocusRules {
 
     fun releaseAt(newUntil: Long?, now: Long): Long = activeUntil(newUntil, now) ?: now
 
+    const val URGENT_DAILY_LIMIT = 3
+    const val URGENT_WINDOW_MS = 24L * 60 * 60 * 1000
+
+    fun shouldPush(recipientFocusUntil: Long?, now: Long, urgent: Boolean): Boolean =
+        urgent || activeUntil(recipientFocusUntil, now) == null
+
+    fun urgentRemaining(usedInWindow: Long): Int = (URGENT_DAILY_LIMIT - usedInWindow).coerceAtLeast(0).toInt()
+
     fun contentRejection(content: String): String? = when {
         content.isBlank() -> "Message cannot be empty"
         content.length > MAX_CONTENT_LENGTH -> "Message too long"

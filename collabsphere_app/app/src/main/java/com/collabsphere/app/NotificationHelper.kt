@@ -29,7 +29,8 @@ import kotlin.math.abs
 class NotificationHelper(
     private val context: Context,
     private val userDao: UserDao,
-    private val quietHoursStore: com.collabsphere.app.model.QuietHoursStore
+    private val quietHoursStore: com.collabsphere.app.model.QuietHoursStore,
+    private val focusRepo: com.collabsphere.app.model.focus.FocusRepo
 ) {
 
     private val channelId = "collabsphere_dm_channel_v3"
@@ -102,6 +103,7 @@ class NotificationHelper(
     fun showGenericNotification(notification: NotificationResponse) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         if (quietHoursStore.isQuietNow()) return
+        if (focusRepo.isFocusingNow()) return
 
         // The server delivers each notification over both the WebSocket and FCM, with no bound on how far
         // apart; post a given server notification id once.
@@ -187,12 +189,14 @@ class NotificationHelper(
         }
     }
 
-    suspend fun showDmNotification(dm: DmDto) {
+    suspend fun showDmNotification(incoming: DmDto) {
+        val dm = if (incoming.urgent) incoming.copy(content = "⚡ Urgent · ${incoming.content}") else incoming
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             Log.w("NotificationHelper", "Notifications disabled in system settings or missing permission")
             return
         }
         if (quietHoursStore.isQuietNow()) return
+        if (focusRepo.isFocusingNow() && !dm.urgent) return
 
         // The same DM can arrive over the WebSocket and as an FCM push (e.g. while the socket reconnects).
         val messageId = dm.id ?: 0

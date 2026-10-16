@@ -32,6 +32,12 @@ class FocusApiService(private val client: HttpClient) {
             parameter("workspaceId", workspaceId)
         }.requireSuccess().body()
 
+    suspend fun urgent(request: HoldMessageRequest): com.collabsphere.app.dto.focus.UrgentMessageResult =
+        client.post("${AppConfig.BASE_URL}/api/focus/urgent") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.requireSuccess().body()
+
     suspend fun hold(request: HoldMessageRequest): ScheduledMessageItem =
         client.post("${AppConfig.BASE_URL}/api/focus/hold") {
             contentType(ContentType.Application.Json)
