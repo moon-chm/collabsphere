@@ -1173,7 +1173,9 @@ fun Application.configureRouting() {
                     }
                     val emailTarget = issuance.second ?: return@post call.respond(HttpStatusCode.InternalServerError, "Failed to issue verification code")
 
-                    if (EmailService.sendVerificationOtp(emailTarget, otp)) {
+                    val isEmailChange = !emailTarget.equals(userRow[UsersTable.email], ignoreCase = true)
+                    val sent = if (isEmailChange) EmailService.sendEmailChangeOtp(emailTarget, otp) else EmailService.sendVerificationOtp(emailTarget, otp)
+                    if (sent) {
                         call.respond(HttpStatusCode.OK, "Verification email sent")
                     } else {
                         dbQuery {

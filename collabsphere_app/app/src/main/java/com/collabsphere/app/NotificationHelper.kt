@@ -24,7 +24,7 @@ import com.collabsphere.app.dto.notification.NotificationResponse
 import com.collabsphere.app.model.UserDao
 import com.collabsphere.app.remote.dm.DmNotificationReplyReceiver
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 class NotificationHelper(
     private val context: Context,
@@ -33,10 +33,9 @@ class NotificationHelper(
     private val focusRepo: com.collabsphere.app.model.focus.FocusRepo
 ) {
 
-    private val channelId = "collabsphere_dm_channel_v3"
-    private val channelName = "CollabSphere Messages"
-    private val genericChannelId = "collabsphere_activity_channel_v1"
-    private val genericChannelName = "CollabSphere Activity"
+    private val channelId = NotificationChannels.DIRECT
+    private val genericChannelId = NotificationChannels.CHANNELS
+    private val avatars = NotificationAvatars(context)
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     // In-memory conversation history cache: PartnerId -> List of Messages
@@ -47,49 +46,14 @@ class NotificationHelper(
     private val partnerNames = ConcurrentHashMap<Int, String>()
     private val channelHistory = ConcurrentHashMap<Int, MutableList<NotificationCompat.MessagingStyle.Message>>()
     private val channelMeta = ConcurrentHashMap<Int, NotificationResponse>()
+    private val channelThreadChannel = ConcurrentHashMap<Int, String>()
+    private val partnerAvatars = ConcurrentHashMap<Int, Bitmap>()
 
     @Volatile
     var activeChannelId: Int? = null
 
     init {
-        createNotificationChannel()
-        createGenericChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val importance = NotificationManager.IMPORTANCE_HIGH
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val audioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()
-
-            val channel = NotificationChannel(channelId, channelName, importance).apply {
-                description = "CollabSphere real-time direct message notifications with heads-up peeking"
-                setSound(soundUri, audioAttributes)
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 150, 80, 200)
-                enableLights(true)
-                lightColor = 0xFF25D366.toInt()
-                // PRIVATE (not PUBLIC): a locked device still shows "New message from X" without
-                // exposing the message content on the lock screen for anyone else to read.
-                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                setShowBadge(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun createGenericChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(genericChannelId, genericChannelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Mentions, channel messages, and task activity"
-                enableVibration(true)
-                setShowBadge(true)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
+        NotificationChannels.ensureCreated(notificationManager)
     }
 
     private val recentGenericNotifications = ConcurrentHashMap<String, Long>()
@@ -128,6 +92,10 @@ class NotificationHelper(
             recentGenericNotifications.clear()
         }
 
+        MyApplication.appScope.launch { postGeneric(notification) }
+    }
+
+    private suspend fun postGeneric(notification: NotificationResponse) {
         val channelIdForThread = notification.channelId
         if (channelIdForThread != null && (notification.type == "CHANNEL_MESSAGE" || notification.type == "MENTION")) {
             if (MyApplication.isAppForeground && activeChannelId == channelIdForThread) return
@@ -144,7 +112,6 @@ class NotificationHelper(
             putExtra("notification_id", notification.id)
             putExtra("partner_name", notification.actorUsername ?: "Workspace")
         }
-
         val clickPendingIntent = PendingIntent.getActivity(
             context,
             notification.id + 500_000,
@@ -152,45 +119,87 @@ class NotificationHelper(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val avatar = createAvatarBitmap(notification.actorUsername ?: notification.title)
+        val actorName = notification.actorUsername ?: notification.title
+        val avatar = avatars.load(notification.actorAvatarUrl, actorName)
+        val androidChannel = NotificationChannels.forType(notification.type)
+        val color = NotificationChannels.colorFor(notification.type)
         val groupKey = "collabsphere_activity_group"
+        val notificationId = 2_000_000 + notification.id
 
-        val builder = NotificationCompat.Builder(context, genericChannelId)
+        val builder = NotificationCompat.Builder(context, androidChannel)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
             .setLargeIcon(avatar)
             .setContentTitle(notification.title)
             .setContentText(notification.body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(notification.body))
             .setContentIntent(clickPendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(if (androidChannel == NotificationChannels.GITHUB) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setGroup(groupKey)
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
-            .setColor(0xFFF0633D.toInt()) // CollabSphere coral
+            .setCategory(if (notification.type == "TASK_DUE") NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_SOCIAL)
+            .setColor(color)
+            .setWhen(notification.createdAt)
+            .setShowWhen(true)
+        taskDoneAction(notification, notificationId)?.let { builder.addAction(it) }
 
-        val summaryNotification = NotificationCompat.Builder(context, genericChannelId)
+        val summaryNotification = NotificationCompat.Builder(context, androidChannel)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
-            .setContentTitle("CollabSphere Updates")
+            .setContentTitle("CollabSphere")
             .setContentText("New workspace updates")
-            .setStyle(NotificationCompat.InboxStyle().setSummaryText("CollabSphere Updates"))
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("Workspace updates"))
             .setGroup(groupKey)
             .setGroupSummary(true)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setColor(0xFFF0633D.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .build()
 
         try {
-            notificationManager.notify(2_000_000 + notification.id, builder.build())
+            notificationManager.notify(notificationId, builder.build())
             notificationManager.notify(2_999_999, summaryNotification)
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed posting generic notification", e)
         }
     }
 
+    private fun taskDoneAction(notification: NotificationResponse, notificationId: Int): NotificationCompat.Action? {
+        if (notification.type != "TASK_ASSIGNED" && notification.type != "TASK_UPDATED" && notification.type != "TASK_DUE") return null
+        val taskId = notification.referenceId?.takeIf { it > 0 } ?: return null
+        val intent = Intent(context, com.collabsphere.app.remote.task.TaskNotificationReceiver::class.java).apply {
+            action = com.collabsphere.app.remote.task.TaskNotificationReceiver.ACTION_MARK_DONE
+            putExtra(com.collabsphere.app.remote.task.TaskNotificationReceiver.EXTRA_TASK_ID, taskId)
+            putExtra(com.collabsphere.app.remote.task.TaskNotificationReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Action.Builder(R.drawable.ic_stat_collabsphere, "Mark done", pending)
+            .setShowsUserInterface(false)
+            .build()
+    }
+
+    private fun pushConversationShortcut(partnerId: Int, name: String, icon: IconCompat, person: Person, clickIntent: Intent): String? =
+        runCatching {
+            val id = "dm_$partnerId"
+            val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, id)
+                .setShortLabel(name)
+                .setLongLived(true)
+                .setPerson(person)
+                .setIcon(icon)
+                .setIntent(Intent(clickIntent).setAction(Intent.ACTION_VIEW))
+                .setCategories(setOf("android.shortcut.conversation"))
+                .build()
+            androidx.core.content.pm.ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+            id
+        }.onFailure { Log.w("NotificationHelper", "Couldn't publish conversation shortcut", it) }.getOrNull()
+
     suspend fun showDmNotification(incoming: DmDto) {
-        val dm = if (incoming.urgent) incoming.copy(content = "⚡ Urgent · ${incoming.content}") else incoming
+        val previewed = incoming.copy(content = dmPreviewText(incoming.content, incoming.mediaUrl))
+        val dm = if (previewed.urgent) previewed.copy(content = "\u26A1 Urgent \u00B7 ${previewed.content}") else previewed
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             Log.w("NotificationHelper", "Notifications disabled in system settings or missing permission")
             return
@@ -213,16 +222,18 @@ class NotificationHelper(
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         // Resolve sender display name — a plain suspend call instead of blocking the caller's thread.
-        val senderName = (try {
-            userDao.getUserById(dm.senderId)?.userName
+        val sender = try {
+            userDao.getUserById(dm.senderId)
         } catch (e: Exception) {
             null
-        }) ?: "User #${dm.senderId}"
+        }
+        val senderName = sender?.userName ?: "User #${dm.senderId}"
 
         partnerNames[dm.senderId] = senderName
 
         // Generate circular stylized initial avatar bitmap
-        val avatarBitmap = createAvatarBitmap(senderName)
+        val avatarBitmap = avatars.load(sender?.avatarUrl, senderName)
+        partnerAvatars[dm.senderId] = avatarBitmap
         val senderIcon = IconCompat.createWithBitmap(avatarBitmap)
 
         // Build Person objects
@@ -347,25 +358,27 @@ class NotificationHelper(
         }
 
         val notificationId = dm.senderId
-        val builder = NotificationCompat.Builder(context, channelId)
+        val shortcutId = pushConversationShortcut(dm.senderId, senderName, senderIcon, senderPerson, clickIntent)
+        val androidChannel = if (dm.urgent) NotificationChannels.URGENT else NotificationChannels.DIRECT
+        val builder = NotificationCompat.Builder(context, androidChannel)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
             .setStyle(messagingStyle)
             .setContentTitle(senderName)
             .setContentText(dm.content)
             .setLargeIcon(avatarBitmap)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setSound(soundUri)
-            .setVibrate(longArrayOf(0, 150, 80, 200))
+            .setVibrate(if (dm.urgent) NotificationChannels.URGENT_VIBRATION else NotificationChannels.DM_VIBRATION)
             .setContentIntent(clickPendingIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
-            .setColor(0xFF25D366.toInt()) // WhatsApp-style emerald green accent
-            .setSubText("Direct message")
+            .setColor(if (dm.urgent) NotificationChannels.URGENT_COLOR else NotificationChannels.BRAND_COLOR)
+            .setSubText(if (dm.urgent) "Urgent" else "Direct message")
             .addAction(replyAction)
             .addAction(markReadAction)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setShortcutId(shortcutId)
             .setGroup("collabsphere_dms")
 
         try {
@@ -408,7 +421,7 @@ class NotificationHelper(
             }
         }
 
-        val avatarBitmap = createAvatarBitmap(partnerName)
+        val avatarBitmap = partnerAvatars[partnerId] ?: avatars.initials(partnerName)
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
@@ -417,10 +430,11 @@ class NotificationHelper(
             .setPriority(NotificationCompat.PRIORITY_LOW) // low priority update, already sent
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
-            .setColor(0xFF25D366.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .setSubText("Direct message")
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup("collabsphere_dms")
+            .setShortcutId("dm_$partnerId")
 
         try {
             notificationManager.notify(partnerId, builder.build())
@@ -457,14 +471,15 @@ class NotificationHelper(
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
             .setStyle(messagingStyle)
-            .setLargeIcon(createAvatarBitmap(partnerName))
+            .setLargeIcon(partnerAvatars[partnerId] ?: avatars.initials(partnerName))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
-            .setColor(0xFF25D366.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .setSubText("Direct message")
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup("collabsphere_dms")
+            .setShortcutId("dm_$partnerId")
 
         try {
             notificationManager.notify(partnerId, builder.build())
@@ -493,12 +508,12 @@ class NotificationHelper(
             .setGroup("collabsphere_dms")
             .setGroupSummary(true)
             .setAutoCancel(true)
-            .setColor(0xFFF0633D.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .build()
         runCatching { notificationManager.notify(DM_SUMMARY_ID, summary) }
     }
 
-    private fun showChannelNotification(notification: NotificationResponse, channelId: Int) {
+    private suspend fun showChannelNotification(notification: NotificationResponse, channelId: Int) {
         val workspaceId = notification.workspaceId ?: return
         val actorName = notification.actorUsername ?: "Someone"
         val channelLabel = notification.channelName?.let { "#$it" } ?: "Channel"
@@ -507,7 +522,7 @@ class NotificationHelper(
         val actor = Person.Builder()
             .setName(actorName)
             .setKey("u${notification.actorId ?: actorName}")
-            .setIcon(IconCompat.createWithBitmap(createAvatarBitmap(actorName)))
+            .setIcon(IconCompat.createWithBitmap(avatars.load(notification.actorAvatarUrl, actorName)))
             .build()
         val me = Person.Builder().setName("You").setKey(notification.recipientId.toString()).build()
 
@@ -533,6 +548,7 @@ class NotificationHelper(
     fun dismissChannel(channelId: Int) {
         channelHistory.remove(channelId)
         channelMeta.remove(channelId)
+        channelThreadChannel.remove(channelId)
         notificationManager.cancel(CHANNEL_NOTIFICATION_BASE + channelId)
         if (channelHistory.isEmpty()) notificationManager.cancel(CHANNEL_SUMMARY_ID)
     }
@@ -546,6 +562,12 @@ class NotificationHelper(
     ) {
         val workspaceId = meta.workspaceId ?: return
         val requestBase = CHANNEL_NOTIFICATION_BASE + channelId * 4
+        val androidChannel = if (alert) {
+            (if (meta.type == "MENTION") NotificationChannels.MENTIONS else NotificationChannels.CHANNELS)
+                .also { channelThreadChannel[channelId] = it }
+        } else {
+            channelThreadChannel[channelId] ?: NotificationChannels.CHANNELS
+        }
         val style = NotificationCompat.MessagingStyle(me)
             .setConversationTitle(channelLabel)
             .setGroupConversation(true)
@@ -606,7 +628,7 @@ class NotificationHelper(
             .setShowsUserInterface(false)
             .build()
 
-        val builder = NotificationCompat.Builder(context, genericChannelId)
+        val builder = NotificationCompat.Builder(context, androidChannel)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
             .setStyle(style)
             .setContentTitle(channelLabel)
@@ -616,12 +638,12 @@ class NotificationHelper(
             .setOnlyAlertOnce(!alert)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setColor(0xFFF0633D.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .setGroup(CHANNEL_GROUP)
             .addAction(replyAction)
             .addAction(markReadAction)
 
-        val summary = NotificationCompat.Builder(context, genericChannelId)
+        val summary = NotificationCompat.Builder(context, androidChannel)
             .setSmallIcon(R.drawable.ic_stat_collabsphere)
             .setContentTitle("CollabSphere")
             .setContentText(if (channelHistory.size == 1) "New channel activity" else "Activity in ${channelHistory.size} channels")
@@ -629,7 +651,7 @@ class NotificationHelper(
             .setGroup(CHANNEL_GROUP)
             .setGroupSummary(true)
             .setAutoCancel(true)
-            .setColor(0xFFF0633D.toInt())
+            .setColor(NotificationChannels.BRAND_COLOR)
             .build()
 
         try {
@@ -638,56 +660,6 @@ class NotificationHelper(
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed posting channel notification", e)
         }
-    }
-
-    /**
-     * Generates a circular avatar badge with the person's initial letter and tactile depth.
-     */
-    private fun createAvatarBitmap(name: String, sizePx: Int = 128): Bitmap {
-        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint().apply {
-            isAntiAlias = true
-            style = Paint.Style.FILL
-        }
-
-        // WhatsApp / modern messaging curated gradients
-        val palette = intArrayOf(
-            0xFF128C7E.toInt(), // WhatsApp Dark Teal
-            0xFF25D366.toInt(), // WhatsApp Vibrant Green
-            0xFF0088CC.toInt(), // Telegram Blue
-            0xFFF0633D.toInt(), // CollabSphere Coral
-            0xFF6C5CE7.toInt(), // Modern Violet
-            0xFF0984E3.toInt(), // Electric Blue
-            0xFF00B894.toInt()  // Emerald
-        )
-        val baseColor = palette[abs(name.hashCode()) % palette.size]
-        paint.color = baseColor
-        canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
-
-        // Specular glow highlight for polished tactile depth
-        val glowPaint = Paint().apply {
-            isAntiAlias = true
-            style = Paint.Style.FILL
-            this.color = android.graphics.Color.WHITE
-            alpha = 38
-        }
-        canvas.drawCircle(sizePx / 2f, sizePx * 0.35f, sizePx * 0.35f, glowPaint)
-
-        // Draw initial letter
-        val textPaint = Paint().apply {
-            isAntiAlias = true
-            this.color = android.graphics.Color.WHITE
-            textSize = sizePx * 0.46f
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-
-        val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        val yOffset = (textPaint.descent() + textPaint.ascent()) / 2
-        canvas.drawText(initial, sizePx / 2f, (sizePx / 2f) - yOffset, textPaint)
-
-        return bitmap
     }
 
     private companion object {

@@ -6,7 +6,9 @@ import jakarta.mail.PasswordAuthentication
 import jakarta.mail.Session
 import jakarta.mail.Transport
 import jakarta.mail.internet.InternetAddress
+import jakarta.mail.internet.MimeBodyPart
 import jakarta.mail.internet.MimeMessage
+import jakarta.mail.internet.MimeMultipart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -158,7 +160,13 @@ object EmailService {
     /**
      * Sends an email via Google Gmail REST API over HTTPS (Port 443).
      */
-    private fun sendViaGmailApi(to: String, subject: String, htmlBody: String): Boolean {
+    private fun alternativeContent(htmlBody: String, textBody: String): MimeMultipart =
+        MimeMultipart("alternative").apply {
+            addBodyPart(MimeBodyPart().apply { setText(textBody, "UTF-8", "plain") })
+            addBodyPart(MimeBodyPart().apply { setText(htmlBody, "UTF-8", "html") })
+        }
+
+    private fun sendViaGmailApi(to: String, subject: String, htmlBody: String, textBody: String): Boolean {
         val token = getValidAccessToken()
 
         // Build RFC-822 MIME message
@@ -172,13 +180,8 @@ object EmailService {
             setFrom(fromAddress)
             setRecipients(Message.RecipientType.TO, InternetAddress.parse(to))
             setSubject(subject, "UTF-8")
-            setContent(htmlBody, "text/html; charset=utf-8")
-
-            // Transactional priority headers
-            addHeader("X-Priority", "1")
-            addHeader("Priority", "urgent")
-            addHeader("Importance", "high")
-            addHeader("X-MSMail-Priority", "High")
+            setContent(alternativeContent(htmlBody, textBody))
+            addHeader("Auto-Submitted", "auto-generated")
         }
 
         val baos = ByteArrayOutputStream()
@@ -208,7 +211,7 @@ object EmailService {
     /**
      * Sends an email via legacy SMTP (Port 587/465).
      */
-    private fun sendViaSmtp(to: String, subject: String, htmlBody: String): Boolean {
+    private fun sendViaSmtp(to: String, subject: String, htmlBody: String, textBody: String): Boolean {
         val session = Session.getInstance(smtpProperties, object : Authenticator() {
             override fun getPasswordAuthentication(): PasswordAuthentication {
                 return PasswordAuthentication(smtpUser, smtpPass)
@@ -219,9 +222,8 @@ object EmailService {
             setFrom(InternetAddress(smtpFrom))
             setRecipients(Message.RecipientType.TO, InternetAddress.parse(to))
             setSubject(subject, "UTF-8")
-            setContent(htmlBody, "text/html; charset=utf-8")
-            addHeader("X-Priority", "1")
-            addHeader("Importance", "high")
+            setContent(alternativeContent(htmlBody, textBody))
+            addHeader("Auto-Submitted", "auto-generated")
         }
 
         Transport.send(message)
@@ -235,11 +237,13 @@ object EmailService {
      * Tier 2: Standard SMTP (Port 587 / 465)
      * Tier 3: Console Mock Print
      */
-    suspend fun sendEmail(to: String, subject: String, htmlBody: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun sendEmail(content: EmailContent, to: String): Boolean = sendEmail(to, content.subject, content.html, content.text)
+
+    suspend fun sendEmail(to: String, subject: String, htmlBody: String, textBody: String): Boolean = withContext(Dispatchers.IO) {
         // Tier 1: Gmail API
         if (isGmailApiConfigured) {
             try {
-                val ok = sendViaGmailApi(to, subject, htmlBody)
+                val ok = sendViaGmailApi(to, subject, htmlBody, textBody)
                 if (ok) return@withContext true
                 logger.warn("[EmailService] Gmail API returned unsuccessful response, falling back...")
             } catch (e: Exception) {
@@ -251,7 +255,7 @@ object EmailService {
         // Tier 2: SMTP Fallback
         if (isSmtpConfigured) {
             try {
-                val ok = sendViaSmtp(to, subject, htmlBody)
+                val ok = sendViaSmtp(to, subject, htmlBody, textBody)
                 if (ok) return@withContext true
                 logger.warn("[EmailService] SMTP dispatch failed, falling back...")
             } catch (e: Exception) {
@@ -267,94 +271,23 @@ object EmailService {
             To: $to
             Subject: $subject
             Body:
-            $htmlBody
+            $textBody
             ============================================================
         """.trimIndent())
         return@withContext true
     }
 
-    suspend fun sendVerificationOtp(to: String, otp: String): Boolean {
-        val subject = "$otp is your CollabSphere verification code"
-        val html = """
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"></head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #E8E4DA; margin: 0; padding: 32px;">
-                <div style="max-width: 520px; margin: 0 auto; background: #FDFBF7; border-radius: 20px; padding: 36px; box-shadow: 0 4px 16px rgba(44,42,40,0.12); border: 1px solid rgba(44,42,40,0.08);">
-                    <div style="text-align: center; margin-bottom: 24px;">
-                        <span style="font-size: 26px; font-weight: 800; color: #F0633D;">CollabSphere</span>
-                    </div>
-                    <h2 style="color: #2C2A28; font-size: 22px; font-weight: 700; margin-bottom: 12px; text-align: center;">Verify your email address</h2>
-                    <p style="color: #7A7570; font-size: 15px; line-height: 1.5; text-align: center;">
-                        Thank you for joining CollabSphere. Enter the following 6-digit verification code in the app to activate your account:
-                    </p>
-                    <div style="background: #FAF8F3; border: 2px solid #F0633D; border-radius: 14px; padding: 18px; text-align: center; margin: 28px 0;">
-                        <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #2C2A28;">$otp</span>
-                    </div>
-                    <p style="color: #7A7570; font-size: 13px; text-align: center;">
-                        This code will expire in <strong>15 minutes</strong>. If you did not create a CollabSphere account, please disregard this email.
-                    </p>
-                </div>
-            </body>
-            </html>
-        """.trimIndent()
-        return sendEmail(to, subject, html)
-    }
+    private val otpMinutes: Int get() = (plugins.AuthRules.OTP_TTL_MS / 60_000L).toInt()
 
-    suspend fun sendPasswordResetOtp(to: String, otp: String): Boolean {
-        val subject = "$otp is your CollabSphere password reset code"
-        val html = """
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"></head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #E8E4DA; margin: 0; padding: 32px;">
-                <div style="max-width: 520px; margin: 0 auto; background: #FDFBF7; border-radius: 20px; padding: 36px; box-shadow: 0 4px 16px rgba(44,42,40,0.12); border: 1px solid rgba(44,42,40,0.08);">
-                    <div style="text-align: center; margin-bottom: 24px;">
-                        <span style="font-size: 26px; font-weight: 800; color: #F0633D;">CollabSphere</span>
-                    </div>
-                    <h2 style="color: #2C2A28; font-size: 22px; font-weight: 700; margin-bottom: 12px; text-align: center;">Reset your password</h2>
-                    <p style="color: #7A7570; font-size: 15px; line-height: 1.5; text-align: center;">
-                        We received a request to reset your CollabSphere password. Use the following 6-digit code in the app to set a new password:
-                    </p>
-                    <div style="background: #FAF8F3; border: 2px solid #4C55C4; border-radius: 14px; padding: 18px; text-align: center; margin: 28px 0;">
-                        <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #2C2A28;">$otp</span>
-                    </div>
-                    <p style="color: #7A7570; font-size: 13px; text-align: center;">
-                        This code will expire in <strong>15 minutes</strong>. If you did not request a password reset, you can safely ignore this email.
-                    </p>
-                </div>
-            </body>
-            </html>
-        """.trimIndent()
-        return sendEmail(to, subject, html)
-    }
+    suspend fun sendVerificationOtp(to: String, otp: String): Boolean =
+        sendEmail(EmailTemplates.verification(otp, otpMinutes), to)
 
-    suspend fun sendWorkspaceInvitation(to: String, workspaceName: String, inviterName: String, inviteCode: String): Boolean {
-        val subject = "$inviterName invited you to join $workspaceName on CollabSphere"
-        val html = """
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"></head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #E8E4DA; margin: 0; padding: 32px;">
-                <div style="max-width: 520px; margin: 0 auto; background: #FDFBF7; border-radius: 20px; padding: 36px; box-shadow: 0 4px 16px rgba(44,42,40,0.12); border: 1px solid rgba(44,42,40,0.08);">
-                    <div style="text-align: center; margin-bottom: 24px;">
-                        <span style="font-size: 26px; font-weight: 800; color: #F0633D;">CollabSphere</span>
-                    </div>
-                    <h2 style="color: #2C2A28; font-size: 22px; font-weight: 700; margin-bottom: 12px; text-align: center;">You've been invited!</h2>
-                    <p style="color: #7A7570; font-size: 15px; line-height: 1.5; text-align: center;">
-                        <strong>$inviterName</strong> has invited you to collaborate in the <strong>$workspaceName</strong> workspace.
-                    </p>
-                    <div style="background: #FAF8F3; border: 2px solid #4E9E78; border-radius: 14px; padding: 18px; text-align: center; margin: 28px 0;">
-                        <p style="color: #7A7570; font-size: 12px; text-transform: uppercase; font-weight: 700; margin: 0 0 6px 0; letter-spacing: 1px;">Your Invite Code</p>
-                        <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #2C2A28;">$inviteCode</span>
-                    </div>
-                    <p style="color: #7A7570; font-size: 14px; text-align: center;">
-                        Open CollabSphere and tap <strong>"Join with Code"</strong> on your Dashboard to join this workspace!
-                    </p>
-                </div>
-            </body>
-            </html>
-        """.trimIndent()
-        return sendEmail(to, subject, html)
-    }
+    suspend fun sendEmailChangeOtp(to: String, otp: String): Boolean =
+        sendEmail(EmailTemplates.emailChange(otp, to, otpMinutes), to)
+
+    suspend fun sendPasswordResetOtp(to: String, otp: String): Boolean =
+        sendEmail(EmailTemplates.passwordReset(otp, otpMinutes), to)
+
+    suspend fun sendWorkspaceInvitation(to: String, workspaceName: String, inviterName: String, inviteCode: String): Boolean =
+        sendEmail(EmailTemplates.workspaceInvitation(workspaceName, inviterName, inviteCode, validDays = 7), to)
 }

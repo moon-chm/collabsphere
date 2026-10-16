@@ -360,8 +360,13 @@ fun AppNavigation(
                             val wsName = dashboardViewModel.workspaces.value
                                 ?.find { it.id == workspaceId }?.workspaceName ?: "Workspace"
                             val encodedWsName = URLEncoder.encode(wsName, StandardCharsets.UTF_8.toString())
-                            val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
-                            navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=$tab")
+                            val partnerId = notification.actorId
+                            if (notification.type == "DM" && partnerId != null) {
+                                navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=4&initialPartnerId=$partnerId")
+                            } else {
+                                val tab = if (notification.type == "TASK_ASSIGNED" || notification.type == "TASK_UPDATED" || notification.type == "TASK_DUE") 1 else 0
+                                navController.navigate("workspace_detailed/$workspaceId/$encodedWsName?initialTab=$tab")
+                            }
                         }
                     },
                     onAcceptInvitation = { invitationId, notificationId ->

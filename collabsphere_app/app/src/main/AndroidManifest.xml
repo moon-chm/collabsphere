@@ -34,6 +34,14 @@
         </receiver>
 
         <receiver
+            android:name=".remote.task.TaskNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.collabsphere.app.ACTION_TASK_MARK_DONE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".remote.dm.DmNotificationReplyReceiver"
             android:exported="false">
             <intent-filter>

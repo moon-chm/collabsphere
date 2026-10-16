@@ -12,9 +12,9 @@ import com.collabsphere.app.remote.notification.NotificationApiService
  */
 class NotificationRepo(private val apiService: NotificationApiService) {
 
-    suspend fun getNotifications(unreadOnly: Boolean = false): Result<List<NotificationResponse>> {
+    suspend fun getNotifications(unreadOnly: Boolean = false, limit: Int = 50, offset: Long = 0): Result<List<NotificationResponse>> {
         return try {
-            Result.success(apiService.getNotifications(unreadOnly = unreadOnly))
+            Result.success(apiService.getNotifications(unreadOnly = unreadOnly, limit = limit, offset = offset))
         } catch (e: Exception) {
             Log.e("NotificationRepo", "Operation failed", e)
             Result.failure(e)
