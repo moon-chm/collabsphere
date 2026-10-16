@@ -1,6 +1,11 @@
 package plugins.mcp
 
+import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent as HttpTextContent
 import io.ktor.server.application.Application
+import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.install
+import io.ktor.server.request.path
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
@@ -9,6 +14,11 @@ import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 
 internal object CollabSphereMcp {
@@ -46,8 +56,40 @@ internal object CollabSphereMcp {
     }
 }
 
+internal object McpJsonCleanup {
+    fun stripNulls(text: String): String {
+        val parsed = runCatching { Json.parseToJsonElement(text) }.getOrNull() ?: return text
+        return clean(parsed, topLevel = true).toString()
+    }
+
+    private fun clean(element: JsonElement, topLevel: Boolean = false): JsonElement = when (element) {
+        is JsonObject -> JsonObject(
+            element.entries
+                .filter { (key, value) -> value !is JsonNull || (topLevel && key == "id") }
+                .associate { (key, value) -> key to clean(value) }
+        )
+        is JsonArray -> JsonArray(element.map { clean(it) })
+        else -> element
+    }
+}
+
+private val McpNullStripping = createApplicationPlugin("McpNullStripping") {
+    onCallRespond { call ->
+        if (call.request.path() != CollabSphereMcp.PATH) return@onCallRespond
+        transformBody { body ->
+            when {
+                body is HttpTextContent && body.contentType.match(ContentType.Application.Json) ->
+                    HttpTextContent(McpJsonCleanup.stripNulls(body.text), body.contentType, body.status)
+                body is String -> McpJsonCleanup.stripNulls(body)
+                else -> body
+            }
+        }
+    }
+}
+
 internal fun Application.configureMcp(environment: Map<String, String> = System.getenv()) {
     if (!CollabSphereMcp.isEnabled(environment)) return
+    install(McpNullStripping)
     mcpStatelessStreamableHttp(
         path = CollabSphereMcp.PATH,
         enableDnsRebindingProtection = true,

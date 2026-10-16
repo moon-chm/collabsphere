@@ -129,5 +129,43 @@ class CollabSphereMcpTest {
         val response = rpc(initialize, host = "localhost:8080")
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
     }
+
+    private fun nullPaths(element: kotlinx.serialization.json.JsonElement, path: String = "$"): List<String> = when (element) {
+        is kotlinx.serialization.json.JsonNull -> listOf(path)
+        is JsonObject -> element.flatMap { (key, value) -> nullPaths(value, "$path.$key") }
+        is kotlinx.serialization.json.JsonArray -> element.flatMapIndexed { index, value -> nullPaths(value, "$path[$index]") }
+        else -> emptyList()
+    }
+
+    @Test
+    fun `responses carry no null fields that strict clients reject`() = testApplication {
+        appLikeProduction()
+        listOf(
+            initialize,
+            """{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}""",
+            """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"${CollabSphereMcp.STATUS_TOOL}","arguments":{}}}"""
+        ).forEach { body ->
+            val response = rpc(body)
+            assertEquals(HttpStatusCode.OK, response.status)
+            val nulls = nullPaths(payload(response.bodyAsText()))
+            assertTrue(nulls.isEmpty(), "null fields in response: $nulls")
+        }
+    }
+
+    @Test
+    fun `cleanup keeps a top-level null id and leaves non-JSON untouched`() {
+        assertEquals("""{"jsonrpc":"2.0","id":null,"error":{"code":-32700}}""",
+            McpJsonCleanup.stripNulls("""{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"data":null}}"""))
+        assertEquals("""{"a":[1,{"b":2}]}""", McpJsonCleanup.stripNulls("""{"a":[1,{"b":2,"c":null}],"d":null}"""))
+        assertEquals("event: ping", McpJsonCleanup.stripNulls("event: ping"))
+    }
+
+    @Test
+    fun `notifications are accepted with an empty body`() = testApplication {
+        appLikeProduction()
+        val response = rpc("""{"jsonrpc":"2.0","method":"notifications/initialized"}""")
+        assertEquals(HttpStatusCode.Accepted, response.status)
+        assertTrue(response.bodyAsText().isBlank())
+    }
 }
 
