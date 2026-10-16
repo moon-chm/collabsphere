@@ -335,6 +335,8 @@ fun Application.configureRouting() {
             call.respondText("CollabSphere Server is running!", ContentType.Text.Plain, HttpStatusCode.OK)
         }
 
+        publicPages()
+
         head("/") {
             call.respond(HttpStatusCode.OK)
         }
