@@ -1,5 +1,6 @@
 package com.collabsphere
 
+import plugins.mcp.configureMcp
 import plugins.WebSocketBroker
 import plugins.configureRouting
 import plugins.configureGitHubRoutes
@@ -212,6 +213,7 @@ fun Application.module() {
     // ── Feature routes ────────────────────────────────────────────────────────
     configureRouting()
     configureGitHubRoutes()
+    configureMcp()
     startTaskReminderScheduler()
     startScheduledMessageDispatcher()
     plugins.WorkspaceSyncNotifier.start(this)

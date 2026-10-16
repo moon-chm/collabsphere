@@ -35,6 +35,8 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json")
 
     implementation("org.postgresql:postgresql:42.7.14")
+    implementation("io.modelcontextprotocol:kotlin-sdk-server:0.15.0")
+    testImplementation("io.modelcontextprotocol:kotlin-sdk-client:0.15.0")
     implementation("com.zaxxer:HikariCP:5.1.0")
     implementation("org.jetbrains.exposed:exposed-java-time:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-core:$exposed_version")
