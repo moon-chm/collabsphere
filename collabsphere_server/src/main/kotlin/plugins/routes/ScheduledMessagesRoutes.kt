@@ -83,7 +83,7 @@ internal fun Route.scheduledMessagesRoutes() {
                         it[createdAt] = now
                         it[status] = SCHEDULE_PENDING
                     }[ScheduledMessagesTable.id]
-                    ScheduledMessagesTable.selectAll().where { ScheduledMessagesTable.id eq id }.single().toItem()
+                    ScheduledMessagesTable.selectAll().where { ScheduledMessagesTable.id eq id }.single().toScheduledItem()
                 }
                 if (created == null) call.respond(HttpStatusCode.Forbidden, "You can't message there")
                 else call.respond(HttpStatusCode.Created, created)
@@ -109,7 +109,7 @@ internal fun Route.scheduledMessagesRoutes() {
                             condition
                         }
                         .orderBy(ScheduledMessagesTable.sendAt, SortOrder.ASC)
-                        .map { it.toItem() }
+                        .map { it.toScheduledItem() }
                 }
                 call.respond(HttpStatusCode.OK, items)
             } catch (e: Exception) {
@@ -138,7 +138,7 @@ internal fun Route.scheduledMessagesRoutes() {
     }
 }
 
-private fun ResultRow.toItem() = ScheduledMessageItem(
+internal fun ResultRow.toScheduledItem() = ScheduledMessageItem(
     id = this[ScheduledMessagesTable.id],
     kind = this[ScheduledMessagesTable.kind],
     workspaceId = this[ScheduledMessagesTable.workspaceId],

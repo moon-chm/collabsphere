@@ -1,57 +1,48 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import androidx.compose.animation.core.Spring
-import com.collabsphere.app.view.components.AppToast
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.FolderDelete
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.ui.theme.Destructive
+import com.collabsphere.app.ui.theme.DestructiveEnd
+import com.collabsphere.app.ui.theme.DestructiveStart
+import com.collabsphere.app.ui.theme.Muted
+import com.collabsphere.app.view.components.AppToast
+import com.collabsphere.app.view.components.SkeuoTextField
+import com.collabsphere.app.view.components.WorkspaceDialogButton
+import com.collabsphere.app.view.components.WorkspaceDialogCard
 import com.collabsphere.app.viewmodel.workspace.WorkspaceViewModel
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeleteWorkspaceScreen(
     viewModel: WorkspaceViewModel,
@@ -60,7 +51,6 @@ fun DeleteWorkspaceScreen(
     onBack: () -> Unit,
     onDeleted: () -> Unit
 ) {
-    val context = LocalContext.current
     val workspaceStatus by viewModel.workspaceStatus.collectAsStateWithLifecycle()
     val isDeletingWorkspace by viewModel.isDeletingWorkspace.collectAsStateWithLifecycle()
 
@@ -69,6 +59,7 @@ fun DeleteWorkspaceScreen(
 
     var lastClickTime by remember { mutableStateOf(0L) }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
 
     val isFormValid = name.isNotBlank() && password.isNotBlank()
 
@@ -79,446 +70,92 @@ fun DeleteWorkspaceScreen(
 
     LaunchedEffect(workspaceStatus) {
         workspaceStatus?.let {
-            AppToast.show(it)
             viewModel.clearWorkspaceStatus()
-
             if (it.contains("successfully", ignoreCase = true)) {
-                onDeleted()
+                successMessage = "Workspace deleted"
+            } else {
+                AppToast.show(it)
             }
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Delete Workspace",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Destructive
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        enabled = !isDeletingWorkspace,
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .size(42.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.25f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.9f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = SurfaceRaised,
-                                    radius = size.minDimension / 2f
-                                )
-                                }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Ink
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
+    LaunchedEffect(successMessage) {
+        if (successMessage != null) {
+            delay(1100)
+            onDeleted()
         }
-    ) { paddingValues ->
+    }
+
+    val submit = {
+        val now = System.currentTimeMillis()
+        if (!isDeletingWorkspace && isFormValid && now - lastClickTime > 500L) {
+            lastClickTime = now
+            viewModel.onDeleteWorkspace(workspaceIdToDelete, workspaceNameToDelete)
+        } else if (!isDeletingWorkspace && !isFormValid) {
+            AppToast.warning("Enter the workspace password to confirm")
+        }
+    }
+
+    WorkspaceDialogCard(
+        icon = Icons.Default.FolderDelete,
+        accent = Destructive,
+        title = "Delete “$workspaceNameToDelete”?",
+        subtitle = "All channels, messages, files, tasks and members will be removed for everyone. This can't be undone.",
+        onClose = onBack,
+        closeEnabled = !isDeletingWorkspace,
+        successMessage = successMessage
+    ) {
+        SkeuoTextField(
+            value = password,
+            onValueChange = { viewModel.onPasswordChange(it) },
+            placeholder = "Workspace password",
+            enabled = !isDeletingWorkspace,
+            isError = true,
+            visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done,
+            onImeAction = submit,
+            leadingIcon = {
+                Icon(Icons.Outlined.Lock, contentDescription = null, tint = Destructive, modifier = Modifier.size(18.dp))
+            },
+            trailingIcon = {
+                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                    Icon(
+                        imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                        contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                        tint = Muted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        )
+
+        Spacer(Modifier.height(22.dp))
+
+        WorkspaceDialogButton(
+            text = "Delete workspace",
+            loadingText = "Deleting…",
+            colors = listOf(DestructiveStart, DestructiveEnd),
+            enabled = isFormValid,
+            loading = isDeletingWorkspace,
+            onClick = submit
+        )
+
+        Spacer(Modifier.height(6.dp))
+
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.TopCenter
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(enabled = !isDeletingWorkspace, onClick = onBack),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Tactile 3D Destructive Badge
-                Box(
-                    modifier = Modifier
-                        .size(84.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                            drawCircle(
-                                color = ShadowDark.copy(alpha = 0.30f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x + 3.dp.toPx(), center.y + 4.dp.toPx())
-                            )
-                            drawCircle(
-                                color = ShadowLight.copy(alpha = 0.95f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                            )
-                            }
-                        }
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(SurfaceRaised, Surface),
-                                start = Offset(0f, 0f),
-                                end = Offset(84.dp.value, 84.dp.value)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(DestructiveLight, Destructive),
-                                        center = Offset(center.x - 5.dp.toPx(), center.y - 5.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
-                                )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderDelete,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Text(
-                    text = "Delete workspace",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "This action is permanent and cannot be undone",
-                    style = MaterialTheme.typography.bodyMedium.copy(color = Destructive),
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Warning Info Card — lists what will be deleted
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .drawWithCache {
-                            onDrawBehind {
-                                // Bottom-right shadow
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.18f),
-                                    topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(20.dp.toPx())
-                                )
-                                // Top-left highlight
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(20.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = SurfaceRaised,
-                                    cornerRadius = CornerRadius(20.dp.toPx())
-                                )
-                                // 4dp destructive red left accent border
-                                drawRoundRect(
-                                    color = Destructive,
-                                    topLeft = Offset(0f, 8.dp.toPx()),
-                                    size = Size(4.dp.toPx(), size.height - 16.dp.toPx()),
-                                    cornerRadius = CornerRadius(2.dp.toPx())
-                                )
-                            }
-                        }
-                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "This will permanently delete:",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = Ink
-                        )
-                        listOf(
-                            "All messages and channels",
-                            "All files and attachments",
-                            "All tasks and assignments",
-                            "All workspace members"
-                        ).forEach { item ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = Destructive,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = item,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Ink
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Make sure you have backed up any important data.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Muted,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Tactile Form Card
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        DeleteDebossedField(
-                            value = name,
-                            onValueChange = { },
-                            readOnly = true,
-                            label = "Workspace name",
-                            placeholder = "Workspace name",
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Business,
-                                    contentDescription = null,
-                                    tint = Destructive,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Locked",
-                                    tint = Muted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        )
-
-                        DeleteDebossedField(
-                            value = password,
-                            onValueChange = { viewModel.onPasswordChange(it) },
-                            label = "Workspace password",
-                            placeholder = "Enter password to confirm",
-                            visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardType = KeyboardType.Password,
-                            imeAction = ImeAction.Done,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = Destructive,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                                        tint = Muted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Tactile Destructive Button
-                        val deleteInteractionSource = remember { MutableInteractionSource() }
-                        val isDeletePressed by deleteInteractionSource.collectIsPressedAsState()
-                        val btnScale by animateFloatAsState(
-                            targetValue = if (isDeletePressed) 0.95f else 1f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
-                            label = "deleteSubmitScale"
-                        )
-
-                        val shadowAlpha = if (isDeletePressed) 0.15f else if (isFormValid) 0.38f else 0.20f
-                        val shadowOffset = if (isDeletePressed) 2.dp else 5.dp
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(54.dp)
-                                .graphicsLayer { scaleX = btnScale; scaleY = btnScale }
-                                .drawWithCache {
-                                    val cr = CornerRadius(16.dp.toPx())
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = DestructiveStart.copy(alpha = shadowAlpha),
-                                        topLeft = Offset(0f, shadowOffset.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = cr
-                                    )
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.25f),
-                                        topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = cr
-                                    )
-                                    drawRoundRect(
-                                        brush = Brush.linearGradient(
-                                            colors = if (isFormValid) {
-                                                listOf(DestructiveStart, DestructiveEnd)
-                                            } else {
-                                                listOf(DestructiveStart.copy(alpha = 0.72f), DestructiveEnd.copy(alpha = 0.72f))
-                                            },
-                                            start = Offset(0f, 0f),
-                                            end = Offset(size.width, size.height)
-                                        ),
-                                        cornerRadius = cr
-                                    )
-                                    // Specular hairline highlight hugging rounded contour
-                                    drawRoundRect(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.40f),
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.Transparent
-                                            ),
-                                            startY = 0f,
-                                            endY = 16.dp.toPx()
-                                        ),
-                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                        cornerRadius = cr,
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                    }
-                                }
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable(
-                                    interactionSource = deleteInteractionSource,
-                                    indication = null,
-                                    enabled = !isDeletingWorkspace
-                                ) {
-                                    val currentTime = System.currentTimeMillis()
-                                    if (!isDeletingWorkspace && isFormValid && currentTime - lastClickTime > 500L) {
-                                        lastClickTime = currentTime
-                                        viewModel.onDeleteWorkspace(workspaceIdToDelete, workspaceNameToDelete)
-                                    } else if (!isDeletingWorkspace && !isFormValid) {
-                                        AppToast.warning("Please confirm workspace deletion")
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isDeletingWorkspace) {
-                                Row(
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(
-                                        text = "Deleting workspace…",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp
-                                        ),
-                                        color = Color.White
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = "Delete workspace",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
-                                    ),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(36.dp))
-            }
+            Text(
+                text = "Keep workspace",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = Muted
+            )
         }
     }
-}
-
-/** Inset debossed field tailored for delete workspace confirmation using shared SkeuoTextField */
-@Composable
-private fun DeleteDebossedField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    placeholder: String,
-    readOnly: Boolean = false,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    imeAction: ImeAction = ImeAction.Next,
-    onImeAction: () -> Unit = {},
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    leadingIcon: (@Composable () -> Unit)? = null,
-    trailingIcon: (@Composable () -> Unit)? = null
-) {
-    com.collabsphere.app.view.components.SkeuoTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = label,
-        placeholder = placeholder,
-        readOnly = readOnly,
-        keyboardType = keyboardType,
-        imeAction = imeAction,
-        onImeAction = onImeAction,
-        visualTransformation = visualTransformation,
-        leadingIcon = leadingIcon,
-        trailingIcon = trailingIcon,
-        isError = true
-    )
 }

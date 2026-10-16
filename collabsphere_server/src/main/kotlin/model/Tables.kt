@@ -32,6 +32,7 @@ object UsersTable : Table("users") {
     // IANA zone reported by the user's device; decides which calendar day an activity counts toward
     // for streaks and daily caps. Null means UTC.
     val timeZone = varchar("time_zone", 64).nullable()
+    val focusUntil = long("focus_until").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -962,6 +963,7 @@ object ScheduledMessagesTable : Table("scheduled_messages") {
     val sendAt = long("send_at")
     val createdAt = long("created_at")
     val status = varchar("status", 12)
+    val heldForFocus = bool("held_for_focus").default(false)
 
     override val primaryKey = PrimaryKey(id)
 

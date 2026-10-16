@@ -16,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import com.collabsphere.app.model.commitment.Commitment
+import com.collabsphere.app.model.commitment.CommitmentDetector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -108,11 +111,34 @@ fun MarkdownText(
     style: TextStyle,
     linkColor: Color,
     modifier: Modifier = Modifier,
-    maxLines: Int = Int.MAX_VALUE
+    maxLines: Int = Int.MAX_VALUE,
+    commitmentTracked: Boolean = false,
+    onCommitmentClick: ((Commitment) -> Unit)? = null
 ) {
     val codeBackground = color.copy(alpha = 0.12f)
-    val annotated = remember(text, linkColor, codeBackground) {
-        buildMarkdown(parseMarkdown(text), linkColor, codeBackground)
+    val latestOnCommitmentClick by rememberUpdatedState(onCommitmentClick)
+    val detectCommitments = onCommitmentClick != null && !commitmentTracked
+    val annotated = remember(text, linkColor, codeBackground, detectCommitments, color) {
+        val base = buildMarkdown(parseMarkdown(text), linkColor, codeBackground)
+        if (!detectCommitments) return@remember base
+        val today = ((java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        val commitment = CommitmentDetector.detect(base.text, today) ?: return@remember base
+        val overlapsLink = base.getLinkAnnotations(commitment.start, commitment.end).isNotEmpty()
+        if (overlapsLink) return@remember base
+        AnnotatedString.Builder(base).apply {
+            addLink(
+                LinkAnnotation.Clickable(
+                    tag = "commitment",
+                    styles = TextLinkStyles(
+                        style = SpanStyle(textDecoration = TextDecoration.Underline, background = color.copy(alpha = 0.08f)),
+                        pressedStyle = SpanStyle(textDecoration = TextDecoration.Underline, background = color.copy(alpha = 0.18f))
+                    ),
+                    linkInteractionListener = { latestOnCommitmentClick?.invoke(commitment) }
+                ),
+                commitment.start,
+                commitment.end
+            )
+        }.toAnnotatedString()
     }
     Text(
         text = annotated,

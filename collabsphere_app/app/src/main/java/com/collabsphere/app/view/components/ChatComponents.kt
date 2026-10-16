@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -195,7 +196,7 @@ fun JumpToLatestButton(
 
 // ── Unread badge ──
 
-/** Coral pill with the count ("99+" above 99); draws nothing for zero. */
+/** Tactile coral pill with white border stroke and count ("99+" above 99); draws nothing for zero. */
 @Composable
 fun UnreadCountBadge(count: Int, modifier: Modifier = Modifier) {
     if (count <= 0) return
@@ -204,7 +205,8 @@ fun UnreadCountBadge(count: Int, modifier: Modifier = Modifier) {
             .heightIn(min = 20.dp)
             .widthIn(min = 20.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(Brush.linearGradient(listOf(CoralStart, CoralEnd)))
+            .background(Brush.linearGradient(listOf(Color(0xFFFF6B57), CoralStart)))
+            .border(1.5.dp, Color.White, RoundedCornerShape(10.dp))
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center
     ) {

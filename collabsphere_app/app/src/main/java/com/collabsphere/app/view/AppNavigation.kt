@@ -30,6 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.collabsphere.app.NotificationDeepLink
@@ -840,7 +842,10 @@ fun AppNavigation(
                 )
             }
 
-            composable("workspace_create") {
+            dialog(
+                route = "workspace_create",
+                dialogProperties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)
+            ) {
                 val workspaceViewModel: WorkspaceViewModel =
                     koinViewModel { parametersOf(loggedInUserId.toInt()) }
                 CreateWorkspaceScreen(
@@ -849,12 +854,13 @@ fun AppNavigation(
                 )
             }
 
-            composable(
+            dialog(
                 route = "workspace_delete/{workspaceId}/{workspaceName}",
                 arguments = listOf(
                     navArgument("workspaceId") { type = NavType.IntType },
                     navArgument("workspaceName") { type = NavType.StringType }
-                )
+                ),
+                dialogProperties = DialogProperties(usePlatformDefaultWidth = false)
             ) { backStackEntry ->
                 val workspaceId = backStackEntry.arguments?.getInt("workspaceId") ?: -1
                 val rawWorkspaceName = backStackEntry.arguments?.getString("workspaceName") ?: ""

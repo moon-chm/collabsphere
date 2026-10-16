@@ -59,6 +59,20 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.material.icons.filled.Keyboard
+import com.collabsphere.app.view.components.ChatBubbleShape
+import com.collabsphere.app.view.components.ChatBubbleTail
+import com.collabsphere.app.view.components.ComposerAction
+import com.collabsphere.app.view.components.ComposerActionsButton
+import com.collabsphere.app.view.components.ComposerEmojiPanel
+import com.collabsphere.app.view.components.OwnBubbleColor
+import com.collabsphere.app.view.components.insertAtCursor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -180,6 +194,9 @@ fun MessageScreen(
         canModerate = myRole == "OWNER" || myRole == "ADMIN"
     }
     var confirmDeleteFor by remember { mutableStateOf<MessageEntity?>(null) }
+    val commitmentRepo = koinInject<com.collabsphere.app.model.commitment.CommitmentRepo>()
+    val trackedCommitments by commitmentRepo.trackedKeys.collectAsStateWithLifecycle(initialValue = emptySet())
+    var commitmentTarget by remember { mutableStateOf<com.collabsphere.app.view.components.CommitmentTarget?>(null) }
     val haptics = LocalHapticFeedback.current
     androidx.lifecycle.compose.LifecycleResumeEffect(viewModel) {
         viewModel.onScreenVisible(true)
@@ -233,6 +250,23 @@ fun MessageScreen(
     var selectedMessage by remember { mutableStateOf<MessageEntity?>(null) }
     var showActionMenu by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
+    var composerState by remember { mutableStateOf(TextFieldValue(messageContent, TextRange(messageContent.length))) }
+    val composerValue = composerState.copy(text = messageContent)
+    var showComposerActions by remember { mutableStateOf(false) }
+    var showEmojiPanel by remember { mutableStateOf(false) }
+    val composerFocus = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val openEmojiPanel = {
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        showEmojiPanel = true
+    }
+    val openKeyboard = {
+        showEmojiPanel = false
+        composerFocus.requestFocus()
+        keyboardController?.show()
+    }
 
     val listState = rememberLazyListState()
     val jumpToLatest = rememberJumpToLatestState(viewModel.currentChannelId)
@@ -348,6 +382,14 @@ fun MessageScreen(
         ScheduledMessagesDialog(state = scheduled, onDismiss = { showScheduledList = false })
     }
 
+    commitmentTarget?.let { target ->
+        com.collabsphere.app.view.components.CommitmentTaskDialog(
+            target = target,
+            currentUserId = currentUserId,
+            onDismiss = { commitmentTarget = null }
+        )
+    }
+
     if (showCreatePoll) {
         com.collabsphere.app.view.components.CreatePollDialog(
             onCreate = { question, options, multiple ->
@@ -424,34 +466,35 @@ fun MessageScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            // Tactile Skeuomorphic Top Bar
+            // Tactile Skeuomorphic Top Bar (covers status bar to fill top gap)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(64.dp)
                     .drawWithCache {
                         onDrawBehind {
-                        // Ambient shadow beneath header
-                        drawRect(
-                            color = ShadowDark.copy(alpha = 0.14f),
-                            topLeft = Offset(0f, size.height),
-                            size = Size(size.width, 3.dp.toPx())
-                        )
-                        drawRect(color = SurfaceRaised)
-                        // Top hairline highlight
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.85f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
-                        )
-                                            }
+                            // Ambient shadow beneath header
+                            drawRect(
+                                color = ShadowDark.copy(alpha = 0.14f),
+                                topLeft = Offset(0f, size.height),
+                                size = Size(size.width, 3.dp.toPx())
+                            )
+                            drawRect(color = SurfaceRaised)
+                            // Top hairline highlight
+                            drawRect(
+                                color = Color.White.copy(alpha = 0.85f),
+                                topLeft = Offset(0f, 0f),
+                                size = Size(size.width, 1.dp.toPx())
+                            )
+                        }
                     }
-                    .padding(horizontal = 14.dp),
+                    .statusBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -549,59 +592,73 @@ fun MessageScreen(
             }
         },
         bottomBar = {
-            // Skeuomorphic Message Input Bar
+            // Floating Tactile Pill Composer Dock
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .imePadding()
-                    .drawWithCache {
-                        onDrawBehind {
-                        // Dual shadow on top of bottom bar
-                        drawRect(
-                            color = ShadowDark.copy(alpha = 0.16f),
-                            topLeft = Offset(0f, -3.dp.toPx()),
-                            size = Size(size.width, 3.dp.toPx())
-                        )
-                        drawRect(
-                            color = ShadowLight.copy(alpha = 0.85f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
-                        )
-                        drawRect(color = SurfaceRaised)
-                                            }
-                    }
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 // Editing banner if active
                 if (isEditing) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .drawWithCache {
+                                onDrawBehind {
+                                    drawRoundRect(
+                                        color = ShadowDark.copy(alpha = 0.10f),
+                                        topLeft = Offset(0f, 2.dp.toPx()),
+                                        size = size,
+                                        cornerRadius = CornerRadius(12.dp.toPx())
+                                    )
+                                    drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(12.dp.toPx()))
+                                    drawRoundRect(
+                                        color = CoralStart.copy(alpha = 0.5f),
+                                        topLeft = Offset(0f, 0f),
+                                        size = Size(4.dp.toPx(), size.height),
+                                        cornerRadius = CornerRadius(4.dp.toPx())
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Editing message...",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = IndigoStart
-                        )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Editing message...",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = CoralStart
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 isEditing = false
                                 selectedMessage = null
                                 viewModel.endEdit()
                             },
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Cancel edit",
-                                tint = Muted,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel edit", tint = Muted, modifier = Modifier.size(16.dp))
                         }
+                    }
+                }
+
+                if (!isEditing) {
+                    replyingTo?.let { target ->
+                        ReplyComposerBanner(
+                            authorName = if (target.userId == currentUserId) "yourself" else target.userName,
+                            snippet = target.content,
+                            onCancel = viewModel::cancelReply,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
                     }
                 }
 
@@ -631,7 +688,7 @@ fun MessageScreen(
                     com.collabsphere.app.view.components.UploadProgressBar(
                         progress = uploadProgress,
                         onCancel = viewModel::cancelUpload,
-                        modifier = Modifier.padding(bottom = 6.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
 
@@ -640,79 +697,250 @@ fun MessageScreen(
                         text = label,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = Muted,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+                        modifier = Modifier.padding(start = 20.dp, bottom = 4.dp)
                     )
                 }
 
-                if (!isEditing) {
-                    replyingTo?.let { target ->
-                        ReplyComposerBanner(
-                            authorName = if (target.userId == currentUserId) "yourself" else target.userName,
-                            snippet = target.content,
-                            onCancel = viewModel::cancelReply,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (!isEditing) {
-                        Box(
-                            modifier = Modifier.size(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isUploadingMedia) {
-                                CollabSpinner(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.dp,
-                                    color = CoralStart
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                                    MaterialTheme.colorScheme.background
                                 )
-                            } else {
-                                IconButton(onClick = { imagePicker.launch("image/*") }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Image,
-                                        contentDescription = "Attach image",
-                                        tint = IndigoStart
+                            )
+                        )
+                        .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                ) {
+                    // Floating Tactile Pill Dock
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawWithCache {
+                                onDrawBehind {
+                                    val cr = 28.dp.toPx()
+                                    // 1. Ambient soft diffuse shadow
+                                    drawRoundRect(
+                                        color = Color(0xFF2C201A).copy(alpha = 0.12f),
+                                        topLeft = Offset(0f, 4.dp.toPx()),
+                                        size = size,
+                                        cornerRadius = CornerRadius(cr)
+                                    )
+                                    // 2. Crisp contact shadow
+                                    drawRoundRect(
+                                        color = Color(0xFF2C201A).copy(alpha = 0.04f),
+                                        topLeft = Offset(0f, 1.dp.toPx()),
+                                        size = size,
+                                        cornerRadius = CornerRadius(cr)
+                                    )
+                                    // 3. Crisp white dock plate
+                                    drawRoundRect(
+                                        color = SurfaceRaised,
+                                        cornerRadius = CornerRadius(cr)
+                                    )
+                                    // 4. Specular gloss top rim highlight
+                                    drawRoundRect(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.95f),
+                                                Color.White.copy(alpha = 0.20f),
+                                                Color.Transparent
+                                            ),
+                                            startY = 0f,
+                                            endY = 16.dp.toPx()
+                                        ),
+                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+                                        cornerRadius = CornerRadius(cr),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                    // 5. Hairline contour border
+                                    drawRoundRect(
+                                        color = Color(0xFF2C2A28).copy(alpha = 0.07f),
+                                        cornerRadius = CornerRadius(cr),
+                                        style = Stroke(width = 1.dp.toPx())
                                     )
                                 }
                             }
-                        }
-                        IconButton(onClick = { showCreatePoll = true }, modifier = Modifier.size(40.dp)) {
-                            Icon(
-                                imageVector = Icons.Outlined.Poll,
-                                contentDescription = "Create poll",
-                                tint = IndigoStart
-                            )
-                        }
-                    }
-                    // Debossed text input field
-                    var isComposerFocused by remember { mutableStateOf(false) }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp, max = 120.dp)
-                            .skeuoFocusRing(isComposerFocused, cornerRadius = 24.dp)
-                            .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
-                            .clip(RoundedCornerShape(24.dp))
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        contentAlignment = Alignment.CenterStart
+                            .clip(RoundedCornerShape(28.dp))
+                            .padding(start = 4.dp, end = 5.dp, top = 5.dp, bottom = 5.dp)
                     ) {
-                        BasicTextField(
-                            value = messageContent,
-                            onValueChange = { viewModel.onMessageContentChange(it) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onFocusChanged { isComposerFocused = it.isFocused },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                            cursorBrush = SolidColor(CoralStart),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(
-                                onSend = {
-                                    if (messageContent.trim().isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            ComposerActionsButton(
+                                modifier = Modifier.padding(bottom = 3.dp),
+                                expanded = showComposerActions,
+                                onExpandedChange = { showComposerActions = it },
+                                busy = isUploadingMedia,
+                                actions = listOfNotNull(
+                                    ComposerAction(
+                                        label = if (showEmojiPanel) "Keyboard" else "Emoji",
+                                        icon = if (showEmojiPanel) Icons.Default.Keyboard else Icons.Default.EmojiEmotions,
+                                        tint = Color(0xFFF2A93B)
+                                    ) {
+                                        if (showEmojiPanel) openKeyboard() else openEmojiPanel()
+                                    },
+                                    if (isEditing) null else ComposerAction(
+                                        label = "Photo",
+                                        icon = Icons.Default.Image,
+                                        tint = IndigoStart,
+                                        enabled = !isUploadingMedia
+                                    ) { imagePicker.launch("image/*") },
+                                    if (isEditing) null else ComposerAction(
+                                        label = "Poll",
+                                        icon = Icons.Outlined.Poll,
+                                        tint = Color(0xFF2FA67A)
+                                    ) { showCreatePoll = true }
+                                )
+                            )
+
+                            var isComposerFocused by remember { mutableStateOf(false) }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 46.dp, max = 140.dp)
+                                    .drawWithCache {
+                                        onDrawBehind {
+                                            val cr = 23.dp.toPx()
+                                            // Recessed well surface
+                                            drawRoundRect(
+                                                color = Color(0xFFF3ECE6),
+                                                cornerRadius = CornerRadius(cr)
+                                            )
+                                            // Top inner shadow
+                                            drawRoundRect(
+                                                color = Color(0xFF2C201A).copy(alpha = 0.06f),
+                                                topLeft = Offset(0f, 0.5.dp.toPx()),
+                                                size = size,
+                                                cornerRadius = CornerRadius(cr),
+                                                style = Stroke(width = 1.dp.toPx())
+                                            )
+                                            // Outline hairline
+                                            drawRoundRect(
+                                                color = if (isComposerFocused) CoralStart.copy(alpha = 0.5f) else Color(0xFFE2DDD7),
+                                                cornerRadius = CornerRadius(cr),
+                                                style = Stroke(width = 1.dp.toPx())
+                                            )
+                                        }
+                                    }
+                                    .clip(RoundedCornerShape(23.dp))
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                BasicTextField(
+                                    value = composerValue,
+                                    onValueChange = {
+                                        composerState = it
+                                        if (it.text != messageContent) viewModel.onMessageContentChange(it.text)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(composerFocus)
+                                        .onFocusChanged {
+                                            isComposerFocused = it.isFocused
+                                            if (it.isFocused) showEmojiPanel = false
+                                        },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontSize = 15.5.sp, lineHeight = 21.sp),
+                                    cursorBrush = SolidColor(CoralStart),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                    keyboardActions = KeyboardActions(
+                                        onSend = {
+                                            if (messageContent.trim().isNotEmpty()) {
+                                                if (isEditing) {
+                                                    val currentMsg = selectedMessage
+                                                    if (currentMsg != null) {
+                                                        viewModel.changeStatus(
+                                                            currentMsg.copy(content = messageContent.trim(), editedAt = System.currentTimeMillis()),
+                                                            currentMsg.status
+                                                        )
+                                                    }
+                                                    isEditing = false
+                                                    selectedMessage = null
+                                                    viewModel.endEdit()
+                                                } else {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    viewModel.onSendMessageUser()
+                                                }
+                                            }
+                                        }
+                                    ),
+                                    decorationBox = { inner ->
+                                        Box(contentAlignment = Alignment.CenterStart) {
+                                            if (messageContent.isEmpty()) {
+                                                Text(
+                                                    text = if (isEditing) "Edit message..." else "Message #$channelName...",
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                                    color = Muted.copy(alpha = 0.65f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            inner()
+                                        }
+                                    }
+                                )
+                            }
+
+                            // ── Vibrant Coral Send / Mic CTA ──
+                            val sendInteractionSource = remember { MutableInteractionSource() }
+                            val isSendPressed by sendInteractionSource.collectIsPressedAsState()
+                            val sendScale by animateFloatAsState(
+                                targetValue = if (isSendPressed) 0.90f else 1f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                                label = "channelSendScale"
+                            )
+
+                            val showMic = messageContent.isBlank() && !isEditing && !isUploadingMedia && !isRecordingVoice
+                            val canSend = (messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia) || showMic
+                            val sendAlpha = if (canSend) 1f else 0.70f
+
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
+                                    .drawWithCache {
+                                        onDrawBehind {
+                                            val shadowOffset = if (isSendPressed) 1.dp else 2.5.dp
+                                            val shadowAlpha = if (isSendPressed) 0.15f else 0.35f
+                                            drawCircle(
+                                                color = CoralStart.copy(alpha = shadowAlpha * sendAlpha),
+                                                radius = size.minDimension / 2f,
+                                                center = Offset(center.x, center.y + shadowOffset.toPx())
+                                            )
+                                            drawCircle(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0xFFFC6955).copy(alpha = sendAlpha),
+                                                        CoralStart.copy(alpha = sendAlpha)
+                                                    ),
+                                                    center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx()),
+                                                    radius = size.minDimension / 2f
+                                                )
+                                            )
+                                            drawCircle(
+                                                color = Color.White.copy(alpha = 0.30f),
+                                                style = Stroke(width = 1.dp.toPx())
+                                            )
+                                        }
+                                    }
+                                    .clip(CircleShape)
+                                    .combinedClickable(
+                                        enabled = canSend,
+                                        interactionSource = sendInteractionSource,
+                                        indication = null,
+                                        onLongClick = {
+                                            if (messageContent.isNotBlank() && !isEditing) {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                showSchedule = true
+                                            }
+                                        }
+                                    ) {
                                         if (isEditing) {
                                             val currentMsg = selectedMessage
                                             if (currentMsg != null) {
@@ -724,114 +952,37 @@ fun MessageScreen(
                                             isEditing = false
                                             selectedMessage = null
                                             viewModel.endEdit()
+                                        } else if (showMic) {
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                                                android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            ) startVoice() else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
                                         } else {
                                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             viewModel.onSendMessageUser()
                                         }
-                                    }
-                                }
-                            ),
-                            decorationBox = { inner ->
-                                Box(contentAlignment = Alignment.CenterStart) {
-                                    if (messageContent.isEmpty()) {
-                                        Text(
-                                            text = if (isEditing) "Edit message..." else "Message #$channelName...",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = Ink.copy(alpha = 0.40f)
-                                        )
-                                    }
-                                    inner()
-                                }
-                            }
-                        )
-                    }
-
-                    // Tactile Send Button
-                    val sendInteractionSource = remember { MutableInteractionSource() }
-                    val isSendPressed by sendInteractionSource.collectIsPressedAsState()
-                    val sendScale by animateFloatAsState(
-                        targetValue = if (isSendPressed) 0.90f else 1f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                        label = "sendScale"
-                    )
-
-                    val showMic = messageContent.isBlank() && !isEditing && !isUploadingMedia && !isRecordingVoice
-                    val canSend = (messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia) || showMic
-                    val sendAlpha = if (canSend) 1f else 0.70f
-
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                            .drawWithCache {
-                                onDrawBehind {
-                                val shadowOffset = if (isSendPressed) 1.5.dp else 4.dp
-                                val shadowAlpha = if (isSendPressed) 0.12f else 0.32f
-
-                                drawCircle(
-                                    color = CoralStart.copy(alpha = shadowAlpha * sendAlpha),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x, center.y + shadowOffset.toPx())
-                                )
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.30f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx())
-                                )
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            CoralStart.copy(alpha = sendAlpha),
-                                            CoralEnd.copy(alpha = sendAlpha)
-                                        ),
-                                        center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
-                                )
-                                                            }
-                            }
-                            .clip(CircleShape)
-                            .combinedClickable(
-                                enabled = canSend,
-                                interactionSource = sendInteractionSource,
-                                indication = null,
-                                onLongClick = {
-                                    if (messageContent.isNotBlank() && !isEditing) {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        showSchedule = true
-                                    }
-                                }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                if (isEditing) {
-                                    val currentMsg = selectedMessage
-                                    if (currentMsg != null) {
-                                        viewModel.changeStatus(
-                                            currentMsg.copy(content = messageContent.trim(), editedAt = System.currentTimeMillis()),
-                                            currentMsg.status
-                                        )
-                                    }
-                                    isEditing = false
-                                    selectedMessage = null
-                                    viewModel.endEdit()
-                                } else if (showMic) {
-                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
-                                        android.content.pm.PackageManager.PERMISSION_GRANTED
-                                    ) startVoice() else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
-                                } else {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    viewModel.onSendMessageUser()
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (showMic) Icons.Default.Mic else Icons.AutoMirrored.Filled.Send,
-                            contentDescription = if (showMic) "Record voice message" else "Send",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
+                                Icon(
+                                    imageVector = if (showMic) Icons.Default.Mic else Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = if (showMic) "Record voice message" else "Send",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
+
+                ComposerEmojiPanel(
+                    visible = showEmojiPanel,
+                    onEmoji = { emoji ->
+                        val updated = composerValue.insertAtCursor(emoji)
+                        composerState = updated
+                        viewModel.onMessageContentChange(updated.text)
+                    },
+                    onClose = { showEmojiPanel = false }
+                )
             }
         }
     ) { paddingValues ->
@@ -879,7 +1030,7 @@ fun MessageScreen(
                         start = 16.dp,
                         end = 16.dp,
                         top = if (pinned.isNotEmpty()) 76.dp else 12.dp,
-                        bottom = 12.dp
+                        bottom = 18.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
@@ -961,84 +1112,18 @@ fun MessageScreen(
                                         fontWeight = FontWeight.SemiBold
                                     ),
                                     color = if (isOwnMessage) CoralStart else Muted,
-                                    modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 3.dp)
+                                    modifier = Modifier.padding(
+                                        start = if (isOwnMessage) 6.dp else 6.dp + ChatBubbleTail,
+                                        end = if (isOwnMessage) 6.dp + ChatBubbleTail else 6.dp,
+                                        bottom = 3.dp
+                                    )
                                 )
 
-                                // Tactile Chat Bubble
+                                val bubbleShape = ChatBubbleShape(isOwn = isOwnMessage, showTail = !continuesGroup)
                                 Box(
                                     modifier = Modifier
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                            if (isOwnMessage) {
-                                                // Own message: Coral tactile raised bubble
-                                                drawRoundRect(
-                                                    color = CoralStart.copy(alpha = 0.25f),
-                                                    topLeft = Offset(0f, 3.dp.toPx()),
-                                                    size = Size(size.width, size.height),
-                                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    brush = Brush.linearGradient(
-                                                        colors = listOf(CoralLight, CoralStart),
-                                                        start = Offset(0f, 0f),
-                                                        end = Offset(size.width, size.height)
-                                                    ),
-                                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                                )
-                                                // Top hairline specular hugging rounded contour
-                                                drawRoundRect(
-                                                    brush = Brush.verticalGradient(
-                                                        colors = listOf(
-                                                            Color.White.copy(alpha = 0.35f),
-                                                            Color.White.copy(alpha = 0.10f),
-                                                            Color.Transparent
-                                                        ),
-                                                        startY = 0f,
-                                                        endY = 16.dp.toPx()
-                                                    ),
-                                                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                                    cornerRadius = CornerRadius(16.dp.toPx()),
-                                                    style = Stroke(width = 1.dp.toPx())
-                                                )
-                                            } else {
-                                                // Incoming message: Surface parchment raised bubble
-                                                drawRoundRect(
-                                                    color = ShadowDark.copy(alpha = 0.18f),
-                                                    topLeft = Offset(2.dp.toPx(), 3.dp.toPx()),
-                                                    size = Size(size.width, size.height),
-                                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = ShadowLight.copy(alpha = 0.85f),
-                                                    topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                                    size = Size(size.width, size.height),
-                                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                                )
-                                                drawRoundRect(
-                                                    color = SurfaceRaised,
-                                                    cornerRadius = CornerRadius(16.dp.toPx())
-                                                )
-                                                // Top hairline hugging rounded contour
-                                                drawRoundRect(
-                                                    brush = Brush.verticalGradient(
-                                                        colors = listOf(
-                                                            Color.White.copy(alpha = 0.70f),
-                                                            Color.White.copy(alpha = 0.15f),
-                                                            Color.Transparent
-                                                        ),
-                                                        startY = 0f,
-                                                        endY = 16.dp.toPx()
-                                                    ),
-                                                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                                    cornerRadius = CornerRadius(16.dp.toPx()),
-                                                    style = Stroke(width = 1.dp.toPx())
-                                                )
-                                            }
-                                                                                    }
-                                        }
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(if (isOwnMessage) OwnBubbleColor else SurfaceRaised, bubbleShape)
+                                        .clip(bubbleShape)
                                         .combinedClickable(
                                             onClick = {},
                                             onLongClick = {
@@ -1049,7 +1134,12 @@ fun MessageScreen(
                                                 }
                                             }
                                         )
-                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .padding(
+                                            start = if (isOwnMessage) 11.dp else 11.dp + ChatBubbleTail,
+                                            end = if (isOwnMessage) 11.dp + ChatBubbleTail else 11.dp,
+                                            top = 7.dp,
+                                            bottom = 7.dp
+                                        )
                                 ) {
                                     Column {
                                         message.replyToId?.let { targetId ->
@@ -1107,6 +1197,7 @@ fun MessageScreen(
                                             )
                                         }
                                         if (polls[message.id] == null && (message.content.isNotBlank() || message.mediaUrl == null)) {
+                                            val commitmentKey = com.collabsphere.app.model.commitment.CommitmentRepo.channelKey(message.id)
                                             MarkdownText(
                                                 text = message.content,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
@@ -1114,8 +1205,25 @@ fun MessageScreen(
                                                     fontSize = 15.sp
                                                 ),
                                                 color = if (isOwnMessage) Color.White else Ink,
-                                                linkColor = if (isOwnMessage) Color.White else IndigoStart
+                                                linkColor = if (isOwnMessage) Color.White else IndigoStart,
+                                                commitmentTracked = commitmentKey in trackedCommitments,
+                                                onCommitmentClick = if (message.id > 0) { commitment ->
+                                                    commitmentTarget = com.collabsphere.app.view.components.CommitmentTarget(
+                                                        commitment = commitment,
+                                                        source = com.collabsphere.app.model.commitment.CommitmentSource(
+                                                            key = commitmentKey,
+                                                            workspaceId = viewModel.currentWorkspaceId,
+                                                            assigneeId = message.userId,
+                                                            assigneeName = message.userName,
+                                                            placeLabel = "#$channelName",
+                                                            quote = commitment.phrase
+                                                        )
+                                                    )
+                                                } else null
                                             )
+                                            if (commitmentKey in trackedCommitments) {
+                                                com.collabsphere.app.view.components.TrackedCommitmentLabel(onDarkBubble = isOwnMessage)
+                                            }
                                             LinkPreviewCard(text = message.content, onDarkBubble = isOwnMessage)
                                             
                                             val githubRegex = Regex("(https://github\\.com/[^/]+/[^/]+/[\\w/]+|https://github\\.com/[^/]+/[^/]+/?(?=\\s|$))")

@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +60,7 @@ fun ReactionPickerDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .background(SurfaceRaised)
                 .padding(horizontal = 16.dp, vertical = 16.dp),
@@ -69,24 +72,32 @@ fun ReactionPickerDialog(
                 color = Muted
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 quickRow.forEach { emoji ->
                     val isSelected = emoji in selectedEmojis
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .weight(1f)
+                            .widthIn(max = 44.dp)
+                            .aspectRatio(1f)
                             .clip(CircleShape)
                             .background(if (isSelected) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
                             .border(1.dp, if (isSelected) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)
                             .clickable { pick(emoji) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = emoji, fontSize = 22.sp)
+                        Text(text = emoji, fontSize = 20.sp)
                     }
                 }
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .weight(1f)
+                        .widthIn(max = 44.dp)
+                        .aspectRatio(1f)
                         .clip(CircleShape)
                         .background(if (expanded) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
                         .border(1.dp, if (expanded) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)

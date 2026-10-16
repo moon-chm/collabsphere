@@ -346,4 +346,55 @@ class MessagingIntegrationTest {
         assertTrue(json.decodeFromString<List<ScheduledMessageItem>>(client.get("/api/scheduled") { bearerAuth(owner.token) }.bodyAsText()).isEmpty())
         assertEquals(dm.receiverId, partner.id)
     }
+
+    @Test
+    fun `focus holds DMs until the recipient is free and releases them when focus ends`() = testApplication {
+        application { module() }
+        val sender = client.signUp("focus-sender")
+        val focuser = client.signUp("focus-focuser")
+        val outsider = client.signUp("focus-outsider")
+        val (ws, _) = workspaceWithChannel(sender.id, focuser.id)
+
+        suspend fun setFocus(account: Account, until: Long?) = client.put("/api/focus") {
+            bearerAuth(account.token)
+            contentType(ContentType.Application.Json)
+            setBody(if (until == null) """{"until":null}""" else """{"until":$until}""")
+        }
+        suspend fun hold(content: String) = client.post("/api/focus/hold") {
+            bearerAuth(sender.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"workspaceId":$ws,"receiverId":${focuser.id},"content":"$content"}""")
+        }
+
+        assertEquals(HttpStatusCode.Conflict, hold("too early").status, "nobody is focusing yet")
+        assertEquals(HttpStatusCode.BadRequest, setFocus(focuser, System.currentTimeMillis() + 10_000L).status)
+
+        val until = System.currentTimeMillis() + 30 * 60_000L
+        assertEquals(HttpStatusCode.OK, setFocus(focuser, until).status)
+
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/focus/${focuser.id}?workspaceId=$ws") { bearerAuth(outsider.token) }.status)
+        val seen = json.decodeFromString<com.collabsphere.dto.FocusStatus>(
+            client.get("/api/focus/${focuser.id}?workspaceId=$ws") { bearerAuth(sender.token) }.bodyAsText()
+        )
+        assertEquals(until, seen.focusUntil)
+
+        val held = hold("ping me after your focus")
+        assertEquals(HttpStatusCode.Created, held.status, held.bodyAsText())
+        assertEquals(until, json.decodeFromString<ScheduledMessageItem>(held.bodyAsText()).sendAt)
+
+        plugins.dispatchDueScheduledMessages(System.currentTimeMillis())
+        transaction {
+            assertEquals(0L, DirectMessagesTable.selectAll().where { DirectMessagesTable.content eq "ping me after your focus" }.count())
+        }
+
+        assertEquals(HttpStatusCode.OK, setFocus(focuser, null).status)
+        transaction {
+            assertEquals(1L, DirectMessagesTable.selectAll().where {
+                (DirectMessagesTable.senderId eq sender.id) and (DirectMessagesTable.content eq "ping me after your focus")
+            }.count())
+        }
+        val mine = json.decodeFromString<com.collabsphere.dto.FocusStatus>(client.get("/api/focus/me") { bearerAuth(focuser.token) }.bodyAsText())
+        assertNull(mine.focusUntil)
+    }
 }
+

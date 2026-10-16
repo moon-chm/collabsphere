@@ -1,0 +1,16 @@
+package com.collabsphere.app.dto.focus
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class SetFocusRequest(val until: Long? = null)
+
+@Serializable
+data class FocusStatus(val userId: Int, val focusUntil: Long? = null)
+
+@Serializable
+data class HoldMessageRequest(
+    val workspaceId: Int,
+    val receiverId: Int,
+    val content: String
+)

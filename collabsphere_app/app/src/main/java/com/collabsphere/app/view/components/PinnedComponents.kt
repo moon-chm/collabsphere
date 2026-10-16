@@ -2,15 +2,7 @@ package com.collabsphere.app.view.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +27,10 @@ import com.collabsphere.app.ui.theme.Ink
 import com.collabsphere.app.ui.theme.Muted
 import com.collabsphere.app.ui.theme.SurfaceRaised
 import com.collabsphere.app.ui.theme.skeuoFloatingCard
+
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import com.collabsphere.app.ui.theme.CoralLight
 
 private fun MessageEntity.pinnedPreview(): String =
     content.ifBlank { if (mediaUrl != null) "Photo" else "" }
@@ -62,15 +58,30 @@ fun PinnedMessagesBanner(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .skeuoFloatingCard(cornerRadius = 12.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .skeuoFloatingCard(cornerRadius = 14.dp, surfaceColor = SurfaceRaised)
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+        Box(
+            modifier = Modifier
+                .width(3.5.dp)
+                .height(26.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Brush.verticalGradient(listOf(CoralLight, CoralStart)))
+        )
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(CoralStart.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(16.dp))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (count > 1) "Pinned · $count messages" else "Pinned message",

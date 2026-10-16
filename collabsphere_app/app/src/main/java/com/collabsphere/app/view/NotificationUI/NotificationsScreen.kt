@@ -81,8 +81,17 @@ fun NotificationsScreen(
                     .height(64.dp)
                     .drawWithCache {
                         onDrawBehind {
-                        drawRect(color = SurfaceRaised)
-                        drawRect(color = Color.White.copy(alpha = 0.85f), topLeft = Offset(0f, 0f), size = Size(size.width, 1.dp.toPx()))
+                            drawRect(
+                                color = ShadowDark.copy(alpha = 0.14f),
+                                topLeft = Offset(0f, size.height),
+                                size = Size(size.width, 3.dp.toPx())
+                            )
+                            drawRect(color = SurfaceRaised)
+                            drawRect(
+                                color = Color.White.copy(alpha = 0.85f),
+                                topLeft = Offset(0f, 0f),
+                                size = Size(size.width, 1.dp.toPx())
+                            )
                         }
                     }
                     .padding(horizontal = 14.dp),
@@ -256,15 +265,16 @@ private fun NotificationRow(
 
                 if (notification.type == "WORKSPACE_INVITE" && notification.referenceId != null) {
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .skeuoRaised(cornerRadius = 12.dp, elevation = 2.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(MintGreen)
                                 .clickable(enabled = !isInvitationActionPending) {
                                     onAcceptInvitation?.invoke(notification.referenceId, notification.id)
                                 }
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 7.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -276,12 +286,13 @@ private fun NotificationRow(
 
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .skeuoRaised(cornerRadius = 12.dp, elevation = 2.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(Surface)
                                 .clickable(enabled = !isInvitationActionPending) {
                                     onDeclineInvitation?.invoke(notification.referenceId, notification.id)
                                 }
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 7.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

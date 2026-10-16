@@ -36,6 +36,7 @@ import com.collabsphere.app.ui.theme.IndigoStart
 import com.collabsphere.app.ui.theme.Ink
 import com.collabsphere.app.ui.theme.Muted
 import com.collabsphere.app.ui.theme.SurfaceRaised
+import com.collabsphere.app.ui.theme.skeuoFloatingCard
 
 @Composable
 fun ReplyQuote(
@@ -98,6 +99,7 @@ fun ReplyComposerBanner(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
+            .skeuoFloatingCard(cornerRadius = 12.dp, surfaceColor = SurfaceRaised)
             .clip(RoundedCornerShape(12.dp))
             .background(SurfaceRaised),
         verticalAlignment = Alignment.CenterVertically

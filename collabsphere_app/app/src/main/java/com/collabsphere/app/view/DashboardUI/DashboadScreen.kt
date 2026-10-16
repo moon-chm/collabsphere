@@ -978,129 +978,91 @@ private fun JoinWorkspaceByCodeDialog(
     onSubmit: (String) -> Unit
 ) {
     var codeInput by remember { mutableStateOf("") }
+    val canSubmit = codeInput.length == 6
+    val submit = {
+        if (canSubmit) {
+            onSubmit(codeInput)
+            onDismiss()
+        }
+    }
 
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
-                .padding(24.dp)
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        com.collabsphere.app.view.components.WorkspaceDialogCard(
+            icon = Icons.Outlined.GroupAdd,
+            accent = IndigoStart,
+            title = "Join workspace",
+            subtitle = "Enter the 6-character code from your invite.",
+            onClose = onDismiss
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            var isInviteFocused by remember { mutableStateOf(false) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .skeuoFocusRing(isInviteFocused, cornerRadius = 29.dp, ringColor = IndigoStart)
+                    .skeuoInset(cornerRadius = 29.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
+                    .clip(RoundedCornerShape(29.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(IndigoStart.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.GroupAdd,
-                        contentDescription = null,
-                        tint = IndigoStart,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-
-                Text(
-                    text = "Join Workspace",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-
-                Text(
-                    text = "Enter the 6-character invitation code you received by email or invitation.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Muted,
-                    textAlign = TextAlign.Center
-                )
-
-                var isInviteFocused by remember { mutableStateOf(false) }
-                Box(
+                BasicTextField(
+                    value = codeInput,
+                    onValueChange = { input ->
+                        codeInput = input.uppercase().filter { it.isLetterOrDigit() }.take(6)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp)
-                        .skeuoFocusRing(isInviteFocused, cornerRadius = 27.dp, ringColor = IndigoStart)
-                        .skeuoInset(cornerRadius = 27.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
-                        .clip(RoundedCornerShape(27.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    BasicTextField(
-                        value = codeInput,
-                        onValueChange = {
-                            if (it.length <= 6) codeInput = it.uppercase().filter { ch -> ch.isLetterOrDigit() }
-                        },
-                        modifier = Modifier.onFocusChanged { isInviteFocused = it.isFocused },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.titleMedium.copy(
-                            color = Ink,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            letterSpacing = 4.sp
-                        ),
-                        cursorBrush = SolidColor(IndigoStart),
-                        decorationBox = { innerTextField ->
-                            Box(contentAlignment = Alignment.Center) {
-                                if (codeInput.isEmpty()) {
-                                    Text(
-                                        text = "INVITE",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            color = Ink.copy(alpha = 0.40f),
-                                            fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Center,
-                                            letterSpacing = 4.sp
-                                        )
+                        .onFocusChanged { isInviteFocused = it.isFocused },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Go
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { submit() }),
+                    textStyle = MaterialTheme.typography.titleLarge.copy(
+                        color = Ink,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        letterSpacing = 6.sp
+                    ),
+                    cursorBrush = SolidColor(IndigoStart),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.Center) {
+                            if (codeInput.isEmpty()) {
+                                Text(
+                                    text = "ABC123",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        color = Ink.copy(alpha = 0.22f),
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        letterSpacing = 6.sp
                                     )
-                                }
-                                innerTextField()
+                                )
                             }
+                            innerTextField()
                         }
-                    )
-                }
-
-                Spacer(Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onDismiss() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
                     }
-
-                    val canSubmit = codeInput.trim().length == 6
-                    val submitAlpha = if (canSubmit) 1f else 0.5f
-                    Box(
-                        modifier = Modifier
-                            .weight(1.4f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(IndigoStart.copy(alpha = submitAlpha))
-                            .clickable(enabled = canSubmit) {
-                                onSubmit(codeInput.trim())
-                                onDismiss()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Join Workspace",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
-                }
+                )
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                text = "${codeInput.length}/6",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = if (canSubmit) IndigoStart else Muted
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            com.collabsphere.app.view.components.WorkspaceDialogButton(
+                text = "Join workspace",
+                colors = listOf(IndigoStart, IndigoStart.copy(red = IndigoStart.red * 0.8f, green = IndigoStart.green * 0.8f, blue = IndigoStart.blue * 0.85f)),
+                enabled = canSubmit,
+                onClick = submit
+            )
         }
     }
 }

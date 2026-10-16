@@ -182,6 +182,7 @@ val networkModule = module {
     single { NotificationApiService(get(named("RegularHttpClient"))) }
     single { com.collabsphere.app.remote.vote.TaskVoteApiService(get(named("RegularHttpClient"))) }
     single { com.collabsphere.app.remote.progression.ProgressionApiService(get(named("RegularHttpClient"))) }
+    single { com.collabsphere.app.remote.focus.FocusApiService(get(named("RegularHttpClient"))) }
 }
 
 val repositoryModule = module {
@@ -196,6 +197,8 @@ val repositoryModule = module {
     single { DmRepo(get(), get(), get(), get(), get(), get()) }
     single { NotificationRepo(get()) }
     single { com.collabsphere.app.model.progression.ProgressionRepo(get(), get(), get(), get()) }
+    single { com.collabsphere.app.model.commitment.CommitmentRepo(get(), get()) }
+    single { com.collabsphere.app.model.focus.FocusRepo(get()) }
 }
 
 val appModule = module {

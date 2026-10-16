@@ -106,7 +106,7 @@ fun ChannelScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Channel count chip
+                    // Skeuomorphic Channel count chip
                     Box(
                         modifier = Modifier
                             .drawWithCache {
@@ -121,15 +121,26 @@ fun ChannelScreen(
                                         color = SurfaceRaised,
                                         cornerRadius = CornerRadius(12.dp.toPx())
                                     )
+                                    drawRoundRect(
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        cornerRadius = CornerRadius(12.dp.toPx()),
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
                                 }
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text(
-                            text = "${channels?.size ?: "…"} active",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Muted
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Mint))
+                            Text(
+                                text = "${channels?.size ?: "…"} active",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = Muted
+                            )
+                        }
                     }
 
                     // Tactile Header Action Button

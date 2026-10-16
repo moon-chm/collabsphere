@@ -1,64 +1,54 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import androidx.compose.animation.core.Spring
-import com.collabsphere.app.view.components.AppToast
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddBusiness
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.collabsphere.app.ui.theme.*
+import com.collabsphere.app.ui.theme.CoralEnd
+import com.collabsphere.app.ui.theme.CoralStart
+import com.collabsphere.app.ui.theme.Muted
+import com.collabsphere.app.view.components.AppToast
+import com.collabsphere.app.view.components.SkeuoTextField
+import com.collabsphere.app.view.components.WorkspaceDialogButton
+import com.collabsphere.app.view.components.WorkspaceDialogCard
 import com.collabsphere.app.viewmodel.workspace.WorkspaceViewModel
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateWorkspaceScreen(
     viewModel: WorkspaceViewModel,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
     val workspaceStatus by viewModel.workspaceStatus.collectAsStateWithLifecycle()
     val isCreatingWorkspace by viewModel.isCreatingWorkspace.collectAsStateWithLifecycle()
 
@@ -68,394 +58,115 @@ fun CreateWorkspaceScreen(
 
     var lastClickTime by remember { mutableStateOf(0L) }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
 
     val isFormValid = name.isNotBlank() && owner.isNotBlank() && password.isNotBlank()
 
     LaunchedEffect(workspaceStatus) {
         workspaceStatus?.let {
-            AppToast.show(it)
             viewModel.clearWorkspaceStatus()
-
             if (it.contains("successfully", ignoreCase = true)) {
-                onBack()
+                successMessage = "Workspace created"
+            } else {
+                AppToast.show(it)
             }
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Create Workspace",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        enabled = !isCreatingWorkspace,
-                        modifier = Modifier
-                            .padding(start = 12.dp)
-                            .size(42.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.25f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.9f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = SurfaceRaised,
-                                    radius = size.minDimension / 2f
-                                )
-                                }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Ink
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
+    LaunchedEffect(successMessage) {
+        if (successMessage != null) {
+            delay(1100)
+            onBack()
         }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.TopCenter
+    }
+
+    val submit = {
+        val now = System.currentTimeMillis()
+        if (!isCreatingWorkspace && isFormValid && now - lastClickTime > 500L) {
+            lastClickTime = now
+            viewModel.onCreateWorkspace()
+        } else if (!isCreatingWorkspace && !isFormValid) {
+            AppToast.warning("Please enter the workspace name, owner, and password")
+        }
+    }
+
+    WorkspaceDialogCard(
+        icon = Icons.Default.AddBusiness,
+        accent = CoralStart,
+        title = "New workspace",
+        subtitle = "A shared home for your team's channels, tasks and files.",
+        onClose = onBack,
+        closeEnabled = !isCreatingWorkspace,
+        successMessage = successMessage
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Tactile 3D Icon Badge
-                Box(
-                    modifier = Modifier
-                        .size(84.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                            drawCircle(
-                                color = ShadowDark.copy(alpha = 0.30f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x + 3.dp.toPx(), center.y + 4.dp.toPx())
-                            )
-                            drawCircle(
-                                color = ShadowLight.copy(alpha = 0.95f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                            )
-                            }
-                        }
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(SurfaceRaised, Surface),
-                                start = Offset(0f, 0f),
-                                end = Offset(84.dp.value, 84.dp.value)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(CoralLight, CoralStart),
-                                        center = Offset(center.x - 5.dp.toPx(), center.y - 5.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
-                                )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+            SkeuoTextField(
+                value = name,
+                onValueChange = { viewModel.onNameChange(it) },
+                placeholder = "Workspace name",
+                enabled = !isCreatingWorkspace,
+                leadingIcon = {
+                    Icon(Icons.Outlined.Business, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                }
+            )
+            SkeuoTextField(
+                value = owner,
+                onValueChange = { viewModel.onOwnerChange(it) },
+                placeholder = "Owner name",
+                enabled = !isCreatingWorkspace,
+                leadingIcon = {
+                    Icon(Icons.Outlined.Person, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                }
+            )
+            SkeuoTextField(
+                value = password,
+                onValueChange = { viewModel.onPasswordChange(it) },
+                placeholder = "Workspace password",
+                enabled = !isCreatingWorkspace,
+                visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+                onImeAction = submit,
+                leadingIcon = {
+                    Icon(Icons.Outlined.Lock, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = {
+                    IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                         Icon(
-                            imageVector = Icons.Default.AddBusiness,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                            contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                            tint = if (isPasswordVisible) CoralStart else Muted,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 6.dp)
+            ) {
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(14.dp))
                 Text(
-                    text = "Create workspace",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = "Members need this password to join",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted
                 )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "Set up a new shared environment for your team",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // Tactile Form Card
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        WorkspaceDebossedField(
-                            value = name,
-                            onValueChange = { viewModel.onNameChange(it) },
-                            label = "Workspace name",
-                            placeholder = "e.g. Design Studio",
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Business,
-                                    contentDescription = null,
-                                    tint = CoralStart.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        )
-
-                        WorkspaceDebossedField(
-                            value = owner,
-                            onValueChange = { viewModel.onOwnerChange(it) },
-                            label = "Owner name",
-                            placeholder = "e.g. John Doe",
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Person,
-                                    contentDescription = null,
-                                    tint = CoralStart.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        )
-
-                        WorkspaceDebossedField(
-                            value = password,
-                            onValueChange = { viewModel.onPasswordChange(it) },
-                            label = "Workspace password",
-                            placeholder = "••••••••",
-                            visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardType = KeyboardType.Password,
-                            imeAction = ImeAction.Done,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Lock,
-                                    contentDescription = null,
-                                    tint = CoralStart.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                                    Icon(
-                                        imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
-                                        contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                                        tint = if (isPasswordVisible) CoralStart else Muted,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        )
-
-                        // Info note below password
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(start = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = Muted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Password is required to join this workspace",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Muted
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Tactile Submit Button
-                        val submitInteractionSource = remember { MutableInteractionSource() }
-                        val isSubmitPressed by submitInteractionSource.collectIsPressedAsState()
-                        val btnScale by animateFloatAsState(
-                            targetValue = if (isSubmitPressed) 0.95f else 1f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
-                            label = "createSubmitScale"
-                        )
-
-                        val shadowAlpha = if (isSubmitPressed) 0.15f else if (isFormValid) 0.38f else 0.20f
-                        val shadowOffset = if (isSubmitPressed) 2.dp else 5.dp
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(54.dp)
-                                .graphicsLayer { scaleX = btnScale; scaleY = btnScale }
-                                .drawWithCache {
-                                    val cr = CornerRadius(16.dp.toPx())
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = CoralStart.copy(alpha = shadowAlpha),
-                                        topLeft = Offset(0f, shadowOffset.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = cr
-                                    )
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.30f),
-                                        topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = cr
-                                    )
-                                    drawRoundRect(
-                                        brush = Brush.linearGradient(
-                                            colors = if (isFormValid) {
-                                                listOf(CoralStart, CoralEnd)
-                                            } else {
-                                                listOf(CoralStart.copy(alpha = 0.72f), CoralEnd.copy(alpha = 0.72f))
-                                            },
-                                            start = Offset(0f, 0f),
-                                            end = Offset(size.width, size.height)
-                                        ),
-                                        cornerRadius = cr
-                                    )
-                                    // Specular hairline highlight hugging rounded contour
-                                    drawRoundRect(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.40f),
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.Transparent
-                                            ),
-                                            startY = 0f,
-                                            endY = 16.dp.toPx()
-                                        ),
-                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                        cornerRadius = cr,
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                    }
-                                }
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable(
-                                    interactionSource = submitInteractionSource,
-                                    indication = null,
-                                    enabled = !isCreatingWorkspace
-                                ) {
-                                    val currentTime = System.currentTimeMillis()
-                                    if (!isCreatingWorkspace && isFormValid && currentTime - lastClickTime > 500L) {
-                                        lastClickTime = currentTime
-                                        viewModel.onCreateWorkspace()
-                                    } else if (!isCreatingWorkspace && !isFormValid) {
-                                        AppToast.warning("Please enter the workspace name, owner, and password")
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isCreatingWorkspace) {
-                                Row(
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(
-                                        text = "Creating workspace…",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp
-                                        ),
-                                        color = Color.White
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = "Create workspace",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
-                                    ),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(36.dp))
             }
         }
-    }
-}
 
-/** Pill-shaped inset field, same look as the Login/Register fields (shared SkeuoTextField defaults). */
-@Composable
-private fun WorkspaceDebossedField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    placeholder: String,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    imeAction: ImeAction = ImeAction.Next,
-    onImeAction: () -> Unit = {},
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    leadingIcon: (@Composable () -> Unit)? = null,
-    trailingIcon: (@Composable () -> Unit)? = null
-) {
-    com.collabsphere.app.view.components.SkeuoTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = label,
-        placeholder = placeholder,
-        keyboardType = keyboardType,
-        imeAction = imeAction,
-        onImeAction = onImeAction,
-        visualTransformation = visualTransformation,
-        leadingIcon = leadingIcon,
-        trailingIcon = trailingIcon
-    )
+        Spacer(Modifier.height(22.dp))
+
+        WorkspaceDialogButton(
+            text = "Create workspace",
+            loadingText = "Creating…",
+            colors = listOf(CoralStart, CoralEnd),
+            enabled = isFormValid,
+            loading = isCreatingWorkspace,
+            onClick = submit
+        )
+    }
 }
