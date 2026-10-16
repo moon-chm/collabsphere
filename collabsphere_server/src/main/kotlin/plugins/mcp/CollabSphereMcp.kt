@@ -40,7 +40,7 @@ internal object CollabSphereMcp {
         return (defaultHosts + extra).distinct()
     }
 
-    fun buildServer(): Server = Server(
+    fun buildServer(principal: McpPrincipal): Server = Server(
         serverInfo = Implementation(name = SERVER_NAME, version = SERVER_VERSION),
         options = ServerOptions(
             capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = false))
@@ -48,11 +48,16 @@ internal object CollabSphereMcp {
     ).apply {
         addTool(
             name = STATUS_TOOL,
-            description = "Confirms the CollabSphere MCP server is reachable. Returns no workspace data.",
-            inputSchema = ToolSchema(properties = buildJsonObject { })
+            description = "Shows which CollabSphere account and access token this connection uses. Returns no workspace data.",
+            inputSchema = ToolSchema(properties = buildJsonObject { }),
+            toolAnnotations = io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false)
         ) {
-            CallToolResult(content = listOf(TextContent("CollabSphere MCP is reachable. Workspace tools are not enabled yet.")))
+            val access = if (principal.canWrite) "read and write" else "read only"
+            CallToolResult(
+                content = listOf(TextContent("Connected to CollabSphere as ${principal.userName} using the token \"${principal.tokenName}\" ($access)."))
+            )
         }
+        McpTools.register(this, principal)
     }
 }
 
@@ -87,14 +92,19 @@ private val McpNullStripping = createApplicationPlugin("McpNullStripping") {
     }
 }
 
-internal fun Application.configureMcp(environment: Map<String, String> = System.getenv()) {
+internal fun Application.configureMcp(
+    environment: Map<String, String> = System.getenv(),
+    rateLimiter: McpRateLimiter = McpRateLimiter(),
+    authenticator: McpAuthenticator = { McpTokenStore.authenticate(it) }
+) {
     if (!CollabSphereMcp.isEnabled(environment)) return
     install(McpNullStripping)
+    install(mcpAuthPlugin(rateLimiter, authenticator))
     mcpStatelessStreamableHttp(
         path = CollabSphereMcp.PATH,
         enableDnsRebindingProtection = true,
         allowedHosts = CollabSphereMcp.allowedHosts(environment)
     ) {
-        CollabSphereMcp.buildServer()
+        CollabSphereMcp.buildServer(call.attributes[McpPrincipalKey])
     }
 }

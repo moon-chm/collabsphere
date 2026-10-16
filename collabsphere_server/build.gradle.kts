@@ -157,6 +157,7 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
         includeTestsMatching("ApiContractIntegrationTest")
         includeTestsMatching("WorkspaceAnalyticsIntegrationTest")
         includeTestsMatching("MessagingIntegrationTest")
+        includeTestsMatching("McpIntegrationTest")
     }
 
     doFirst {
@@ -189,6 +190,7 @@ val integrationTestTask = tasks.register<Test>("integrationTest") {
         environment("DATABASE_URL", "")
     }
     environment("JDBC_DATABASE_URL", "")
+    environment("MCP_ENABLED", "YES")
     environment("DATABASE_READ_URL", "")
     environment("JDBC_DATABASE_READ_URL", "")
     environment("DB_USER", "")

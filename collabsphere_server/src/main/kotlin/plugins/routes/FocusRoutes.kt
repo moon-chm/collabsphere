@@ -90,7 +90,7 @@ internal fun Route.focusRoutes() {
             val workspaceId = call.request.queryParameters["workspaceId"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "workspaceId is required")
             try {
-                val allowed = isMember(me, workspaceId) && isMember(target, workspaceId)
+                val allowed = dbReadQuery { isMember(me, workspaceId) && isMember(target, workspaceId) }
                 if (!allowed) return@get call.respond(HttpStatusCode.Forbidden, "Not a teammate")
                 val stored = dbReadQuery { storedFocusUntil(target) }
                 call.respond(HttpStatusCode.OK, FocusStatus(target, FocusRules.activeUntil(stored, System.currentTimeMillis())))

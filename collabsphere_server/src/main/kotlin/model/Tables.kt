@@ -973,3 +973,39 @@ object ScheduledMessagesTable : Table("scheduled_messages") {
         index(false, userId, status)
     }
 }
+
+/** Personal access tokens that let an AI agent use CollabSphere's MCP server as its owner. Only a hash is stored. */
+object McpTokensTable : Table("mcp_tokens") {
+    val id = integer("id").autoIncrement()
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE).index()
+    val name = varchar("name", 80)
+    val tokenHash = varchar("token_hash", 64).uniqueIndex()
+    val prefix = varchar("prefix", 16)
+    val scopes = varchar("scopes", 64)
+    val userTokenVersion = integer("user_token_version")
+    val createdAt = long("created_at")
+    val expiresAt = long("expires_at").nullable()
+    val lastUsedAt = long("last_used_at").nullable()
+    val revokedAt = long("revoked_at").nullable()
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+/** What each MCP token did, so people can see their agents' activity. */
+object McpAuditTable : Table("mcp_audit") {
+    val id = long("id").autoIncrement()
+    val tokenId = integer("token_id").references(McpTokensTable.id, onDelete = ReferenceOption.CASCADE)
+    val userId = integer("user_id").references(UsersTable.id, onDelete = ReferenceOption.CASCADE)
+    val tool = varchar("tool", 64)
+    val workspaceId = integer("workspace_id").nullable()
+    val outcome = varchar("outcome", 16)
+    val detail = varchar("detail", 200).nullable()
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index(false, userId, createdAt)
+    }
+}
+

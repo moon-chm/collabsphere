@@ -30,19 +30,26 @@ import kotlin.test.assertTrue
 class CollabSphereMcpTest {
 
     private val enabled = mapOf("MCP_ENABLED" to "YES")
+    private val testToken = "csmcp_" + "a".repeat(43)
+    private val testPrincipal = McpPrincipal(userId = 1, userName = "Test User", tokenId = 7, tokenName = "laptop", scopes = setOf("read"))
+    private val fakeAuthenticator: McpAuthenticator = { token -> if (token == testToken) testPrincipal else null }
 
-    private fun ApplicationTestBuilder.appLikeProduction(environment: Map<String, String> = enabled) {
+    private fun ApplicationTestBuilder.appLikeProduction(
+        environment: Map<String, String> = enabled,
+        rateLimiter: McpRateLimiter = McpRateLimiter()
+    ) {
         application {
             install(WebSockets)
             install(ContentNegotiation) { json() }
             install(StatusPages)
-            configureMcp(environment)
+            configureMcp(environment, rateLimiter, fakeAuthenticator)
         }
     }
 
-    private suspend fun ApplicationTestBuilder.rpc(body: String, host: String = "localhost"): HttpResponse =
+    private suspend fun ApplicationTestBuilder.rpc(body: String, host: String = "localhost", token: String? = testToken): HttpResponse =
         client.post(CollabSphereMcp.PATH) {
             header(HttpHeaders.Host, host)
+            if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
             header(HttpHeaders.Accept, "application/json, text/event-stream")
             header("MCP-Protocol-Version", "2025-11-25")
             contentType(ContentType.Application.Json)
@@ -73,12 +80,12 @@ class CollabSphereMcpTest {
         val list = rpc("""{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}""")
         assertEquals(HttpStatusCode.OK, list.status, list.bodyAsText())
         val tools = payload(list.bodyAsText())["result"]!!.jsonObject["tools"]!!.jsonArray
-        assertEquals(listOf(CollabSphereMcp.STATUS_TOOL), tools.map { it.jsonObject["name"]!!.jsonPrimitive.content })
+        assertEquals(expectedTools, tools.map { it.jsonObject["name"]!!.jsonPrimitive.content })
 
         val call = rpc("""{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"${CollabSphereMcp.STATUS_TOOL}","arguments":{}}}""")
         assertEquals(HttpStatusCode.OK, call.status, call.bodyAsText())
         val content = payload(call.bodyAsText())["result"]!!.jsonObject["content"]!!.jsonArray
-        assertTrue(content.first().jsonObject["text"]!!.jsonPrimitive.content.contains("reachable"))
+        assertTrue(content.first().jsonObject["text"]!!.jsonPrimitive.content.contains("Connected to CollabSphere as Test User"))
     }
 
     @Test
@@ -108,16 +115,19 @@ class CollabSphereMcpTest {
         appLikeProduction()
         val http = createClient {
             install(io.ktor.client.plugins.sse.SSE)
-            install(io.ktor.client.plugins.DefaultRequest) { header(HttpHeaders.Host, "localhost") }
+            install(io.ktor.client.plugins.DefaultRequest) {
+                header(HttpHeaders.Host, "localhost")
+                header(HttpHeaders.Authorization, "Bearer $testToken")
+            }
         }
         val mcp = http.mcpStreamableHttp("http://localhost${CollabSphereMcp.PATH}")
         try {
             assertEquals(CollabSphereMcp.SERVER_NAME, mcp.serverVersion?.name)
             val tools = mcp.listTools().tools.map { it.name }
-            assertEquals(listOf(CollabSphereMcp.STATUS_TOOL), tools)
+            assertEquals(expectedTools, tools)
             val result = mcp.callTool(CollabSphereMcp.STATUS_TOOL, emptyMap())
             val text = (result.content.first() as io.modelcontextprotocol.kotlin.sdk.types.TextContent).text
-            assertTrue(text.contains("reachable"))
+            assertTrue(text.contains("read only"))
         } finally {
             mcp.close()
         }
@@ -167,5 +177,48 @@ class CollabSphereMcpTest {
         assertEquals(HttpStatusCode.Accepted, response.status)
         assertTrue(response.bodyAsText().isBlank())
     }
-}
 
+    private val expectedTools = listOf(
+        CollabSphereMcp.STATUS_TOOL,
+        McpTools.LIST_WORKSPACES,
+        McpTools.WORKSPACE_OVERVIEW,
+        McpTools.LIST_TASKS,
+        McpTools.GET_TASK_CONTEXT
+    )
+
+    @Test
+    fun `a request without a token is challenged`() = testApplication {
+        appLikeProduction()
+        val response = rpc(initialize, token = null)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals("Bearer realm=\"collabsphere\"", response.headers[HttpHeaders.WWWAuthenticate])
+    }
+
+    @Test
+    fun `a wrong token is rejected as invalid`() = testApplication {
+        appLikeProduction()
+        val response = rpc(initialize, token = "csmcp_" + "b".repeat(43))
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertTrue(response.headers[HttpHeaders.WWWAuthenticate]!!.contains("error=\"invalid_token\""))
+    }
+
+    @Test
+    fun `each token is rate limited`() = testApplication {
+        appLikeProduction(rateLimiter = McpRateLimiter(maxRequests = 2))
+        assertEquals(HttpStatusCode.OK, rpc(initialize).status)
+        assertEquals(HttpStatusCode.OK, rpc(initialize).status)
+        val limited = rpc(initialize)
+        assertEquals(HttpStatusCode.TooManyRequests, limited.status)
+        assertEquals("60", limited.headers[HttpHeaders.RetryAfter])
+    }
+
+    @Test
+    fun `read tools are marked read-only`() = testApplication {
+        appLikeProduction()
+        val tools = payload(rpc("""{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}""").bodyAsText())["result"]!!.jsonObject["tools"]!!.jsonArray
+        tools.forEach { tool ->
+            val annotations = tool.jsonObject["annotations"]!!.jsonObject
+            assertEquals("true", annotations["readOnlyHint"]!!.jsonPrimitive.content, tool.toString())
+        }
+    }
+}

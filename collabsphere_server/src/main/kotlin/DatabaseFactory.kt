@@ -133,7 +133,9 @@ object DatabaseFactory {
                 SavedMessagesTable,
                 PollsTable,
                 PollVotesTable,
-                ScheduledMessagesTable
+                ScheduledMessagesTable,
+                McpTokensTable,
+                McpAuditTable
             )
             SyncSchema.install(this)
             com.collabsphere.util.GitHubBot.ensureExists()

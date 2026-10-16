@@ -1575,6 +1575,7 @@ fun Application.configureRouting() {
                 scheduledMessagesRoutes()
                 focusRoutes()
                 standupRoutes()
+                mcpTokenRoutes()
             }
 
 

@@ -1040,6 +1040,8 @@ onDrawBehind {
 
                 com.collabsphere.app.view.components.FocusModeCard()
 
+                com.collabsphere.app.view.components.AiToolsCard()
+
                 com.collabsphere.app.view.components.NotificationSettingsCard()
 
                 // ── Privacy card ────────────────────────────────────────────────

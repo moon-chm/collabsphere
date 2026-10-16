@@ -36,7 +36,7 @@ internal fun Route.standupRoutes() {
             ?.takeIf { kotlin.math.abs(it - now) <= 2 * StandupComposer.DAY_MS }
             ?: (now - now % StandupComposer.DAY_MS)
         try {
-            if (!isMember(userId, workspaceId)) return@get call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
+            if (!dbReadQuery { isMember(userId, workspaceId) }) return@get call.respond(HttpStatusCode.Forbidden, "Not a member of this workspace")
             val draft = dbReadQuery {
                 val tasks = TasksTable.selectAll()
                     .where {
