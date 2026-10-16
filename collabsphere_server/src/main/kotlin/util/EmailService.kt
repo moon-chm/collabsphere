@@ -28,6 +28,7 @@ object EmailService {
     private val logger = LoggerFactory.getLogger(EmailService::class.java)
     // --- Gmail API (OAuth2 over HTTPS Port 443) Configuration ---
     private var isGmailApiConfigured = false
+    private var gmailCredentialsPresent = false
     private var gmailClientId = ""
     private var gmailClientSecret = ""
     private var gmailRefreshToken = ""
@@ -83,6 +84,7 @@ object EmailService {
 
         if (gmailClientId.isNotBlank() && gmailClientSecret.isNotBlank() && gmailRefreshToken.isNotBlank()) {
             isGmailApiConfigured = true
+            gmailCredentialsPresent = true
             logger.info("[EmailService] Configured Gmail API (OAuth2 HTTPS Port 443) for $gmailSender")
         }
 
@@ -110,7 +112,7 @@ object EmailService {
         }
 
         if (!isGmailApiConfigured && !isSmtpConfigured) {
-            logger.warn("[EmailService] No email provider fully configured. Emails will be logged to stdout.")
+            logger.warn("[EmailService] No email provider configured. Outside production, emails are printed to stdout instead of sent.")
         }
     }
 
@@ -200,7 +202,7 @@ object EmailService {
 
         val sendResponse = httpClient.send(sendRequest, HttpResponse.BodyHandlers.ofString())
         if (sendResponse.statusCode() in 200..299) {
-            logger.info("[EmailService] Gmail API: Successfully sent email to $to: \"$subject\"")
+            logger.info("[EmailService] Gmail API: email delivered to ${maskEmail(to)}")
             return true
         } else {
             logger.error("[EmailService] Gmail API send error HTTP ${sendResponse.statusCode()}: ${sendResponse.body()}")
@@ -227,7 +229,7 @@ object EmailService {
         }
 
         Transport.send(message)
-        logger.info("[EmailService] SMTP: Successfully sent email to $to: \"$subject\"")
+        logger.info("[EmailService] SMTP: email delivered to ${maskEmail(to)}")
         return true
     }
 
@@ -248,7 +250,15 @@ object EmailService {
                 logger.warn("[EmailService] Gmail API returned unsuccessful response, falling back...")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                logger.warn("[EmailService] Gmail API failed (${e.message}), falling back...")
+                if (e.message?.contains("invalid_grant") == true) {
+                    isGmailApiConfigured = false
+                    logger.error(
+                        "[EmailService] Gmail refresh token is expired or revoked. Gmail sending is off until GMAIL_REFRESH_TOKEN " +
+                            "is replaced and the server restarts. If the Google OAuth app is in Testing mode, tokens expire after 7 days; publish it to Production."
+                    )
+                } else {
+                    logger.warn("[EmailService] Gmail API failed (${e.message}), falling back...")
+                }
             }
         }
 
@@ -264,10 +274,14 @@ object EmailService {
             }
         }
 
-        // Tier 3: Console Mock Output
+        if (!consoleFallbackAllowed(gmailConfigured = gmailCredentialsPresent, smtpConfigured = isSmtpConfigured)) {
+            logger.error("[EmailService] Email to ${maskEmail(to)} was NOT delivered: every configured provider failed")
+            return@withContext false
+        }
+
         println("""
             ============================================================
-            [MOCK EMAIL DISPATCH]
+            [DEV EMAIL - no provider configured, not sent]
             To: $to
             Subject: $subject
             Body:
@@ -275,6 +289,18 @@ object EmailService {
             ============================================================
         """.trimIndent())
         return@withContext true
+    }
+
+    internal fun consoleFallbackAllowed(
+        gmailConfigured: Boolean,
+        smtpConfigured: Boolean,
+        environment: Map<String, String> = System.getenv()
+    ): Boolean = !gmailConfigured && !smtpConfigured && !environment["APP_ENV"].equals("production", ignoreCase = true)
+
+    internal fun maskEmail(address: String): String {
+        val at = address.indexOf('@')
+        if (at <= 0) return "***"
+        return address.first() + "***" + address.substring(at)
     }
 
     private val otpMinutes: Int get() = (plugins.AuthRules.OTP_TTL_MS / 60_000L).toInt()
