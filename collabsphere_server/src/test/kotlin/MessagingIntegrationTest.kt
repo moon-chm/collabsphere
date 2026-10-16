@@ -396,5 +396,41 @@ class MessagingIntegrationTest {
         val mine = json.decodeFromString<com.collabsphere.dto.FocusStatus>(client.get("/api/focus/me") { bearerAuth(focuser.token) }.bodyAsText())
         assertNull(mine.focusUntil)
     }
+
+    @Test
+    fun `standup draft summarises my tasks and is private to workspace members`() = testApplication {
+        application { module() }
+        val me = client.signUp("standup-me")
+        val outsider = client.signUp("standup-outsider")
+        val (ws, _) = workspaceWithChannel(me.id)
+        val now = System.currentTimeMillis()
+        transaction {
+            com.collabsphere.model.TasksTable.insert {
+                it[createdByUserId] = me.id
+                it[assignedToUserId] = me.id
+                it[workspaceId] = ws
+                it[taskName] = "Write release notes"
+                it[taskDescription] = ""
+                it[status] = "DONE"
+                it[completedAt] = now - 60_000L
+            }
+            com.collabsphere.model.TasksTable.insert {
+                it[createdByUserId] = me.id
+                it[assignedToUserId] = me.id
+                it[workspaceId] = ws
+                it[taskName] = "Refactor sync worker"
+                it[taskDescription] = ""
+                it[status] = "IN_PROGRESS"
+            }
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/standup/draft?workspaceId=$ws") { bearerAuth(outsider.token) }.status)
+        val response = client.get("/api/standup/draft?workspaceId=$ws&since=${now - 86_400_000L}") { bearerAuth(me.token) }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val draft = json.decodeFromString<com.collabsphere.dto.StandupDraft>(response.bodyAsText())
+        assertEquals(listOf("Completed “Write release notes”"), draft.yesterday)
+        assertEquals(listOf("Continue “Refactor sync worker”"), draft.today)
+        assertFalse(draft.githubLinked)
+    }
 }
 

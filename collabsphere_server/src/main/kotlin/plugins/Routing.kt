@@ -1565,6 +1565,7 @@ fun Application.configureRouting() {
                 pollRoutes()
                 scheduledMessagesRoutes()
                 focusRoutes()
+                standupRoutes()
             }
 
 

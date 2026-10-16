@@ -6,6 +6,7 @@ import com.collabsphere.app.view.components.ScheduledMessagesDialog
 import com.collabsphere.app.view.components.rememberScheduledMessages
 import com.collabsphere.app.view.components.scheduleLabel
 import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.automirrored.filled.Comment
 import com.collabsphere.app.view.components.VoiceMessagePlayer
@@ -179,6 +180,7 @@ fun MessageScreen(
     var threadRoot by remember { mutableStateOf<MessageEntity?>(null) }
     var infoFor by remember { mutableStateOf<MessageEntity?>(null) }
     var showCreatePoll by remember { mutableStateOf(false) }
+    var showStandup by remember { mutableStateOf(false) }
     val scheduled = rememberScheduledMessages("CHANNEL", viewModel.currentWorkspaceId, viewModel.currentChannelId, null)
     var showSchedule by remember { mutableStateOf(false) }
     var showScheduledList by remember { mutableStateOf(false) }
@@ -387,6 +389,15 @@ fun MessageScreen(
             target = target,
             currentUserId = currentUserId,
             onDismiss = { commitmentTarget = null }
+        )
+    }
+
+    if (showStandup) {
+        com.collabsphere.app.view.components.StandupDialog(
+            workspaceId = viewModel.currentWorkspaceId,
+            channelName = channelName,
+            onPost = { text, onDone -> viewModel.sendStandup(text, onDone) },
+            onDismiss = { showStandup = false }
         )
     }
 
@@ -796,7 +807,12 @@ fun MessageScreen(
                                         label = "Poll",
                                         icon = Icons.Outlined.Poll,
                                         tint = Color(0xFF2FA67A)
-                                    ) { showCreatePoll = true }
+                                    ) { showCreatePoll = true },
+                                    if (isEditing) null else ComposerAction(
+                                        label = "Standup",
+                                        icon = Icons.Outlined.WbSunny,
+                                        tint = CoralStart
+                                    ) { showStandup = true }
                                 )
                             )
 

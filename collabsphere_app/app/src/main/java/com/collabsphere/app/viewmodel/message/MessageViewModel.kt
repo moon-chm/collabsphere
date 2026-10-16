@@ -521,6 +521,31 @@ class MessageViewModel(
         }
     }
 
+    fun sendStandup(content: String, onDone: (Boolean) -> Unit) {
+        val text = content.trim()
+        if (text.isEmpty()) return onDone(false)
+        viewModelScope.launch {
+            val ok = try {
+                repo.sendMessageToUser(
+                    MessageEntity(
+                        userId = loggedUserId,
+                        workspaceId = loggedWorkspaceId,
+                        channelId = loggedChannelId,
+                        userName = loggedUserName,
+                        content = text,
+                        status = MessageStatus.Delivered
+                    )
+                )
+                true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            onDone(ok)
+        }
+    }
+
     fun changeStatus(message: MessageEntity, newmsgStatus: MessageStatus) {
         viewModelScope.launch {
             if (!repo.updateMessage(message.copy(status = newmsgStatus))) {

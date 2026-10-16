@@ -183,6 +183,7 @@ val networkModule = module {
     single { com.collabsphere.app.remote.vote.TaskVoteApiService(get(named("RegularHttpClient"))) }
     single { com.collabsphere.app.remote.progression.ProgressionApiService(get(named("RegularHttpClient"))) }
     single { com.collabsphere.app.remote.focus.FocusApiService(get(named("RegularHttpClient"))) }
+    single { com.collabsphere.app.remote.standup.StandupApiService(get(named("RegularHttpClient"))) }
 }
 
 val repositoryModule = module {
