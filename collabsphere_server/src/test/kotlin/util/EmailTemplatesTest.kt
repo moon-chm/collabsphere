@@ -104,5 +104,6 @@ class EmailTemplatesTest {
         assertTrue(raw.contains("multipart/related"))
         assertTrue(raw.contains("Content-ID: <${EmailTemplates.LOGO_CID}>"))
         assertTrue(raw.contains("image/png"))
+        assertTrue(raw.length < 40_000, "email grew to ${raw.length} bytes")
     }
 }
