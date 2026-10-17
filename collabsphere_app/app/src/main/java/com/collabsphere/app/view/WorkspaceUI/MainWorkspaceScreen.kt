@@ -1,234 +1,98 @@
 package com.collabsphere.app.view.WorkspaceUI
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddBusiness
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddBusiness
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.viewmodel.workspace.WorkspaceViewModel
+import kotlin.math.sin
 
 @Composable
 fun WorkspaceAction(
     viewModel: WorkspaceViewModel,
     onNavigateToCreate: () -> Unit
 ) {
+    val blob = remember { BlobShape(seed = 29, wobble = 0.16f) }
+    val phase = rememberBlobPhase(durationMillis = 4000)
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(PrintPaper)
+            .paperGrain()
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Skeuomorphic tactile card
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .skeuoFloatingCard(cornerRadius = 28.dp, surfaceColor = SurfaceRaised)
+                .printEntrance(0, alreadyShown = false) {}
+                .printSurface(shape = RoundedCornerShape(28.dp))
+                .padding(horizontal = 28.dp, vertical = 36.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp, vertical = 36.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                // Tactile 3D Icon Badge
-                Box(
+            Box(modifier = Modifier.size(120.dp)) {
+                HalftonePatch(
                     modifier = Modifier
-                        .size(92.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                            // Dark shadow below badge
-                            drawCircle(
-                                color = ShadowDark.copy(alpha = 0.35f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x + 3.dp.toPx(), center.y + 4.dp.toPx())
-                            )
-                            // White specular rim
-                            drawCircle(
-                                color = ShadowLight.copy(alpha = 0.95f),
-                                radius = size.minDimension / 2f,
-                                center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                            )
-                            }
-                        }
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(SurfaceRaised, Surface),
-                                start = Offset(0f, 0f),
-                                end = Offset(92.dp.value, 92.dp.value)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(62.dp)
-                            .clip(CircleShape)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(CoralLight, CoralStart),
-                                        center = Offset(center.x - 6.dp.toPx(), center.y - 6.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
-                                )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AddBusiness,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
-                }
-
-                // Title & Subtitle in Fraunces serif and Manrope body
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Create workspace",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        ),
-                        textAlign = TextAlign.Center
-                    )
-
-                    Text(
-                        text = "Set up a brand new workspace environment to begin collaborating on your creative projects.",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                            lineHeight = 22.sp
-                        ),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Tactile CTA Button
-                var pressed by remember { mutableStateOf(false) }
-                val scale by animateFloatAsState(
-                    targetValue = if (pressed) 0.96f else 1f,
-                    animationSpec = tween(80),
-                    label = "createBtnScale"
+                        .align(Alignment.BottomStart)
+                        .size(52.dp),
+                    color = PrintSky
                 )
-
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .graphicsLayer { scaleX = scale; scaleY = scale }
-                        .drawWithCache {
-                            val shadowOffset = if (pressed) 2.dp else 6.dp
-                            val shadowAlpha = if (pressed) 0.15f else 0.35f
-                            onDrawBehind {
-
-                            // Dynamic shadow using CoralStart
-                            drawRoundRect(
-                                color = CoralStart.copy(alpha = shadowAlpha),
-                                topLeft = Offset(0f, shadowOffset.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            // White light bounce
-                            drawRoundRect(
-                                color = Color.White.copy(alpha = 0.30f),
-                                topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            // Gradient body
-                            drawRoundRect(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(CoralLight, CoralStart),
-                                    start = Offset(0f, 0f),
-                                    end = Offset(size.width, size.height)
-                                ),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            // Top hairline highlight hugging rounded contour
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.40f),
-                                        Color.White.copy(alpha = 0.10f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = 16.dp.toPx()
-                                ),
-                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                cornerRadius = CornerRadius(16.dp.toPx()),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                            }
-                        }
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            pressed = true
-                            onNavigateToCreate()
-                        },
+                        .align(Alignment.Center)
+                        .size(92.dp)
+                        .graphicsLayer { translationY = sin(phase()) * 4.dp.toPx() }
+                        .printSurface(shape = blob, fill = PrintCoral),
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Create workspace",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            ),
-                            color = Color.White
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.AddBusiness,
+                        contentDescription = null,
+                        tint = PrintInk,
+                        modifier = Modifier.size(38.dp)
+                    )
                 }
+                PrintStar(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp),
+                    twinkle = true
+                )
             }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MisregisteredTitle(
+                    text = "Create a workspace",
+                    style = PrintType.H2
+                )
+                Text(
+                    text = "Bring your team, chats, tasks and files into one place.",
+                    style = PrintType.Body,
+                    color = Muted,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            PrintButton(
+                text = "Create workspace",
+                onClick = onNavigateToCreate,
+                icon = Icons.Outlined.Add,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

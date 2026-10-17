@@ -9,6 +9,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -61,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.model.UserEntity
 import com.collabsphere.app.model.task.TaskEntity
@@ -108,7 +111,7 @@ fun TaskScreen(
     val labelFilter by viewModel.labelFilter.collectAsStateWithLifecycle()
     val pendingProposals by taskVoteViewModel.pendingProposals.collectAsStateWithLifecycle()
 
-    var selectedViewMode by remember { mutableIntStateOf(0) } // 0 = Board, 1 = Team Votes
+    var selectedViewMode by remember { mutableIntStateOf(0) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
     var taskToUpdate by remember { mutableStateOf<TaskEntity?>(null) }
@@ -118,10 +121,9 @@ fun TaskScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(PrintPaper)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,13 +131,12 @@ fun TaskScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (selectedViewMode == 0) "Kanban board" else "Team votes",
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
+                MisregisteredTitle(
+                    text = if (selectedViewMode == 0) "Board" else "Team votes",
+                    style = PrintType.H2,
+                    modifier = Modifier.weight(1f)
                 )
-
-                // Tactile Header Action Button
+                Spacer(Modifier.width(12.dp))
                 SkeuoHeaderActionButton(
                     text = "Propose task",
                     icon = Icons.Default.Add,
@@ -143,64 +144,23 @@ fun TaskScreen(
                 )
             }
 
-            // View Toggle Pills Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
+                    .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (selectedViewMode == 0) SurfaceRaised else Color.Transparent)
-                        .clickable { selectedViewMode = 0 }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "Board (${tasks.size})",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (selectedViewMode == 0) Ink else Muted
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (selectedViewMode == 1) SurfaceRaised else Color.Transparent)
-                        .clickable { selectedViewMode = 1 }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "Votes",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = if (selectedViewMode == 1) Ink else Muted
-                        )
-                        if (pendingProposals.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(Amber),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${pendingProposals.size}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
+                PrintChip(
+                    text = "Board · ${tasks.size}",
+                    fill = if (selectedViewMode == 0) PrintLeaf else PrintWhite,
+                    onClick = { selectedViewMode = 0 }
+                )
+                PrintChip(
+                    text = if (pendingProposals.isEmpty()) "Votes" else "Votes · ${pendingProposals.size}",
+                    fill = if (selectedViewMode == 1) PrintCoral else PrintWhite,
+                    onClick = { selectedViewMode = 1 }
+                )
             }
 
             if (selectedViewMode == 1) {
@@ -216,7 +176,6 @@ fun TaskScreen(
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
                 )
 
-                // Kanban Horizontal Scroll Columns
                 androidx.compose.animation.Crossfade(
                     targetState = Pair(isSyncing, tasks.isEmpty()),
                     label = "tasksCrossfade",
@@ -232,7 +191,7 @@ fun TaskScreen(
                         com.collabsphere.app.view.components.SkeuoEmptyState(
                             icon = androidx.compose.material.icons.Icons.Default.AssignmentInd,
                             title = "No tasks yet",
-                            description = "Tap the + button or create your first task to start tracking work.",
+                            description = "Tap “Propose task” to put your first piece of work up for a team vote.",
                             actionLabel = null,
                             onAction = {},
                             modifier = Modifier.fillMaxSize()
@@ -243,8 +202,8 @@ fun TaskScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .horizontalScroll(scrollState)
-                                .padding(horizontal = 14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                .padding(start = 20.dp, end = 24.dp, top = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                     val toDoTasks = tasks.filter { it.task.status == TaskStatus.TO_DO }
                 val inProgressTasks = tasks.filter { it.task.status == TaskStatus.IN_PROGRESS }
@@ -253,7 +212,7 @@ fun TaskScreen(
                 SkeuoKanbanColumn(
                     title = "To do",
                     tasks = toDoTasks,
-                    accentColor = Amber,
+                    accentColor = PrintCoral,
                     onMoveForward = { viewModel.moveTask(it, TaskStatus.IN_PROGRESS) },
                     onMoveBackward = null,
                     onDelete = { taskToDelete = it },
@@ -264,7 +223,7 @@ fun TaskScreen(
                 SkeuoKanbanColumn(
                     title = "In progress",
                     tasks = inProgressTasks,
-                    accentColor = IndigoStart,
+                    accentColor = PrintSky,
                     onMoveForward = { viewModel.moveTask(it, TaskStatus.DONE) },
                     onMoveBackward = { viewModel.moveTask(it, TaskStatus.TO_DO) },
                     onDelete = { taskToDelete = it },
@@ -275,19 +234,19 @@ fun TaskScreen(
                 SkeuoKanbanColumn(
                     title = "Done",
                     tasks = doneTasks,
-                    accentColor = Mint,
+                    accentColor = PrintLeaf,
                     onMoveForward = null,
                     onMoveBackward = { viewModel.moveTask(it, TaskStatus.IN_PROGRESS) },
                     onDelete = { taskToDelete = it },
                     onUpdate = { taskToUpdate = it },
                     onAssignClick = { taskToAssign = it }
                 )
-                        } // Row
-                    } // else
-                } // when
-            } // Crossfade
-            } // else
-        } // Column
+                        }
+                    }
+                }
+            }
+            }
+        }
 
         if (showCreateDialog) {
             CreateTaskDialog(
@@ -356,47 +315,10 @@ fun SkeuoKanbanColumn(
             .width(286.dp)
             .fillMaxHeight()
             .padding(bottom = 88.dp)
-            .drawWithCache {
-onDrawBehind {
-                drawRoundRect(
-                    color = ShadowDark.copy(alpha = 0.16f),
-                    topLeft = Offset(3.dp.toPx(), 4.dp.toPx()),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(20.dp.toPx())
-                )
-                drawRoundRect(
-                    color = ShadowLight.copy(alpha = 0.85f),
-                    topLeft = Offset(-2.dp.toPx(), -2.dp.toPx()),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(20.dp.toPx())
-                )
-                drawRoundRect(
-                    color = Surface,
-                    cornerRadius = CornerRadius(20.dp.toPx())
-                )
-                // Specular hairline highlight hugging rounded contour
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.70f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 20.dp.toPx()
-                    ),
-                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = CornerRadius(20.dp.toPx()),
-                    style = Stroke(width = 1.dp.toPx())
-                )
-            }
-}
-            .clip(RoundedCornerShape(20.dp))
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), fill = PrintPaper)
             .padding(14.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Column Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -406,41 +328,20 @@ onDrawBehind {
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(accentColor)
+                            .size(18.dp)
+                            .printSurface(shape = BlobShape(seed = title.length, wobble = 0.16f), fill = accentColor, shadow = null, outline = 1.5.dp)
                     )
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
+                        style = PrintType.H3,
+                        color = PrintInk
                     )
                 }
-
-                // Count badge
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .drawWithCache {
-onDrawBehind {
-                            drawCircle(
-                                color = SurfaceRaised,
-                                radius = size.minDimension / 2f
-                            )
-                        }
-},
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "${tasks.size}",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Muted
-                    )
-                }
+                PrintChip(text = "${tasks.size}", fill = accentColor)
             }
 
             if (tasks.isEmpty()) {
@@ -451,21 +352,23 @@ onDrawBehind {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No tasks",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted.copy(alpha = 0.7f)
+                        text = "Nothing here yet",
+                        style = PrintType.Caption,
+                        color = Muted
                     )
                 }
             } else {
                 val columnListState = rememberLazyListState()
+                val entranceRegistry = rememberEntranceRegistry()
                 LazyColumn(
                     state = columnListState,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(end = 4.dp, bottom = 8.dp),
                     modifier = Modifier
                         .fillMaxSize()
                         .fadingScrollEdges(listState = columnListState, top = 16.dp, bottom = 24.dp)
                 ) {
-                    items(tasks, key = { it.task.id }) { taskUi ->
+                    itemsIndexed(tasks, key = { _, it -> it.task.id }) { index, taskUi ->
                         SkeuoKanbanTaskCard(
                             taskUi = taskUi,
                             accentColor = accentColor,
@@ -474,7 +377,9 @@ onDrawBehind {
                             onDelete = { onDelete(taskUi.task) },
                             onUpdate = { onUpdate(taskUi.task) },
                             onAssignClick = { onAssignClick(taskUi.task) },
-                            modifier = Modifier.animateItem()
+                            modifier = Modifier
+                                .animateItem()
+                                .printListEntrance(taskUi.task.id, index, entranceRegistry)
                         )
                     }
                 }
@@ -496,22 +401,12 @@ fun SkeuoKanbanTaskCard(
 ) {
     val isEditable = taskUi.isEditableByMe
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "taskCardScale"
-    )
+    val press = rememberPrintPress(interactionSource)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoFloatingCard(cornerRadius = 14.dp, isPressed = isPressed)
-            .clip(RoundedCornerShape(14.dp))
+            .printSurface(shape = RoundedCornerShape(18.dp), shadowOffset = 3.dp, pressProgress = press)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -523,17 +418,14 @@ fun SkeuoKanbanTaskCard(
             taskReferenceLabel(taskUi.task.id)?.let {
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF9E8E89)
+                    style = PrintType.Tiny,
+                    color = Muted
                 )
             }
             Text(
                 text = taskUi.task.taskName,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.5.sp
-                ),
-                color = Color(0xFF1F1A17),
+                style = PrintType.H3.copy(fontSize = 16.sp, lineHeight = 21.sp),
+                color = PrintInk,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -542,11 +434,8 @@ fun SkeuoKanbanTaskCard(
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = taskUi.task.taskDescription,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp
-                    ),
-                    color = Color(0xFF6E635C),
+                    style = PrintType.Caption,
+                    color = Muted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -557,31 +446,15 @@ fun SkeuoKanbanTaskCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Assignee debossed pill
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .drawWithCache {
-onDrawBehind {
-                        val cr = 8.dp.toPx()
-                        drawRoundRect(
-                            color = Color(0xFF241A15).copy(alpha = 0.10f),
-                            topLeft = Offset(1.dp.toPx(), 1.2.dp.toPx()),
-                            size = Size(size.width - 1.dp.toPx(), size.height - 1.2.dp.toPx()),
-                            cornerRadius = CornerRadius(cr)
-                        )
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(
-                                listOf(Color(0xFFEDE8DF), Color(0xFFF7F4ED))
-                            ),
-                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                            cornerRadius = CornerRadius(cr)
-                        )
-                    }
-}
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(PrintPaper)
+                    .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
                     .clickable(enabled = isEditable, onClick = onAssignClick)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .heightIn(min = 32.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.CenterStart
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -590,20 +463,19 @@ onDrawBehind {
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
-                        tint = IndigoStart,
-                        modifier = Modifier.size(14.dp)
+                        tint = PrintInk,
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = taskUi.assigneeName.ifEmpty { "Unassigned" },
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                        color = Ink
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                        color = PrintInk
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Action icons row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -615,8 +487,8 @@ onDrawBehind {
                     icon = Icons.Default.DeleteOutline,
                     contentDescription = "Delete task",
                     tint = DestructiveStart,
-                    size = 30.dp,
-                    iconSize = 15.dp
+                    size = 36.dp,
+                    iconSize = 18.dp
                 )
 
                 Spacer(modifier = Modifier.width(6.dp))
@@ -626,9 +498,9 @@ onDrawBehind {
                     enabled = isEditable,
                     icon = Icons.Default.Edit,
                     contentDescription = "Edit task",
-                    tint = IndigoStart,
-                    size = 30.dp,
-                    iconSize = 15.dp
+                    tint = PrintInk,
+                    size = 36.dp,
+                    iconSize = 18.dp
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -640,8 +512,8 @@ onDrawBehind {
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Move back",
                         tint = Ink,
-                        size = 30.dp,
-                        iconSize = 15.dp
+                        size = 36.dp,
+                        iconSize = 18.dp
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                 }
@@ -652,9 +524,10 @@ onDrawBehind {
                         enabled = isEditable,
                         icon = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = "Move forward",
-                        tint = CoralStart,
-                        size = 30.dp,
-                        iconSize = 15.dp
+                        tint = PrintInk,
+                        fill = accentColor,
+                        size = 36.dp,
+                        iconSize = 18.dp
                     )
                 }
             }
@@ -686,26 +559,13 @@ fun CreateTaskBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        // Bottom insets only (nav bar + keyboard). The default also pads the top by however much of the
-        // status bar the sheet overlaps; for this full-height sheet that padding changes the sheet's height,
-        // which moves it, which changes the padding again, so the sheet bounced up and down non-stop.
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
-        containerColor = SurfaceRaised,
-        scrimColor = Color.Black.copy(alpha = 0.45f),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 12.dp, bottom = 8.dp)
-                    .width(36.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Muted.copy(alpha = 0.4f))
-            )
-        },
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        containerColor = PrintWhite,
+        scrimColor = PrintInk.copy(alpha = 0.45f),
+        dragHandle = { PrintSheetHandle() },
+        shape = PrintSheetShape,
+        modifier = Modifier.printSheetOutline()
     ) {
-        // The form is taller than the screen; capping it keeps the sheet clear of the status bar and the form
-        // scrolls inside instead.
         val maxSheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
         Column(
             modifier = Modifier
@@ -717,7 +577,6 @@ fun CreateTaskBottomSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // Header: Icon + Title & Subtitle + Close button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -730,62 +589,48 @@ fun CreateTaskBottomSheet(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(CoralStart, CoralEnd)
-                                )
-                            ),
+                            .size(48.dp)
+                            .printSurface(shape = BlobShape(seed = 11, wobble = 0.14f), fill = PrintLeaf, shadow = null),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
                     Column {
                         Text(
-                            text = "Propose new task",
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Ink
+                            text = "Propose a task",
+                            style = PrintType.H2.copy(fontSize = 24.sp, lineHeight = 28.sp),
+                            color = PrintInk
                         )
                         Text(
-                            text = "Team proposal for voting & tracking",
+                            text = "Your team votes before it lands on the board",
                             style = MaterialTheme.typography.bodySmall,
                             color = Muted
                         )
                     }
                 }
 
-                IconButton(
+                PrintIconButton(
+                    icon = Icons.Default.Close,
+                    contentDescription = "Close",
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Surface)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Muted,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    fill = PrintPaper,
+                    size = 40.dp,
+                    iconSize = 18.dp,
+                    shadow = false
+                )
             }
 
-            // SECTION: TASK DETAILS
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "TASK DETAILS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    ),
-                    color = Muted
+                    style = PrintType.Tiny,
+                    color = PrintInk
                 )
 
                 com.collabsphere.app.view.components.SkeuoTextField(
@@ -797,8 +642,8 @@ fun CreateTaskBottomSheet(
                         Icon(
                             imageVector = Icons.Outlined.TaskAlt,
                             contentDescription = null,
-                            tint = CoralStart.copy(alpha = 0.75f),
-                            modifier = Modifier.size(18.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 )
@@ -809,7 +654,7 @@ fun CreateTaskBottomSheet(
                     value = description,
                     onValueChange = { viewModel.onTaskDescriptionChange(it) },
                     label = "Description",
-                    placeholder = "Add optional details or acceptance criteria...",
+                    placeholder = "Optional details or acceptance criteria",
                     imeAction = ImeAction.Done,
                     singleLine = false,
                     minLines = 2,
@@ -817,15 +662,11 @@ fun CreateTaskBottomSheet(
                 )
             }
 
-            // SECTION: PRIORITY & SCHEDULING
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "PRIORITY & SCHEDULING",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    ),
-                    color = Muted
+                    style = PrintType.Tiny,
+                    color = PrintInk
                 )
 
                 PrioritySelector(selected = priority, onSelect = viewModel::onPriorityChange)
@@ -833,15 +674,11 @@ fun CreateTaskBottomSheet(
                 DueDateSelector(dueDate = dueDate, onDueDateChange = viewModel::onDueDateChange)
             }
 
-            // SECTION: ASSIGN TO
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "ASSIGN TO",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    ),
-                    color = Muted
+                    style = PrintType.Tiny,
+                    color = PrintInk
                 )
 
                 Box {
@@ -867,21 +704,21 @@ fun CreateTaskBottomSheet(
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
-                                    tint = if (assignedUserId != null) CoralStart else Muted,
+                                    tint = PrintInk,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
                                     text = selectedMemberName,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (assignedUserId != null) FontWeight.SemiBold else FontWeight.Normal
+                                    style = PrintType.Body.copy(
+                                        fontWeight = if (assignedUserId != null) FontWeight.Bold else FontWeight.Normal
                                     ),
-                                    color = if (assignedUserId != null) Ink else Muted
+                                    color = if (assignedUserId != null) PrintInk else Muted
                                 )
                             }
                             Text(
                                 text = "▼",
-                                fontSize = 10.sp,
-                                color = Muted
+                                fontSize = 12.sp,
+                                color = PrintInk
                             )
                         }
                     }
@@ -889,7 +726,7 @@ fun CreateTaskBottomSheet(
                     DropdownMenu(
                         expanded = dropdownExpanded,
                         onDismissRequest = { dropdownExpanded = false },
-                        modifier = Modifier.background(SurfaceRaised)
+                        modifier = Modifier.background(PrintWhite)
                     ) {
                         DropdownMenuItem(
                             text = { Text("Unassigned") },
@@ -911,15 +748,11 @@ fun CreateTaskBottomSheet(
                 }
             }
 
-            // SECTION: LABELS
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "LABELS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    ),
-                    color = Muted
+                    style = PrintType.Tiny,
+                    color = PrintInk
                 )
 
                 LabelEditor(labels = labels, onLabelsChange = viewModel::onLabelsChange)
@@ -927,108 +760,53 @@ fun CreateTaskBottomSheet(
 
             Spacer(Modifier.height(4.dp))
 
-            // Action Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Surface)
-                        .clickable(enabled = !isCreatingTask, onClick = onDismiss),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Cancel",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = Muted
-                    )
-                }
-
-                val canCreate = name.trim().isNotEmpty() && !isCreatingTask
-                val createAlpha = if (canCreate) 1f else 0.65f
-                Box(
-                    modifier = Modifier
-                        .weight(1.3f)
-                        .height(48.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                                drawRoundRect(
-                                    color = CoralStart.copy(alpha = 0.28f * createAlpha),
-                                    topLeft = Offset(0f, 3.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            CoralStart.copy(alpha = createAlpha),
-                                            CoralEnd.copy(alpha = createAlpha)
-                                        ),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                            }
-                        }
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(enabled = canCreate) {
-                            if (canCreate) {
-                                if (taskVoteViewModel != null) {
-                                    taskVoteViewModel.submitCreateProposal(
-                                        workspaceId = viewModel.loggedWorkspaceId,
-                                        taskName = name.trim(),
-                                        taskDescription = description.trim(),
-                                        assignedToUserId = assignedUserId,
-                                        priority = priority.name,
-                                        dueDate = dueDate,
-                                        labels = labels
-                                    ) { success ->
-                                        if (success) {
-                                            AppToast.show("Task proposal submitted for team vote")
-                                            viewModel.onTaskNameChange("")
-                                            viewModel.onTaskDescriptionChange("")
-                                            viewModel.onAssigneeChange(null)
-                                            viewModel.onDueDateChange(null)
-                                            viewModel.onPriorityChange(com.collabsphere.app.model.task.TaskPriority.MEDIUM)
-                                            viewModel.onLabelsChange(emptyList())
-                                            onDismiss()
-                                        }
-                                    }
-                                } else {
-                                    viewModel.onCreateTask(onCreated = onDismiss)
+            val canCreate = name.trim().isNotEmpty() && !isCreatingTask
+            com.collabsphere.app.view.components.WorkspaceDialogButton(
+                text = "Propose task",
+                loadingText = "Proposing…",
+                colors = listOf(PrintInk),
+                enabled = canCreate,
+                loading = isCreatingTask,
+                onClick = {
+                    if (canCreate) {
+                        if (taskVoteViewModel != null) {
+                            taskVoteViewModel.submitCreateProposal(
+                                workspaceId = viewModel.loggedWorkspaceId,
+                                taskName = name.trim(),
+                                taskDescription = description.trim(),
+                                assignedToUserId = assignedUserId,
+                                priority = priority.name,
+                                dueDate = dueDate,
+                                labels = labels
+                            ) { success ->
+                                if (success) {
+                                    AppToast.show("Task proposal submitted for team vote")
+                                    viewModel.onTaskNameChange("")
+                                    viewModel.onTaskDescriptionChange("")
+                                    viewModel.onAssigneeChange(null)
+                                    viewModel.onDueDateChange(null)
+                                    viewModel.onPriorityChange(com.collabsphere.app.model.task.TaskPriority.MEDIUM)
+                                    viewModel.onLabelsChange(emptyList())
+                                    onDismiss()
                                 }
                             }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isCreatingTask) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                            text = "Propose Task",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            ),
-                            color = Color.White.copy(alpha = if (canCreate) 1f else 0.85f)
-                        )
+                        } else {
+                            viewModel.onCreateTask(onCreated = onDismiss)
+                        }
                     }
                 }
-            }
+            )
+            PrintButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                primary = false,
+                enabled = !isCreatingTask,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
-// Backward compatibility alias
 @Composable
 fun CreateTaskDialog(
     viewModel: TaskViewModel,
@@ -1059,64 +837,21 @@ fun UpdateTaskDialog(
     var updatedLabels by remember { mutableStateOf(task.labels) }
     val canPlan = viewModel.canPlan(task)
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawWithCache {
-onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    // Specular hairline highlight hugging rounded contour
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.75f),
-                                Color.White.copy(alpha = 0.15f),
-                                Color.Transparent
-                            ),
-                            startY = 0f,
-                            endY = 24.dp.toPx()
-                        ),
-                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                        cornerRadius = CornerRadius(24.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
-}
-                .padding(24.dp)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        com.collabsphere.app.view.components.WorkspaceDialogCard(
+            icon = Icons.Default.Edit,
+            accent = PrintSky,
+            title = "Edit task",
+            subtitle = taskReferenceLabel(task.id) ?: "Update the details and plan",
+            onClose = onDismiss
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Update task",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-                taskReferenceLabel(task.id)?.let {
-                    Text(text = it, style = MaterialTheme.typography.labelMedium, color = Muted)
-                }
-
                 com.collabsphere.app.view.components.SkeuoTextField(
                     value = updatedName,
                     onValueChange = { updatedName = it },
@@ -1126,8 +861,8 @@ onDrawBehind {
                         Icon(
                             imageVector = Icons.Outlined.TaskAlt,
                             contentDescription = null,
-                            tint = CoralStart.copy(alpha = 0.75f),
-                            modifier = Modifier.size(18.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 )
@@ -1175,65 +910,24 @@ onDrawBehind {
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
+                val canUpdate = updatedName.trim().isNotEmpty()
+                com.collabsphere.app.view.components.WorkspaceDialogButton(
+                    text = "Save changes",
+                    colors = listOf(PrintInk),
+                    enabled = canUpdate,
+                    onClick = {
+                        if (canUpdate) {
+                            viewModel.onUpdateTask(task, updatedName, updatedDescription, updatedDueDate, updatedPriority, updatedChecklist, updatedLabels)
+                            onDismiss()
+                        }
                     }
-
-                    val canUpdate = updatedName.trim().isNotEmpty()
-                    val updateAlpha = if (canUpdate) 1f else 0.72f
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .drawWithCache {
-onDrawBehind {
-                                drawRoundRect(
-                                    color = CoralStart.copy(alpha = 0.25f * updateAlpha),
-                                    topLeft = Offset(0f, 2.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            CoralStart.copy(alpha = updateAlpha),
-                                            CoralEnd.copy(alpha = updateAlpha)
-                                        ),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                            }
-}
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(enabled = canUpdate) {
-                                if (updatedName.trim().isNotEmpty()) {
-                                    viewModel.onUpdateTask(task, updatedName, updatedDescription, updatedDueDate, updatedPriority, updatedChecklist, updatedLabels)
-                                    onDismiss()
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Update",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White.copy(alpha = if (canUpdate) 1f else 0.85f)
-                        )
-                    }
-                }
+                )
+                PrintButton(
+                    text = "Cancel",
+                    onClick = onDismiss,
+                    primary = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1246,114 +940,104 @@ fun AssignMemberDialog(
     onAssign: (Int?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawWithCache {
-onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                }
-}
-                .padding(22.dp)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        com.collabsphere.app.view.components.WorkspaceDialogCard(
+            icon = Icons.Default.AssignmentInd,
+            accent = PrintLeaf,
+            title = "Assign member",
+            subtitle = task.taskName,
+            onClose = onDismiss
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            val assignListState = rememberLazyListState()
+            LazyColumn(
+                state = assignListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .fadingScrollEdges(listState = assignListState, top = 14.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Assign member",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-
-                val assignListState = rememberLazyListState()
-                LazyColumn(
-                    state = assignListState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 260.dp)
-                        .fadingScrollEdges(listState = assignListState, top = 14.dp, bottom = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Surface)
-                                .clickable { onAssign(null) }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Unassigned",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = Muted
-                            )
-                        }
-                    }
-
-                    items(members, key = { it.id }) { member ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Surface)
-                                .clickable { onAssign(member.id) }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(IndigoStart),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = member.userName.take(1).uppercase(),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                            Text(
-                                text = member.userName,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = Ink
-                            )
-                        }
-                    }
+                item {
+                    AssignMemberRow(
+                        name = "Unassigned",
+                        initial = "–",
+                        fill = PrintPaper,
+                        selected = task.assignedToUserId == null,
+                        onClick = { onAssign(null) }
+                    )
                 }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Surface)
-                        .clickable(onClick = onDismiss),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
+                itemsIndexed(members, key = { _, it -> it.id }) { index, member ->
+                    AssignMemberRow(
+                        name = member.userName,
+                        initial = member.userName.take(1).uppercase(),
+                        fill = listOf(PrintSky, PrintLeaf, PrintCoral)[index % 3],
+                        selected = task.assignedToUserId == member.id,
+                        onClick = { onAssign(member.id) }
+                    )
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            PrintButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                primary = false,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun AssignMemberRow(
+    name: String,
+    initial: String,
+    fill: Color,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(PrintTokens.RadiusSmall)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(shape)
+            .background(if (selected) PrintLeaf.copy(alpha = 0.35f) else PrintWhite)
+            .border(1.5.dp, PrintInk, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .printSurface(shape = CircleShape, fill = fill, shadow = null, outline = 1.5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initial,
+                style = PrintType.Label.copy(fontSize = 14.sp),
+                color = PrintInk
+            )
+        }
+        Text(
+            text = name,
+            style = PrintType.Body.copy(fontWeight = FontWeight.Bold),
+            color = PrintInk,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Current assignee",
+                tint = PrintInk,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -1364,115 +1048,12 @@ fun DeleteTaskConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawWithCache {
-onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                }
-}
-                .padding(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(Destructive.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WarningAmber,
-                        contentDescription = null,
-                        tint = Destructive,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Text(
-                    text = "Delete task",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-
-                Text(
-                    text = "Are you sure you want to delete '$taskName'? This action cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Muted,
-                    textAlign = TextAlign.Center
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .drawWithCache {
-onDrawBehind {
-                                drawRoundRect(
-                                    color = Destructive.copy(alpha = 0.3f),
-                                    topLeft = Offset(0f, 2.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(Destructive, Color(0xFFB52E2E)),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                            }
-}
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = onConfirm),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Delete",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-        }
-    }
+    com.collabsphere.app.view.components.PrintConfirmDialog(
+        title = "Delete “$taskName”?",
+        message = "This task will be removed from the board for everyone.",
+        confirmLabel = "Delete task",
+        icon = Icons.Default.WarningAmber,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss
+    )
 }

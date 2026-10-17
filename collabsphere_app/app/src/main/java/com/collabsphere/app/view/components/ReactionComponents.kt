@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -85,8 +86,8 @@ fun ReactionPickerDialog(
                             .widthIn(max = 44.dp)
                             .aspectRatio(1f)
                             .clip(CircleShape)
-                            .background(if (isSelected) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
-                            .border(1.dp, if (isSelected) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)
+                            .background(if (isSelected) PrintCoral else PrintWhite)
+                            .border(if (isSelected) 2.dp else 1.5.dp, PrintInk, CircleShape)
                             .clickable { pick(emoji) },
                         contentAlignment = Alignment.Center
                     ) {
@@ -99,8 +100,8 @@ fun ReactionPickerDialog(
                         .widthIn(max = 44.dp)
                         .aspectRatio(1f)
                         .clip(CircleShape)
-                        .background(if (expanded) CoralStart.copy(alpha = 0.18f) else SurfaceRaised)
-                        .border(1.dp, if (expanded) CoralStart else Muted.copy(alpha = 0.2f), CircleShape)
+                        .background(if (expanded) PrintCoral else PrintWhite)
+                        .border(1.5.dp, PrintInk, CircleShape)
                         .clickable { expanded = !expanded },
                     contentAlignment = Alignment.Center
                 ) {
@@ -145,8 +146,8 @@ fun ReactionChipsRow(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (mine) CoralStart.copy(alpha = 0.14f) else SurfaceRaised)
-                        .border(1.dp, if (mine) CoralStart.copy(alpha = 0.6f) else Muted.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                        .background(if (mine) PrintCoral.copy(alpha = 0.55f) else PrintWhite)
+                        .border(if (mine) 2.dp else 1.5.dp, PrintInk, RoundedCornerShape(14.dp))
                         .clickable { onToggle(emoji) }
                         .padding(horizontal = 8.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -155,8 +156,8 @@ fun ReactionChipsRow(
                     Text(text = emoji, fontSize = 13.sp)
                     Text(
                         text = users.size.toString(),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                        color = if (mine) CoralStart else Ink
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
+                        color = PrintInk
                     )
                 }
             }

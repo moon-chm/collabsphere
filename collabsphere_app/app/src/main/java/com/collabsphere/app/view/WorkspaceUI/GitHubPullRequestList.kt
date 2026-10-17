@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,14 +49,20 @@ internal fun PullRequestListView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) {
-                Text("← Back", color = Color(0xFF2C2A28))
-            }
+            com.collabsphere.app.ui.theme.SkeuoActionIconButton(
+                onClick = onBack,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                size = 40.dp,
+                iconSize = 20.dp,
+                tint = com.collabsphere.app.ui.theme.PrintInk
+            )
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = "Pull requests",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2A28)
+                color = com.collabsphere.app.ui.theme.PrintInk
             )
         }
 
@@ -79,7 +88,7 @@ internal fun PullRequestListView(
                 if (state.isLoading) {
                     CollabSpinner()
                 } else {
-                    Text("No pull requests", color = Color(0xFF70625E))
+                    Text("No pull requests", color = com.collabsphere.app.ui.theme.Muted)
                 }
             }
         } else {
@@ -113,7 +122,7 @@ internal fun PullRequestListView(
                                 CollabSpinner(modifier = Modifier.size(24.dp))
                             } else {
                                 OutlinedButton(onClick = onLoadMore) {
-                                    Text("Load more", color = Color(0xFF2C2A28))
+                                    Text("Load more", color = com.collabsphere.app.ui.theme.PrintInk)
                                 }
                             }
                         }

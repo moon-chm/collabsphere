@@ -108,7 +108,7 @@ fun SwipeToReply(
                 .background(SurfaceRaised),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
         }
         Box(Modifier.offset { IntOffset(offsetX.value.roundToInt(), 0) }) { content() }
     }
@@ -119,7 +119,7 @@ fun MessageStatusTicks(isRead: Boolean, modifier: Modifier = Modifier) {
     Icon(
         imageVector = if (isRead) Icons.Default.DoneAll else Icons.Default.Done,
         contentDescription = if (isRead) "Read" else "Sent",
-        tint = if (isRead) Color(0xFF6EE7B7) else Color.White.copy(alpha = 0.75f),
+        tint = if (isRead) PrintLeaf else PrintPaper.copy(alpha = 0.75f),
         modifier = modifier.size(14.dp)
     )
 }
@@ -132,18 +132,18 @@ fun NewMessagesDivider(modifier: Modifier = Modifier) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.weight(1f).height(1.dp).background(CoralStart.copy(alpha = 0.35f)))
+        Box(Modifier.weight(1f).height(1.dp).background(PrintCoral.copy(alpha = 0.35f)))
         Text(
             text = "New messages",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-            color = CoralStart,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
+            color = PrintInk,
             modifier = Modifier
                 .padding(horizontal = 10.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(CoralStart.copy(alpha = 0.10f))
+                .background(PrintCoral.copy(alpha = 0.35f))
                 .padding(horizontal = 10.dp, vertical = 3.dp)
         )
-        Box(Modifier.weight(1f).height(1.dp).background(CoralStart.copy(alpha = 0.35f)))
+        Box(Modifier.weight(1f).height(1.dp).background(PrintCoral.copy(alpha = 0.35f)))
     }
 }
 
@@ -171,7 +171,7 @@ fun FullScreenImageViewer(url: String, onDismiss: () -> Unit) {
                 contentScale = ContentScale.Fit,
                 loading = {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CollabSpinner(color = CoralStart, modifier = Modifier.size(40.dp))
+                        CollabSpinner(color = PrintInk, modifier = Modifier.size(40.dp))
                     }
                 },
                 modifier = Modifier
@@ -259,7 +259,7 @@ fun UploadProgressBar(progress: Float, onCancel: () -> Unit, modifier: Modifier 
             .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.CloudUpload, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+        Icon(Icons.Outlined.CloudUpload, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -271,8 +271,8 @@ fun UploadProgressBar(progress: Float, onCancel: () -> Unit, modifier: Modifier 
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                color = CoralStart,
-                trackColor = CoralStart.copy(alpha = 0.15f)
+                color = PrintInk,
+                trackColor = PrintInk.copy(alpha = 0.15f)
             )
         }
         IconButton(onClick = onCancel, enabled = progress < 1f) {

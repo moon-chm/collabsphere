@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.foundation.border
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background

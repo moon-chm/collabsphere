@@ -21,7 +21,7 @@ class EmailTemplatesTest {
             validDays = 7
         )
         assertFalse(email.html.contains("<script>"))
-        assertFalse(email.html.contains("<img"))
+        assertFalse(email.html.contains("<img src=x"))
         assertTrue(email.html.contains("&lt;script&gt;"))
         assertTrue(email.html.contains("AB12CD"))
         assertTrue(email.html.contains("7 days"))
@@ -66,17 +66,43 @@ class EmailTemplatesTest {
     }
 
     @Test
-    fun `tactile depth degrades to bevel borders and solid colours where shadows are unsupported`() {
+    fun `print card keeps its ink outline and offset shadow without css shadows`() {
         val html = EmailTemplates.workspaceInvitation("Design", "Ann", "AB12CD", 7).html
         val card = Regex("class=\"cs-card\" style=\"([^\"]+)\"").find(html)!!.groupValues[1]
         val well = Regex("class=\"cs-well\" style=\"([^\"]+)\"").find(html)!!.groupValues[1]
-        listOf(card, well).forEach { style ->
-            assertTrue(style.contains("box-shadow"))
-            assertTrue(style.contains("background-color"), "gradient needs a solid fallback")
-            assertTrue(style.contains("border-top-color") && style.contains("border-bottom-color"), "bevel borders must back up the shadow")
-        }
-        assertTrue(html.contains("bgcolor=\"#FDFBF7\""))
+        assertTrue(card.contains("border: 2px solid #1E2A5A"))
+        assertTrue(card.contains("border-bottom-width: 6px") && card.contains("border-right-width: 6px"))
+        assertTrue(well.contains("border: 2px solid #1E2A5A"))
+        assertFalse(html.contains("box-shadow"))
+        assertFalse(html.contains("linear-gradient"))
+        assertTrue(html.contains("bgcolor=\"#FFFFFF\""))
         assertTrue(html.contains("@media only screen and (max-width: 480px)"))
     }
-}
 
+    @Test
+    fun `every email shows the logo as an inline image`() {
+        listOf(
+            EmailTemplates.verification("123456", 15),
+            EmailTemplates.passwordReset("123456", 15),
+            EmailTemplates.emailChange("123456", "new@example.com", 15),
+            EmailTemplates.workspaceInvitation("Design", "Ann", "AB12CD", 7)
+        ).forEach { email ->
+            assertTrue(email.html.contains("src=\"cid:${EmailTemplates.LOGO_CID}\""))
+            assertTrue(email.html.contains("alt=\"CollabSphere\""))
+        }
+    }
+
+    @Test
+    fun `mime message embeds the logo next to the html part`() {
+        val email = EmailTemplates.verification("123456", 15)
+        val message = jakarta.mail.internet.MimeMessage(jakarta.mail.Session.getInstance(java.util.Properties()))
+        message.setContent(EmailService.alternativeContent(email.html, email.text))
+        message.saveChanges()
+        val out = java.io.ByteArrayOutputStream()
+        message.writeTo(out)
+        val raw = out.toString(Charsets.UTF_8)
+        assertTrue(raw.contains("multipart/related"))
+        assertTrue(raw.contains("Content-ID: <${EmailTemplates.LOGO_CID}>"))
+        assertTrue(raw.contains("image/png"))
+    }
+}

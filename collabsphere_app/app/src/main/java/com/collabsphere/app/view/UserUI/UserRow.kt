@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.UserUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -89,16 +91,13 @@ fun UserRow(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .clip(CircleShape)
-                            .background(
-                                brush = Brush.linearGradient(colors = listOf(CoralLight, CoralStart))
-                            ),
+                            .printSurface(shape = CircleShape, fill = PrintCoral, shadow = null, outline = 1.5.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = displayName.trim().take(1).uppercase().ifEmpty { "U" },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = PrintInk
                         )
                     }
                 }

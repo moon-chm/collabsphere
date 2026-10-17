@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -143,7 +144,7 @@ fun AiToolsCard() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Outlined.SmartToy, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.SmartToy, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
             Text("AI tools (MCP)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
         }
         Text(
@@ -154,7 +155,7 @@ fun AiToolsCard() {
 
         val list = tokens
         when {
-            list == null -> CollabSpinner(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = IndigoStart)
+            list == null -> CollabSpinner(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = PrintInk)
             list.isEmpty() -> Text("No tokens yet.", style = MaterialTheme.typography.bodyMedium, color = Muted)
             else -> list.forEach { token ->
                 TokenRow(token = token, now = now, onRevoke = { revoking = token })
@@ -163,12 +164,11 @@ fun AiToolsCard() {
 
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(IndigoStart)
+                .printSurface(shape = RoundedCornerShape(50), fill = PrintSky, shadowOffset = 3.dp)
                 .clickable { creating = true }
-                .padding(horizontal = 16.dp, vertical = 9.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Text("Create token", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = Color.White)
+            Text("Create token", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = PrintInk)
         }
 
         if (activity.isNotEmpty()) {
@@ -216,7 +216,7 @@ fun AiToolsCard() {
                             .onFailure { AppToast.error("Couldn't revoke the token") }
                         reload()
                     }
-                }) { Text("Revoke", color = DestructiveStart, fontWeight = FontWeight.Bold) }
+                }) { Text("Revoke", color = PrintRedDark, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { revoking = null }) { Text("Cancel", color = Muted) } }
         )
@@ -233,7 +233,7 @@ private fun TokenRow(token: McpTokenInfo, now: Long, onRevoke: () -> Unit) {
             .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.Key, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(18.dp))
+        Icon(Icons.Outlined.Key, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
         Spacer(Modifier.size(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(token.name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -249,7 +249,7 @@ private fun TokenRow(token: McpTokenInfo, now: Long, onRevoke: () -> Unit) {
             )
         }
         IconButton(onClick = onRevoke) {
-            Icon(Icons.Outlined.DeleteOutline, contentDescription = "Revoke ${token.name}", tint = DestructiveStart)
+            Icon(Icons.Outlined.DeleteOutline, contentDescription = "Revoke ${token.name}", tint = PrintRedDark)
         }
     }
 }
@@ -258,7 +258,7 @@ private fun TokenRow(token: McpTokenInfo, now: Long, onRevoke: () -> Unit) {
 private fun ActivityRow(item: McpActivityItem, now: Long) {
     val color = when (item.outcome) {
         "ok" -> Mint
-        "denied" -> DestructiveStart
+        "denied" -> PrintRedDark
         else -> Muted
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -385,7 +385,7 @@ private fun CopyBlock(label: String, value: String, onCopy: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = onCopy) {
-                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy $label", tint = IndigoStart, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy $label", tint = PrintInk, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -397,8 +397,8 @@ private fun ChoiceChip(label: String, selected: Boolean, enabled: Boolean = true
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) IndigoStart.copy(alpha = 0.14f) else Color.Transparent)
-            .border(1.dp, if (selected) IndigoStart else Muted.copy(alpha = 0.25f), shape)
+            .background(if (selected) PrintSky else PrintWhite)
+            .border(if (selected) 2.dp else 1.5.dp, PrintInk, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
@@ -407,7 +407,7 @@ private fun ChoiceChip(label: String, selected: Boolean, enabled: Boolean = true
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = when {
                 !enabled -> Muted.copy(alpha = 0.5f)
-                selected -> IndigoStart
+                selected -> PrintInk
                 else -> Ink
             }
         )

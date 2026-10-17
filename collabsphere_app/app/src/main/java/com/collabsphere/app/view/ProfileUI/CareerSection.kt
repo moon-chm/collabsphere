@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.ui.theme.*
 import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -100,10 +102,9 @@ import java.text.NumberFormat
 import java.text.DateFormat
 import java.util.Date
 
-// Tier colours come from the existing palette: coral-brown bronze, muted silver, amber gold.
-private val BronzeColor = CoralEnd
+private val BronzeColor = PrintCoral
 private val SilverColor = Muted
-private val GoldColor = AmberWarn
+private val GoldColor = Color(0xFFF6D365)
 
 private fun tierColor(tier: BadgeTierUi?): Color = when (tier) {
     BadgeTierUi.BRONZE -> BronzeColor
@@ -287,7 +288,7 @@ internal fun CareerProgressCard(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
             Text(
                 text = "Career",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -298,7 +299,7 @@ internal fun CareerProgressCard(
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp).semantics { contentDescription = "Updating career progress" },
                     strokeWidth = 2.dp,
-                    color = CoralStart
+                    color = PrintInk
                 )
             }
         }
@@ -311,7 +312,7 @@ internal fun CareerProgressCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Muted
                 )
-                TextButton(onClick = onRetry) { Text("Retry", color = CoralStart, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onRetry) { Text("Retry", color = PrintInk, fontWeight = FontWeight.Bold) }
             }
             summary == null -> Text(
                 text = "Loading your career…",
@@ -336,7 +337,7 @@ internal fun CareerProgressCard(
                 }
                 LinearProgressIndicator(
                     progress = { progress },
-                    color = CoralStart,
+                    color = PrintInk,
                     trackColor = Muted.copy(alpha = 0.15f),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -357,7 +358,7 @@ internal fun CareerProgressCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CareerPill(
                         text = "${summary.currentStreakDays}-day streak",
-                        color = if (summary.currentStreakDays > 0) CoralStart else Muted
+                        color = if (summary.currentStreakDays > 0) PrintInk else Muted
                     )
                     CareerPill(text = "Best ${summary.bestStreakDays} days", color = Muted)
                 }
@@ -373,10 +374,10 @@ internal fun CareerProgressCard(
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = onOpenRoadmap, enabled = state.levels.isNotEmpty()) {
-                Text("Career roadmap", color = CoralStart, fontWeight = FontWeight.SemiBold)
+                Text("Career roadmap", color = PrintInk, fontWeight = FontWeight.SemiBold)
             }
             TextButton(onClick = onOpenHistory, enabled = state.hasData) {
-                Text("SP history", color = CoralStart, fontWeight = FontWeight.SemiBold)
+                Text("SP history", color = PrintInk, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -393,7 +394,7 @@ internal fun AchievementsCard(state: CareerUiState, onBadgeClick: (BadgeUi) -> U
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = AmberWarn, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = PrintRedDark, modifier = Modifier.size(20.dp))
             Text(
                 text = "Achievements",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -549,7 +550,7 @@ private fun RoadmapRow(level: CareerLevelDto, currentLevel: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (current) CoralStart.copy(alpha = 0.10f) else Color.Transparent)
+            .background(if (current) PrintCoral.copy(alpha = 0.35f) else Color.Transparent)
             .clearAndSetSemantics {
                 contentDescription = "Level ${level.level}, ${level.title}, ${formatSp(level.requiredSp)} SP, $stateLabel"
             }
@@ -560,13 +561,13 @@ private fun RoadmapRow(level: CareerLevelDto, currentLevel: Int) {
             modifier = Modifier
                 .size(30.dp)
                 .clip(CircleShape)
-                .background(if (reached) CoralStart.copy(alpha = 0.18f) else Muted.copy(alpha = 0.10f)),
+                .background(if (reached) PrintCoral.copy(alpha = 0.35f) else Muted.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = level.level.toString(),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = if (reached) CoralStart else Muted
+                color = if (reached) PrintInk else Muted
             )
         }
         Spacer(Modifier.width(12.dp))
@@ -579,7 +580,7 @@ private fun RoadmapRow(level: CareerLevelDto, currentLevel: Int) {
             Text(text = "${formatSp(level.requiredSp)} SP", style = MaterialTheme.typography.labelSmall, color = Muted)
         }
         if (reached && !current) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MintGreen, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = PrintLeafDark, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -624,13 +625,13 @@ private fun SpHistorySheet(
                     history.isLoading -> CircularProgressIndicator(
                         modifier = Modifier.padding(12.dp).size(20.dp),
                         strokeWidth = 2.dp,
-                        color = CoralStart
+                        color = PrintInk
                     )
                     history.loadFailed -> TextButton(onClick = onLoadMore) {
-                        Text("Couldn't load history — retry", color = CoralStart)
+                        Text("Couldn't load history — retry", color = PrintInk)
                     }
                     history.canLoadMore -> TextButton(onClick = onLoadMore) {
-                        Text("Load more", color = CoralStart, fontWeight = FontWeight.SemiBold)
+                        Text("Load more", color = PrintInk, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -665,7 +666,7 @@ private fun HistoryRow(entry: LedgerEntryResponse, ruleDescriptions: Map<String,
         Text(
             text = (if (entry.amount >= 0) "+" else "") + "${entry.amount} SP",
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-            color = if (entry.amount >= 0) MintGreen else Destructive
+            color = if (entry.amount >= 0) PrintLeafDark else PrintRedDark
         )
     }
 }
@@ -729,7 +730,7 @@ private fun BadgeDetailSheet(badge: BadgeUi, evidence: EvidenceState, onDismiss:
                 }
                 when (evidence) {
                     EvidenceState.Idle, EvidenceState.Loading -> item {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = CoralStart)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = PrintInk)
                     }
                     EvidenceState.Failed -> item {
                         Text("Couldn't load activity right now.", style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -785,7 +786,7 @@ private fun TierRow(badge: BadgeUi, tier: BadgeTierUi) {
             )
         }
         if (unlockedAt != null) {
-            Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = MintGreen, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = PrintLeafDark, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -841,7 +842,7 @@ internal fun GitHubLinkCard(
             )
             GitHubIdentityState.Failed -> {
                 Text("Couldn't check your GitHub link.", style = MaterialTheme.typography.bodyMedium, color = Muted)
-                TextButton(onClick = onRetry) { Text("Retry", color = CoralStart, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onRetry) { Text("Retry", color = PrintInk, fontWeight = FontWeight.Bold) }
             }
             is GitHubIdentityState.Linked -> {
                 Text(
@@ -857,7 +858,7 @@ internal fun GitHubLinkCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Muted
                 )
-                TextButton(onClick = onLink) { Text("Link GitHub", color = CoralStart, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onLink) { Text("Link GitHub", color = PrintInk, fontWeight = FontWeight.Bold) }
             }
         }
     }

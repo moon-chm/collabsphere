@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -95,7 +96,7 @@ fun FocusModeCard() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Outlined.Headphones, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.Headphones, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
             Text(
                 text = "Focus mode",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -156,8 +157,8 @@ private fun FocusChip(label: String, selected: Boolean, enabled: Boolean, onClic
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) IndigoStart.copy(alpha = 0.14f) else Color.Transparent)
-            .border(1.dp, if (selected) IndigoStart else Muted.copy(alpha = 0.25f), shape)
+            .background(if (selected) PrintSky else PrintWhite)
+            .border(if (selected) 2.dp else 1.5.dp, PrintInk, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
@@ -165,7 +166,7 @@ private fun FocusChip(label: String, selected: Boolean, enabled: Boolean, onClic
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (selected) IndigoStart else Ink.copy(alpha = if (enabled) 1f else 0.4f)
+            color = PrintInk.copy(alpha = if (enabled) 1f else 0.4f)
         )
     }
 }
@@ -184,13 +185,13 @@ fun PartnerFocusBanner(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(IndigoStart.copy(alpha = 0.08f))
-            .border(1.dp, IndigoStart.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+            .background(PrintSky.copy(alpha = 0.35f))
+            .border(1.dp, PrintSky.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Outlined.Headphones, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+            Icon(Icons.Outlined.Headphones, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
             Text(
                 text = "$partnerName is focusing until $freeAt",
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -210,7 +211,7 @@ fun PartnerFocusBanner(
                 label = "At $freeAt",
                 selected = hold,
                 modifier = Modifier.weight(1.3f),
-                leading = { Icon(Icons.Outlined.Schedule, contentDescription = null, tint = if (hold) Color.White else IndigoStart, modifier = Modifier.size(14.dp)) }
+                leading = { Icon(Icons.Outlined.Schedule, contentDescription = null, tint = PrintInk, modifier = Modifier.size(14.dp)) }
             ) { onModeChange(com.collabsphere.app.model.focus.FocusSendMode.HOLD) }
             FocusChoice(
                 label = "Now",
@@ -220,9 +221,9 @@ fun PartnerFocusBanner(
             FocusChoice(
                 label = "Urgent",
                 selected = urgent,
-                accent = com.collabsphere.app.ui.theme.DestructiveStart,
+                accent = PrintCoral,
                 modifier = Modifier.weight(1f),
-                leading = { Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = if (urgent) Color.White else com.collabsphere.app.ui.theme.DestructiveStart, modifier = Modifier.size(14.dp)) }
+                leading = { Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = PrintInk, modifier = Modifier.size(14.dp)) }
             ) { onModeChange(com.collabsphere.app.model.focus.FocusSendMode.URGENT) }
         }
         if (mode == com.collabsphere.app.model.focus.FocusSendMode.URGENT) {
@@ -248,8 +249,8 @@ private fun FocusChoice(
     Row(
         modifier = modifier
             .clip(shape)
-            .background(if (selected) accent else Color.Transparent)
-            .border(1.dp, if (selected) accent else accent.copy(alpha = 0.3f), shape)
+            .background(if (selected) printAccentFor(accent) else PrintWhite)
+            .border(if (selected) 2.dp else 1.5.dp, PrintInk, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
@@ -260,7 +261,7 @@ private fun FocusChoice(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = if (selected) Color.White else accent,
+            color = PrintInk,
             maxLines = 1
         )
     }

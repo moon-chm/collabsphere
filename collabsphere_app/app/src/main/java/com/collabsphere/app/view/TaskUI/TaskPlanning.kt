@@ -2,6 +2,7 @@ package com.collabsphere.app.view.TaskUI
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.collabsphere.app.model.task.TaskEntity
 import com.collabsphere.app.model.task.TaskPriority
 import com.collabsphere.app.model.task.TaskStatus
-import com.collabsphere.app.ui.theme.Amber
+import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.ui.theme.CoralStart
 import com.collabsphere.app.ui.theme.DestructiveStart
 import com.collabsphere.app.ui.theme.IndigoStart
@@ -84,9 +85,9 @@ fun dueLabel(dueDate: Long): String = when (dueStateOf(dueDate)) {
 }
 
 fun priorityColor(priority: TaskPriority): Color = when (priority) {
-    TaskPriority.HIGH -> DestructiveStart
-    TaskPriority.MEDIUM -> Amber
-    TaskPriority.LOW -> Mint
+    TaskPriority.HIGH -> PrintCoral
+    TaskPriority.MEDIUM -> PrintSky
+    TaskPriority.LOW -> PrintLeaf
 }
 
 fun priorityLabel(priority: TaskPriority): String = when (priority) {
@@ -112,13 +113,13 @@ fun PrioritySelector(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isSelected) color.copy(alpha = 0.16f) else Surface)
+                    .height(PrintTokens.TouchTarget)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(if (isSelected) color else PrintWhite)
                     .border(
-                        width = if (isSelected) 1.5.dp else 1.dp,
-                        color = if (isSelected) color else Muted.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(10.dp)
+                        width = if (isSelected) PrintTokens.Outline else 1.5.dp,
+                        color = PrintInk,
+                        shape = RoundedCornerShape(percent = 50)
                     )
                     .clickable(enabled = enabled) { onSelect(option) },
                 contentAlignment = Alignment.Center
@@ -130,15 +131,16 @@ fun PrioritySelector(
                     Icon(
                         imageVector = Icons.Default.Flag,
                         contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.size(14.dp)
+                        tint = PrintInk,
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
                         text = priorityLabel(option),
-                        style = MaterialTheme.typography.labelMedium.copy(
+                        style = PrintType.Caption.copy(
+                            fontSize = 14.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         ),
-                        color = if (isSelected) Ink else Muted
+                        color = PrintInk
                     )
                 }
             }
@@ -158,10 +160,10 @@ fun DueDateSelector(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
-            .border(1.dp, Muted.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+            .height(PrintTokens.TouchTarget)
+            .clip(RoundedCornerShape(PrintTokens.RadiusSmall))
+            .background(PrintWhite)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(PrintTokens.RadiusSmall))
             .clickable(enabled = enabled) { showPicker = true }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -170,25 +172,30 @@ fun DueDateSelector(
         Icon(
             imageVector = Icons.Default.Event,
             contentDescription = null,
-            tint = if (dueDate != null) IndigoStart else Muted,
-            modifier = Modifier.size(18.dp)
+            tint = PrintInk,
+            modifier = Modifier.size(20.dp)
         )
         Text(
             text = dueDate?.let { "Due ${formatDueDate(it)}" } ?: "Add due date",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (dueDate != null) Ink else Muted,
+            style = PrintType.Body.copy(fontSize = 15.sp, fontWeight = if (dueDate != null) FontWeight.Bold else FontWeight.Normal),
+            color = if (dueDate != null) PrintInk else Muted,
             modifier = Modifier.weight(1f)
         )
         if (dueDate != null && enabled) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Clear due date",
-                tint = Muted,
+            Box(
                 modifier = Modifier
-                    .size(18.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .clickable { onDueDateChange(null) }
-            )
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable { onDueDateChange(null) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Clear due date",
+                    tint = PrintInk,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 
@@ -207,12 +214,12 @@ fun DueDateSelector(
                     pickerState.selectedDateMillis?.let(onDueDateChange)
                     showPicker = false
                 }) {
-                    Text("Set", color = CoralStart, fontWeight = FontWeight.Bold)
+                    Text("Set", color = PrintInk, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPicker = false }) {
-                    Text("Cancel", color = Muted)
+                    Text("Cancel", color = PrintInk)
                 }
             }
         ) {
@@ -236,21 +243,21 @@ fun TaskPlanningBadges(task: TaskEntity) {
             PlanningPill(
                 text = priorityLabel(task.priority),
                 color = priorityColor(task.priority),
-                icon = { Icon(Icons.Default.Flag, null, tint = it, modifier = Modifier.size(12.dp)) }
+                icon = { Icon(Icons.Default.Flag, null, tint = it, modifier = Modifier.size(14.dp)) }
             )
         }
         if (dueDate != null) {
             val isDone = task.status == TaskStatus.DONE
             val color = when {
-                isDone -> Muted
-                dueStateOf(dueDate) == DueState.OVERDUE -> DestructiveStart
-                dueStateOf(dueDate) == DueState.TODAY -> Amber
-                else -> IndigoStart
+                isDone -> PrintPaper
+                dueStateOf(dueDate) == DueState.OVERDUE -> PrintCoral
+                dueStateOf(dueDate) == DueState.TODAY -> PrintSky
+                else -> PrintPaper
             }
             PlanningPill(
                 text = if (isDone) "Due ${formatDueDate(dueDate)}" else dueLabel(dueDate),
                 color = color,
-                icon = { Icon(Icons.Default.Event, null, tint = it, modifier = Modifier.size(12.dp)) }
+                icon = { Icon(Icons.Default.Event, null, tint = it, modifier = Modifier.size(14.dp)) }
             )
         }
     }
@@ -260,17 +267,18 @@ fun TaskPlanningBadges(task: TaskEntity) {
 internal fun PlanningPill(text: String, color: Color, icon: @Composable (Color) -> Unit) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .clip(RoundedCornerShape(percent = 50))
+            .background(color)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        icon(color)
+        icon(PrintInk)
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-            color = color
+            style = PrintType.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            color = PrintInk
         )
     }
 }

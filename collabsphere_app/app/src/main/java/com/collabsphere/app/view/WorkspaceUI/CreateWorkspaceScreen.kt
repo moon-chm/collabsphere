@@ -109,7 +109,7 @@ fun CreateWorkspaceScreen(
                 placeholder = "Workspace name",
                 enabled = !isCreatingWorkspace,
                 leadingIcon = {
-                    Icon(Icons.Outlined.Business, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Business, contentDescription = null, tint = com.collabsphere.app.ui.theme.PrintInk, modifier = Modifier.size(20.dp))
                 }
             )
             SkeuoTextField(
@@ -118,7 +118,7 @@ fun CreateWorkspaceScreen(
                 placeholder = "Owner name",
                 enabled = !isCreatingWorkspace,
                 leadingIcon = {
-                    Icon(Icons.Outlined.Person, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Person, contentDescription = null, tint = com.collabsphere.app.ui.theme.PrintInk, modifier = Modifier.size(20.dp))
                 }
             )
             SkeuoTextField(
@@ -131,14 +131,14 @@ fun CreateWorkspaceScreen(
                 imeAction = ImeAction.Done,
                 onImeAction = submit,
                 leadingIcon = {
-                    Icon(Icons.Outlined.Lock, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Lock, contentDescription = null, tint = com.collabsphere.app.ui.theme.PrintInk, modifier = Modifier.size(20.dp))
                 },
                 trailingIcon = {
                     IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                         Icon(
                             imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                             contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                            tint = if (isPasswordVisible) CoralStart else Muted,
+                            tint = com.collabsphere.app.ui.theme.PrintInk,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -149,10 +149,10 @@ fun CreateWorkspaceScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(start = 6.dp)
             ) {
-                Icon(Icons.Outlined.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(14.dp))
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(16.dp))
                 Text(
                     text = "Members need this password to join",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = com.collabsphere.app.ui.theme.PrintType.Caption,
                     color = Muted
                 )
             }

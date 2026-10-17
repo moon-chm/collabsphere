@@ -40,6 +40,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -73,7 +74,11 @@ import com.collabsphere.app.view.components.ChatBubbleTail
 import com.collabsphere.app.view.components.ComposerAction
 import com.collabsphere.app.view.components.ComposerActionsButton
 import com.collabsphere.app.view.components.ComposerEmojiPanel
-import com.collabsphere.app.view.components.OwnBubbleColor
+import com.collabsphere.app.view.components.chatBubbleSurface
+import com.collabsphere.app.view.components.chatComposerDock
+import com.collabsphere.app.view.components.chatComposerField
+import com.collabsphere.app.view.components.chatHeaderBar
+import com.collabsphere.app.view.components.chatSendButton
 import com.collabsphere.app.view.components.insertAtCursor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -337,32 +342,16 @@ fun MessageScreen(
     }
 
     confirmDeleteFor?.let { target ->
-        AlertDialog(
-            onDismissRequest = { confirmDeleteFor = null },
-            containerColor = SurfaceRaised,
-            title = {
-                Text(
-                    "Delete message?",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
+        com.collabsphere.app.view.components.PrintConfirmDialog(
+            title = "Delete message?",
+            message = "This removes ${target.userName}'s message for everyone in the channel.",
+            confirmLabel = "Delete",
+            icon = Icons.Default.Delete,
+            onConfirm = {
+                viewModel.onDeleteMessage(target.id)
+                confirmDeleteFor = null
             },
-            text = {
-                Text(
-                    "This removes ${target.userName}'s message for everyone in the channel.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Muted
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.onDeleteMessage(target.id)
-                    confirmDeleteFor = null
-                }) { Text("Delete", color = Destructive, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDeleteFor = null }) { Text("Cancel", color = Muted) }
-            }
+            onDismiss = { confirmDeleteFor = null }
         )
     }
 
@@ -482,29 +471,12 @@ fun MessageScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = PrintPaper,
         topBar = {
-            // Tactile Skeuomorphic Top Bar (covers status bar to fill top gap)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .drawWithCache {
-                        onDrawBehind {
-                            // Ambient shadow beneath header
-                            drawRect(
-                                color = ShadowDark.copy(alpha = 0.14f),
-                                topLeft = Offset(0f, size.height),
-                                size = Size(size.width, 3.dp.toPx())
-                            )
-                            drawRect(color = SurfaceRaised)
-                            // Top hairline highlight
-                            drawRect(
-                                color = Color.White.copy(alpha = 0.85f),
-                                topLeft = Offset(0f, 0f),
-                                size = Size(size.width, 1.dp.toPx())
-                            )
-                        }
-                    }
+                    .chatHeaderBar()
                     .statusBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
@@ -516,39 +488,15 @@ fun MessageScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Back button
-                    IconButton(
+                    PrintIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
                         onClick = onBack,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.90f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = Surface,
-                                    radius = size.minDimension / 2f
-                                )
-                                                            }
-                            }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Ink,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        size = 44.dp,
+                        iconSize = 20.dp,
+                        shadow = false
+                    )
 
-                    // Title with Channel Tag
                     Row(
                         modifier = Modifier
                             .weight(1f)
@@ -556,16 +504,23 @@ fun MessageScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Tag,
-                            contentDescription = null,
-                            tint = CoralStart,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .printSurface(shape = BlobShape(seed = channelName.length, wobble = 0.14f), fill = PrintLeaf, shadow = null, outline = 1.5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tag,
+                                contentDescription = null,
+                                tint = PrintInk,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         Text(
                             text = channelName,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Ink,
+                            style = PrintType.H2.copy(fontSize = 20.sp, lineHeight = 24.sp),
+                            color = PrintInk,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -575,7 +530,7 @@ fun MessageScreen(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search in channel",
-                            tint = if (search.isOpen) CoralStart else IndigoStart
+                            tint = PrintInk
                         )
                     }
 
@@ -595,51 +550,28 @@ fun MessageScreen(
                         Icon(
                             imageVector = if (isChannelMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
                             contentDescription = if (isChannelMuted) "Unmute channel" else "Mute channel",
-                            tint = if (isChannelMuted) Muted else IndigoStart
+                            tint = if (isChannelMuted) Muted else PrintInk
                         )
                     }
 
-                    // Channel indicator
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(Mint)
-                    )
                 }
             }
         },
         bottomBar = {
-            // Floating Tactile Pill Composer Dock
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .imePadding()
             ) {
-                // Editing banner if active
                 if (isEditing) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.10f),
-                                        topLeft = Offset(0f, 2.dp.toPx()),
-                                        size = size,
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(12.dp.toPx()))
-                                    drawRoundRect(
-                                        color = CoralStart.copy(alpha = 0.5f),
-                                        topLeft = Offset(0f, 0f),
-                                        size = Size(4.dp.toPx(), size.height),
-                                        cornerRadius = CornerRadius(4.dp.toPx())
-                                    )
-                                }
-                            }
+                            .clip(RoundedCornerShape(PrintTokens.RadiusSmall))
+                            .background(PrintCoral.copy(alpha = 0.35f))
+                            .border(1.5.dp, PrintInk, RoundedCornerShape(PrintTokens.RadiusSmall))
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -649,11 +581,11 @@ fun MessageScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
                             Text(
-                                text = "Editing message...",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = CoralStart
+                                text = "Editing message",
+                                style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                                color = PrintInk
                             )
                         }
                         IconButton(
@@ -662,9 +594,9 @@ fun MessageScreen(
                                 selectedMessage = null
                                 viewModel.endEdit()
                             },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel edit", tint = Muted, modifier = Modifier.size(16.dp))
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel edit", tint = PrintInk, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -713,7 +645,7 @@ fun MessageScreen(
                 typingLabel(typingUsers)?.let { label ->
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
                         color = Muted,
                         modifier = Modifier.padding(start = 20.dp, bottom = 4.dp)
                     )
@@ -722,68 +654,13 @@ fun MessageScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                                    MaterialTheme.colorScheme.background
-                                )
-                            )
-                        )
-                        .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                        .background(PrintPaper)
+                        .padding(start = 12.dp, end = 15.dp, top = 6.dp, bottom = 13.dp)
                 ) {
-                    // Floating Tactile Pill Dock
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                    val cr = 28.dp.toPx()
-                                    // 1. Ambient soft diffuse shadow
-                                    drawRoundRect(
-                                        color = Color(0xFF2C201A).copy(alpha = 0.12f),
-                                        topLeft = Offset(0f, 4.dp.toPx()),
-                                        size = size,
-                                        cornerRadius = CornerRadius(cr)
-                                    )
-                                    // 2. Crisp contact shadow
-                                    drawRoundRect(
-                                        color = Color(0xFF2C201A).copy(alpha = 0.04f),
-                                        topLeft = Offset(0f, 1.dp.toPx()),
-                                        size = size,
-                                        cornerRadius = CornerRadius(cr)
-                                    )
-                                    // 3. Crisp white dock plate
-                                    drawRoundRect(
-                                        color = SurfaceRaised,
-                                        cornerRadius = CornerRadius(cr)
-                                    )
-                                    // 4. Specular gloss top rim highlight
-                                    drawRoundRect(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.95f),
-                                                Color.White.copy(alpha = 0.20f),
-                                                Color.Transparent
-                                            ),
-                                            startY = 0f,
-                                            endY = 16.dp.toPx()
-                                        ),
-                                        topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                        size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                        cornerRadius = CornerRadius(cr),
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                    // 5. Hairline contour border
-                                    drawRoundRect(
-                                        color = Color(0xFF2C2A28).copy(alpha = 0.07f),
-                                        cornerRadius = CornerRadius(cr),
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                }
-                            }
-                            .clip(RoundedCornerShape(28.dp))
+                            .chatComposerDock()
                             .padding(start = 4.dp, end = 5.dp, top = 5.dp, bottom = 5.dp)
                     ) {
                         Row(
@@ -800,7 +677,7 @@ fun MessageScreen(
                                     ComposerAction(
                                         label = if (showEmojiPanel) "Keyboard" else "Emoji",
                                         icon = if (showEmojiPanel) Icons.Default.Keyboard else Icons.Default.EmojiEmotions,
-                                        tint = Color(0xFFF2A93B)
+                                        tint = AmberWarn
                                     ) {
                                         if (showEmojiPanel) openKeyboard() else openEmojiPanel()
                                     },
@@ -813,7 +690,7 @@ fun MessageScreen(
                                     if (isEditing) null else ComposerAction(
                                         label = "Poll",
                                         icon = Icons.Outlined.Poll,
-                                        tint = Color(0xFF2FA67A)
+                                        tint = MintGreen
                                     ) { showCreatePoll = true },
                                     if (isEditing) null else ComposerAction(
                                         label = "Standup",
@@ -828,31 +705,7 @@ fun MessageScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 46.dp, max = 140.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                            val cr = 23.dp.toPx()
-                                            // Recessed well surface
-                                            drawRoundRect(
-                                                color = Color(0xFFF3ECE6),
-                                                cornerRadius = CornerRadius(cr)
-                                            )
-                                            // Top inner shadow
-                                            drawRoundRect(
-                                                color = Color(0xFF2C201A).copy(alpha = 0.06f),
-                                                topLeft = Offset(0f, 0.5.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = CornerRadius(cr),
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                            // Outline hairline
-                                            drawRoundRect(
-                                                color = if (isComposerFocused) CoralStart.copy(alpha = 0.5f) else Color(0xFFE2DDD7),
-                                                cornerRadius = CornerRadius(cr),
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                        }
-                                    }
-                                    .clip(RoundedCornerShape(23.dp))
+                                    .chatComposerField(isComposerFocused)
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
@@ -869,8 +722,8 @@ fun MessageScreen(
                                             isComposerFocused = it.isFocused
                                             if (it.isFocused) showEmojiPanel = false
                                         },
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontSize = 15.5.sp, lineHeight = 21.sp),
-                                    cursorBrush = SolidColor(CoralStart),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = PrintInk, fontSize = 16.sp, lineHeight = 22.sp),
+                                    cursorBrush = SolidColor(PrintInk),
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                     keyboardActions = KeyboardActions(
                                         onSend = {
@@ -897,9 +750,9 @@ fun MessageScreen(
                                         Box(contentAlignment = Alignment.CenterStart) {
                                             if (messageContent.isEmpty()) {
                                                 Text(
-                                                    text = if (isEditing) "Edit message..." else "Message #$channelName...",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                                                    color = Muted.copy(alpha = 0.65f),
+                                                    text = if (isEditing) "Edit message" else "Message #$channelName",
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp),
+                                                    color = Muted,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -910,49 +763,16 @@ fun MessageScreen(
                                 )
                             }
 
-                            // ── Vibrant Coral Send / Mic CTA ──
                             val sendInteractionSource = remember { MutableInteractionSource() }
-                            val isSendPressed by sendInteractionSource.collectIsPressedAsState()
-                            val sendScale by animateFloatAsState(
-                                targetValue = if (isSendPressed) 0.90f else 1f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-                                label = "channelSendScale"
-                            )
+                            val sendPress = rememberPrintPress(sendInteractionSource)
 
                             val showMic = messageContent.isBlank() && !isEditing && !isUploadingMedia && !isRecordingVoice
                             val canSend = (messageContent.trim().isNotEmpty() && !isSendingMessage && !isUploadingMedia) || showMic
-                            val sendAlpha = if (canSend) 1f else 0.70f
 
                             Box(
                                 modifier = Modifier
                                     .size(46.dp)
-                                    .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                            val shadowOffset = if (isSendPressed) 1.dp else 2.5.dp
-                                            val shadowAlpha = if (isSendPressed) 0.15f else 0.35f
-                                            drawCircle(
-                                                color = CoralStart.copy(alpha = shadowAlpha * sendAlpha),
-                                                radius = size.minDimension / 2f,
-                                                center = Offset(center.x, center.y + shadowOffset.toPx())
-                                            )
-                                            drawCircle(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0xFFFC6955).copy(alpha = sendAlpha),
-                                                        CoralStart.copy(alpha = sendAlpha)
-                                                    ),
-                                                    center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx()),
-                                                    radius = size.minDimension / 2f
-                                                )
-                                            )
-                                            drawCircle(
-                                                color = Color.White.copy(alpha = 0.30f),
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                        }
-                                    }
-                                    .clip(CircleShape)
+                                    .chatSendButton(enabled = canSend, pressProgress = sendPress)
                                     .combinedClickable(
                                         enabled = canSend,
                                         interactionSource = sendInteractionSource,
@@ -989,7 +809,7 @@ fun MessageScreen(
                                 Icon(
                                     imageVector = if (showMic) Icons.Default.Mic else Icons.AutoMirrored.Filled.Send,
                                     contentDescription = if (showMic) "Record voice message" else "Send",
-                                    tint = Color.White,
+                                    tint = if (canSend) PrintInk else Muted,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -1068,7 +888,7 @@ fun MessageScreen(
                                 CollabSpinner(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color = CoralStart
+                                    color = PrintInk
                                 )
                             }
                         }
@@ -1090,7 +910,7 @@ fun MessageScreen(
                                 .animateItem()
                                 .padding(top = if (continuesGroup) 0.dp else 8.dp)
                                 .background(
-                                    if (search.highlightedId == message.id) CoralStart.copy(alpha = 0.10f) else Color.Transparent,
+                                    if (search.highlightedId == message.id) PrintSky.copy(alpha = 0.30f) else Color.Transparent,
                                     RoundedCornerShape(12.dp)
                                 )
                         ) {
@@ -1130,11 +950,11 @@ fun MessageScreen(
                                 }
                                 if (authorLine.isNotEmpty()) Text(
                                     text = authorLine.joinToString(" · "),
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                    style = PrintType.Caption.copy(
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     ),
-                                    color = if (isOwnMessage) CoralStart else Muted,
+                                    color = if (isOwnMessage) PrintInk else Muted,
                                     modifier = Modifier.padding(
                                         start = if (isOwnMessage) 6.dp else 6.dp + ChatBubbleTail,
                                         end = if (isOwnMessage) 6.dp + ChatBubbleTail else 6.dp,
@@ -1145,7 +965,7 @@ fun MessageScreen(
                                 val bubbleShape = ChatBubbleShape(isOwn = isOwnMessage, showTail = !continuesGroup)
                                 Box(
                                     modifier = Modifier
-                                        .background(if (isOwnMessage) OwnBubbleColor else SurfaceRaised, bubbleShape)
+                                        .chatBubbleSurface(isOwnMessage, bubbleShape)
                                         .clip(bubbleShape)
                                         .combinedClickable(
                                             onClick = {},
@@ -1199,7 +1019,7 @@ fun MessageScreen(
                                                 loading = {
                                                     Box(modifier = Modifier.size(120.dp), contentAlignment = Alignment.Center) {
                                                         CollabSpinner(
-                                                            color = if (isOwnMessage) Color.White else CoralStart,
+                                                            color = if (isOwnMessage) PrintPaper else PrintInk,
                                                             modifier = Modifier.size(28.dp),
                                                             strokeWidth = 2.5.dp
                                                         )
@@ -1227,8 +1047,8 @@ fun MessageScreen(
                                                     lineHeight = 20.sp,
                                                     fontSize = 15.sp
                                                 ),
-                                                color = if (isOwnMessage) Color.White else Ink,
-                                                linkColor = if (isOwnMessage) Color.White else IndigoStart,
+                                                color = if (isOwnMessage) PrintPaper else PrintInk,
+                                                linkColor = if (isOwnMessage) PrintSky else PrintInk,
                                                 commitmentTracked = commitmentKey in trackedCommitments,
                                                 onCommitmentClick = if (message.id > 0) { commitment ->
                                                     commitmentTarget = com.collabsphere.app.view.components.CommitmentTarget(
@@ -1277,11 +1097,11 @@ fun MessageScreen(
                                         DropdownMenu(
                                             expanded = showActionMenu,
                                             onDismissRequest = { showActionMenu = false },
-                                            modifier = Modifier.background(SurfaceRaised)
+                                            modifier = Modifier.background(PrintWhite)
                                         ) {
                                             if (message.id > 0) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Reply", color = Ink) },
+                                                    text = { Text("Reply", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         isEditing = false
@@ -1292,47 +1112,47 @@ fun MessageScreen(
                                                         Icon(
                                                             Icons.AutoMirrored.Filled.Reply,
                                                             contentDescription = null,
-                                                            tint = IndigoStart
+                                                            tint = PrintInk
                                                         )
                                                     }
                                                 )
                                             }
                                             if (message.id > 0 && message.threadRootId == null) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Reply in thread", color = Ink) },
+                                                    text = { Text("Reply in thread", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         threadRoot = message
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (message.content.isNotBlank()) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Copy", color = Ink) },
+                                                    text = { Text("Copy", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         clipboard.setText(AnnotatedString(message.content))
                                                         AppToast.show("Copied")
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (message.id > 0) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Forward", color = Ink) },
+                                                    text = { Text("Forward", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         forwardTarget = message
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                 )
                                                 val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("CHANNEL", message.id) in savedKeys
                                                 DropdownMenuItem(
-                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         selectedMessage = null
@@ -1346,7 +1166,7 @@ fun MessageScreen(
                                                         Icon(
                                                             if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
                                                             contentDescription = null,
-                                                            tint = CoralStart,
+                                                            tint = PrintInk,
                                                             modifier = Modifier.size(20.dp)
                                                         )
                                                     }
@@ -1354,19 +1174,19 @@ fun MessageScreen(
                                             }
                                             if (message.id > 0) {
                                                 DropdownMenuItem(
-                                                    text = { Text("React", color = Ink) },
+                                                    text = { Text("React", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         reactionPickerFor = message
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                    leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (message.id > 0) {
                                                 val isPinned = message.pinnedAt != null || pinned.any { it.id == message.id }
                                                 DropdownMenuItem(
-                                                    text = { Text(if (isPinned) "Unpin" else "Pin", color = Ink) },
+                                                    text = { Text(if (isPinned) "Unpin" else "Pin", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         viewModel.togglePin(message)
@@ -1376,14 +1196,14 @@ fun MessageScreen(
                                                         Icon(
                                                             Icons.Default.PushPin,
                                                             contentDescription = null,
-                                                            tint = CoralStart
+                                                            tint = PrintInk
                                                         )
                                                     }
                                                 )
                                             }
                                             if (message.id > 0 && !isOwnMessage) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Mark helpful", color = Ink) },
+                                                    text = { Text("Mark helpful", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         viewModel.markHelpful(message)
@@ -1393,14 +1213,14 @@ fun MessageScreen(
                                                         Icon(
                                                             Icons.Default.ThumbUp,
                                                             contentDescription = null,
-                                                            tint = MintGreen
+                                                            tint = PrintInk
                                                         )
                                                     }
                                                 )
                                             }
                                             if (isOwnMessage) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Edit", color = Ink) },
+                                                    text = { Text("Edit", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         isEditing = true
@@ -1410,25 +1230,25 @@ fun MessageScreen(
                                                         Icon(
                                                             Icons.Default.Edit,
                                                             contentDescription = null,
-                                                            tint = IndigoStart
+                                                            tint = PrintInk
                                                         )
                                                     }
                                                 )
                                             }
                                             if (isOwnMessage && message.id > 0) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Info", color = Ink) },
+                                                    text = { Text("Info", color = PrintInk) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         infoFor = message
                                                         selectedMessage = null
                                                     },
-                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                 )
                                             }
                                             if (isOwnMessage || (canModerate && message.id > 0)) {
                                                 DropdownMenuItem(
-                                                    text = { Text("Delete", color = Destructive) },
+                                                    text = { Text("Delete", color = PrintRedDark) },
                                                     onClick = {
                                                         showActionMenu = false
                                                         if (isOwnMessage) viewModel.onDeleteMessage(message.id)
@@ -1439,7 +1259,7 @@ fun MessageScreen(
                                                         Icon(
                                                             Icons.Default.Delete,
                                                             contentDescription = null,
-                                                            tint = Destructive
+                                                            tint = PrintRedDark
                                                         )
                                                     }
                                                 )
@@ -1458,21 +1278,23 @@ fun MessageScreen(
                                     Row(
                                         modifier = Modifier
                                             .padding(top = 4.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(IndigoStart.copy(alpha = 0.08f))
+                                            .clip(RoundedCornerShape(percent = 50))
+                                            .background(PrintSky.copy(alpha = 0.35f))
+                                            .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
                                             .clickable { threadRoot = message }
-                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                            .heightIn(min = 32.dp)
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(14.dp))
+                                        Icon(Icons.AutoMirrored.Filled.Comment, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
                                         Text(
                                             text = listOfNotNull(
                                                 if (summary.count == 1) "1 reply" else "${summary.count} replies",
                                                 summary.lastReplyAt?.let(::chatTime)
                                             ).joinToString(" · "),
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = IndigoStart
+                                            style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                                            color = PrintInk
                                         )
                                     }
                                 }
@@ -1481,7 +1303,7 @@ fun MessageScreen(
                                     seenByLabel(readStates.values, message, currentUserId)?.let { label ->
                                         Text(
                                             text = label,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = PrintType.Caption.copy(fontSize = 12.sp),
                                             color = Muted,
                                             modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 3.dp)
                                         )
@@ -1490,12 +1312,12 @@ fun MessageScreen(
                             }
                         }
                         }
-                        } // Column (day separator + row)
+                        }
                     }
-                } // LazyColumn
-                    } // else
-                } // when
-            } // Crossfade
+                }
+                    }
+                }
+            }
             if (search.isOpen) {
                 ChatSearchBar(
                     state = search,
@@ -1516,6 +1338,6 @@ fun MessageScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = 16.dp)
             )
-        } // Box
-    } // Scaffold
-} // MessageScreen function
+        }
+    }
+}

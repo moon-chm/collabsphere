@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,46 +54,54 @@ fun TaskGitHubLinksSection(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "GitHub",
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-            color = Color(0xFF1F1A17)
+            text = "GITHUB",
+            style = com.collabsphere.app.ui.theme.PrintType.Tiny,
+            color = com.collabsphere.app.ui.theme.PrintInk
         )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "Mention $reference in a commit or PR to link it. \"fixes $reference\" marks it done when merged.",
-            fontSize = 12.sp,
-            color = Color(0xFF6E635C)
+            style = com.collabsphere.app.ui.theme.PrintType.Caption,
+            color = com.collabsphere.app.ui.theme.Muted
         )
         links?.forEach { link ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { openInBrowser(context, link.url) }
+                    .heightIn(min = 44.dp)
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
+                com.collabsphere.app.ui.theme.PrintChip(
                     text = when (link.kind) {
                         "pr" -> "PR"
                         "issue" -> "Issue"
                         else -> link.ref.take(7)
                     },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6F42C1)
+                    fill = when (link.kind) {
+                        "pr" -> com.collabsphere.app.ui.theme.PrintSky
+                        "issue" -> com.collabsphere.app.ui.theme.PrintLeaf
+                        else -> com.collabsphere.app.ui.theme.PrintPaper
+                    }
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = link.title,
-                    fontSize = 13.sp,
-                    color = Color(0xFF1F1A17),
+                    style = com.collabsphere.app.ui.theme.PrintType.Body.copy(fontSize = 14.sp),
+                    color = com.collabsphere.app.ui.theme.PrintInk,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
         if (links != null && !hasIssue) {
-            TextButton(
+            Spacer(modifier = Modifier.height(8.dp))
+            com.collabsphere.app.ui.theme.PrintButton(
+                text = if (isCreatingIssue) "Creating issue…" else "Create GitHub issue",
+                primary = false,
                 enabled = !isCreatingIssue,
+                modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     isCreatingIssue = true
                     scope.launch {
@@ -106,9 +116,7 @@ fun TaskGitHubLinksSection(
                         isCreatingIssue = false
                     }
                 }
-            ) {
-                Text(if (isCreatingIssue) "Creating issue…" else "Create GitHub issue", color = Color(0xFF6F42C1))
-            }
+            )
         }
     }
 }

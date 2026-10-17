@@ -1,7 +1,11 @@
 package plugins
 
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.response.header
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -9,6 +13,9 @@ import io.ktor.server.routing.get
 internal object PublicPages {
     const val CONTACT_EMAIL = "collabsphere.studio@gmail.com"
     const val POLICY_UPDATED = "16 October 2026"
+    const val LOGO_PATH = "/brand/logo.png"
+
+    val logoPng: ByteArray? by lazy { PublicPages::class.java.getResourceAsStream("/email/logo.png")?.use { it.readBytes() } }
 
     private fun page(title: String, body: String): String = """
         <!DOCTYPE html>
@@ -17,27 +24,29 @@ internal object PublicPages {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>$title</title>
+          <link rel="icon" type="image/png" href="$LOGO_PATH">
           <style>
             :root { color-scheme: light; }
-            body { margin: 0; background: #ECE6DA; color: #2C2A28; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
+            body { margin: 0; background: #FBF5EA; color: #1E2A5A; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
             main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
-            .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; margin-bottom: 20px; }
-            .logo { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(180deg, #FF8A6B, #F0633D); border-bottom: 2px solid #C24A26; color: #fff; display: grid; place-items: center; box-shadow: 0 3px 6px rgba(60,44,30,.25), inset 0 1px 0 rgba(255,255,255,.45); }
-            .card { background: linear-gradient(180deg, #FFFFFF, #F8F4EC); border: 1px solid #DDD5C7; border-top-color: #fff; border-bottom-color: #C9BFAE; border-radius: 22px; padding: 32px 28px; box-shadow: 0 18px 36px -12px rgba(60,44,30,.22), 0 4px 10px rgba(60,44,30,.08); }
-            h1 { font-size: 28px; line-height: 1.25; margin: 0 0 8px; }
+            .brand { display: flex; align-items: center; gap: 12px; font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 22px; margin-bottom: 24px; }
+            .logo-ring { display: inline-flex; padding: 5px; border: 3px dotted #F28B6C; border-radius: 50%; }
+            .logo { width: 44px; height: 44px; display: block; }
+            .card { background: #FFFFFF; border: 2px solid #1E2A5A; border-radius: 24px; padding: 32px 28px; box-shadow: 4px 4px 0 #1E2A5A; }
+            h1 { font-family: Georgia, "Times New Roman", serif; font-size: 30px; line-height: 1.2; margin: 0 0 10px; text-shadow: 2px 2px 0 #F28B6C; }
             h2 { font-size: 19px; margin: 28px 0 8px; }
             p, li { font-size: 16px; }
             ul { padding-left: 22px; }
-            .muted { color: #6F6A64; font-size: 14px; }
-            a { color: #C24A26; }
-            nav { margin-top: 24px; font-size: 14px; color: #6F6A64; }
+            .muted { color: #5B6384; font-size: 14px; }
+            a { color: #1E2A5A; font-weight: 700; text-decoration-thickness: 2px; text-decoration-color: #F28B6C; }
+            nav { margin-top: 28px; font-size: 14px; color: #5B6384; }
             nav a { margin-right: 16px; }
-            @media (max-width: 480px) { .card { padding: 24px 18px; border-radius: 18px; } h1 { font-size: 24px; } }
+            @media (max-width: 480px) { .card { padding: 24px 18px; border-radius: 20px; } h1 { font-size: 25px; } }
           </style>
         </head>
         <body>
           <main>
-            <div class="brand"><div class="logo">C</div>CollabSphere</div>
+            <div class="brand"><span class="logo-ring"><img class="logo" src="$LOGO_PATH" alt="CollabSphere logo" width="44" height="44"></span>CollabSphere</div>
             <div class="card">
             $body
             </div>
@@ -126,5 +135,14 @@ internal fun Route.publicPages() {
     }
     get("/privacy") {
         call.respondText(PublicPages.privacy(), ContentType.Text.Html, HttpStatusCode.OK)
+    }
+    get(PublicPages.LOGO_PATH) {
+        val logo = PublicPages.logoPng
+        if (logo == null) {
+            call.respond(HttpStatusCode.NotFound)
+        } else {
+            call.response.header(HttpHeaders.CacheControl, "public, max-age=86400")
+            call.respondBytes(logo, ContentType.Image.PNG)
+        }
     }
 }

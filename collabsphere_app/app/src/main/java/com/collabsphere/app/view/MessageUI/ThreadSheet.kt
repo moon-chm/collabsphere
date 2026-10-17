@@ -1,5 +1,8 @@
 package com.collabsphere.app.view.MessageUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.view.components.chatSendButton
+import com.collabsphere.app.view.components.chatComposerField
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,6 +32,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.collabsphere.app.model.message.MessageEntity
 import com.collabsphere.app.ui.theme.*
@@ -70,9 +74,12 @@ fun ThreadSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SurfaceRaised,
+        containerColor = PrintWhite,
+        scrimColor = PrintInk.copy(alpha = 0.45f),
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        dragHandle = { PrintSheetHandle() },
+        shape = PrintSheetShape,
+        modifier = Modifier.printSheetOutline()
     ) {
         Column(
             modifier = Modifier
@@ -82,8 +89,8 @@ fun ThreadSheet(
         ) {
             Text(
                 text = "Thread",
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                color = Ink,
+                style = PrintType.H2.copy(fontSize = 24.sp, lineHeight = 28.sp),
+                color = PrintInk,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
             Spacer(Modifier.height(8.dp))
@@ -104,11 +111,11 @@ fun ThreadSheet(
                                 1 -> "1 reply"
                                 else -> "${replies.size} replies"
                             },
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Muted
+                            style = PrintType.Tiny,
+                            color = PrintInk
                         )
                         Spacer(Modifier.width(10.dp))
-                        Box(Modifier.weight(1f).height(1.dp).background(Muted.copy(alpha = 0.2f)))
+                        Box(Modifier.weight(1f).height(1.5.dp).background(PrintInk.copy(alpha = 0.2f)))
                     }
                 }
                 items(replies, key = { it.id }) { reply ->
@@ -125,22 +132,21 @@ fun ThreadSheet(
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp, max = 120.dp)
-                        .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = FieldInsetShadow)
-                        .clip(RoundedCornerShape(24.dp))
+                        .chatComposerField(false)
                         .padding(horizontal = 18.dp, vertical = 12.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     BasicTextField(
                         value = draft,
                         onValueChange = { draft = it },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = PrintInk),
+                        cursorBrush = SolidColor(PrintInk),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { send() }),
                         modifier = Modifier.fillMaxWidth(),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
-                                if (draft.isEmpty()) Text("Reply in thread…", style = MaterialTheme.typography.bodyLarge, color = Ink.copy(alpha = 0.40f))
+                                if (draft.isEmpty()) Text("Reply in thread…", style = MaterialTheme.typography.bodyLarge, color = Muted)
                                 inner()
                             }
                         }
@@ -150,12 +156,11 @@ fun ThreadSheet(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(CircleShape)
-                        .background(if (draft.isNotBlank()) CoralStart else CoralStart.copy(alpha = 0.5f))
+                        .chatSendButton(enabled = draft.isNotBlank(), pressProgress = { 0f })
                         .clickable(enabled = draft.isNotBlank()) { send() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply", tint = Color.White, modifier = Modifier.size(19.dp))
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send reply", tint = if (draft.isNotBlank()) PrintInk else Muted, modifier = Modifier.size(19.dp))
                 }
             }
         }
@@ -168,7 +173,8 @@ private fun ThreadMessageRow(message: MessageEntity, isRoot: Boolean, isOwn: Boo
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(if (isRoot) Background.copy(alpha = 0.6f) else Color.Transparent)
+            .background(if (isRoot) PrintPaper else Color.Transparent)
+            .border(if (isRoot) 1.5.dp else 0.dp, if (isRoot) PrintInk else Color.Transparent, RoundedCornerShape(16.dp))
             .padding(horizontal = if (isRoot) 14.dp else 4.dp, vertical = if (isRoot) 12.dp else 2.dp)
     ) {
         Text(
@@ -178,21 +184,21 @@ private fun ThreadMessageRow(message: MessageEntity, isRoot: Boolean, isOwn: Boo
                 if (message.editedAt != null) "edited" else null
             ).joinToString(" · "),
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = if (isOwn) CoralStart else Muted
+            color = if (isOwn) PrintInk else Muted
         )
         Spacer(Modifier.height(3.dp))
         if (message.content.isNotBlank()) {
             MarkdownText(
                 text = message.content,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Ink,
-                linkColor = IndigoStart
+                color = PrintInk,
+                linkColor = PrintInk
             )
         } else if (message.mediaUrl != null) {
             Text("Attachment", style = MaterialTheme.typography.bodyMedium, color = Muted)
         }
         if (message.id < 0) {
-            Text("Sending…", style = MaterialTheme.typography.labelSmall, color = Muted)
+            Text("Sending…", style = PrintType.Caption, color = Muted)
         }
     }
 }

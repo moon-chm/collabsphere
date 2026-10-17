@@ -2,6 +2,8 @@ package com.collabsphere.app.view.TaskUI
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,18 +44,17 @@ fun TaskVotingSection(
     val pendingProposals by viewModel.pendingProposals.collectAsState()
     val proposalHistory by viewModel.proposalHistory.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Active, 1 = History
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 20.dp)
     ) {
-        // Tab Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(top = 4.dp, bottom = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             VoteTabPill(
@@ -73,42 +74,28 @@ fun TaskVotingSection(
         val displayedList = if (selectedTab == 0) pendingProposals else proposalHistory
 
         if (displayedList.isEmpty()) {
-            Box(
+            com.collabsphere.app.view.components.SkeuoEmptyState(
+                icon = if (selectedTab == 0) Icons.Default.HowToVote else Icons.Default.History,
+                title = if (selectedTab == 0) "No pending votes" else "No vote history yet",
+                description = if (selectedTab == 0) "Tasks proposed for creation or deletion show up here for the team to vote on." else "Finished votes are kept here.",
+                actionLabel = null,
+                onAction = {},
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 60.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = if (selectedTab == 0) Icons.Default.HowToVote else Icons.Default.History,
-                        contentDescription = null,
-                        tint = Muted.copy(alpha = 0.5f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Text(
-                        text = if (selectedTab == 0) "No pending votes" else "No vote history yet",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-                    Text(
-                        text = if (selectedTab == 0) "Tasks proposed for creation or deletion will appear here." else "Resolved team votes will be archived here.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted
-                    )
-                }
-            }
+                    .padding(bottom = 60.dp)
+            )
         } else {
+            val entranceRegistry = rememberEntranceRegistry()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 80.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 2.dp, end = 4.dp, bottom = 96.dp)
             ) {
-                items(displayedList, key = { it.id }) { proposal ->
+                itemsIndexed(displayedList, key = { _, it -> it.id }) { index, proposal ->
                     ProposalCard(
+                        modifier = Modifier
+                            .animateItem()
+                            .printListEntrance(proposal.id, index, entranceRegistry),
                         proposal = proposal,
                         isCurrentUsersProposal = (proposal.proposerId == currentUserId),
                         onVote = { vote -> viewModel.castVote(proposal.id, vote) }
@@ -126,109 +113,68 @@ fun VoteTabPill(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) MaterialTheme.colorScheme.primary else SurfaceRaised)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = if (isSelected) Color.White else Ink
-            )
-            if (count > 0) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) Color.White.copy(alpha = 0.25f) else Amber.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = count.toString(),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (isSelected) Color.White else Amber
-                    )
-                }
-            }
-        }
-    }
+    PrintChip(
+        text = if (count > 0) "$title · $count" else title,
+        fill = if (isSelected) PrintSky else PrintWhite,
+        onClick = onClick
+    )
 }
 
 @Composable
 fun ProposalCard(
     proposal: TaskVoteProposalEntity,
     isCurrentUsersProposal: Boolean,
-    onVote: (String) -> Unit
+    onVote: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isPending = proposal.status == "PENDING"
     val isDelete = proposal.type == "DELETE"
     val hasVoted = proposal.myVote != null
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceRaised),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: Type badge & Status badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Type Badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isDelete) Destructive.copy(alpha = 0.15f) else IndigoStart.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = if (isDelete) "DELETE REQUEST" else "CREATE TASK",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isDelete) Destructive else IndigoStart
-                        )
-                    }
+                    PrintChip(
+                        text = if (isDelete) "Delete" else "New task",
+                        fill = if (isDelete) PrintCoral else PrintLeaf
+                    )
                     if (isCurrentUsersProposal) {
                         Text(
-                            text = "(Your proposal)",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "Yours",
+                            style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
                             color = Muted
                         )
                     }
                 }
 
-                // Status Badge
                 StatusPill(status = proposal.status)
             }
 
-            // Task Name or Info
             Text(
                 text = if (isDelete) "Task #${proposal.taskId}" else (proposal.taskName ?: "Untitled Task"),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Ink,
+                style = PrintType.H3,
+                color = PrintInk,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Description or Reason
             val detailText = if (isDelete) {
                 proposal.deleteReason ?: "No deletion reason provided"
             } else {
@@ -237,45 +183,52 @@ fun ProposalCard(
 
             Text(
                 text = detailText,
-                style = MaterialTheme.typography.bodySmall,
+                style = PrintType.Caption.copy(fontSize = 14.sp, lineHeight = 20.sp),
                 color = Muted,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Vote Progress Bar
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Approval: ${proposal.approveCount}/${proposal.approvalThreshold} needed (${proposal.eligibleCount} members)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Ink
+                        text = "${proposal.approveCount} of ${proposal.approvalThreshold} approvals · ${proposal.eligibleCount} members",
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                        color = PrintInk,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (proposal.rejectCount > 0) {
                         Text(
-                            text = "${proposal.rejectCount} rejected",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Destructive
+                            text = "${proposal.rejectCount} against",
+                            style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                            color = PrintRedDark
                         )
                     }
                 }
 
                 val progress = (proposal.approveCount.toFloat() / proposal.approvalThreshold.toFloat()).coerceIn(0f, 1f)
-                LinearProgressIndicator(
-                    progress = { progress },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = if (progress >= 1f) Mint else IndigoStart,
-                    trackColor = Surface
-                )
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(PrintPaper)
+                        .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progress)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(if (progress >= 1f) PrintLeaf else PrintSky)
+                            .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
+                    )
+                }
             }
 
-            // Time / Deadline info
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -284,42 +237,42 @@ fun ProposalCard(
                 val dateFormat = remember { SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()) }
                 Text(
                     text = "Proposed " + dateFormat.format(Date(proposal.createdAt)),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = PrintType.Caption,
                     color = Muted
                 )
 
                 if (isPending) {
                     val remainingHours = ((proposal.deadline - System.currentTimeMillis()) / (1000 * 3600)).coerceAtLeast(0)
                     Text(
-                        text = "$remainingHours hrs remaining",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (remainingHours < 6) Destructive else Muted
+                        text = "${remainingHours}h left",
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                        color = if (remainingHours < 6) PrintRedDark else PrintInk
                     )
                 }
             }
 
-            // Action Buttons for Voting
             if (isPending) {
                 if (hasVoted) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Surface)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .clip(RoundedCornerShape(PrintTokens.RadiusSmall))
+                            .background(if (proposal.myVote == "APPROVE") PrintLeaf.copy(alpha = 0.35f) else PrintCoral.copy(alpha = 0.35f))
+                            .border(1.5.dp, PrintInk, RoundedCornerShape(PrintTokens.RadiusSmall))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             imageVector = if (proposal.myVote == "APPROVE") Icons.Default.CheckCircle else Icons.Default.Cancel,
                             contentDescription = null,
-                            tint = if (proposal.myVote == "APPROVE") Mint else Destructive,
-                            modifier = Modifier.size(18.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(20.dp)
                         )
                         Text(
                             text = "You voted to ${proposal.myVote?.lowercase()}",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                            color = Ink
+                            style = PrintType.Caption.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                            color = PrintInk
                         )
                     }
                 } else {
@@ -327,29 +280,20 @@ fun ProposalCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Approve Button
-                        Button(
+                        VoteButton(
+                            text = "Approve",
+                            icon = Icons.Default.ThumbUp,
+                            fill = PrintLeaf,
                             onClick = { onVote("APPROVE") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Mint)
-                        ) {
-                            Icon(imageVector = Icons.Default.ThumbUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "Approve", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                        }
-
-                        // Reject Button
-                        Button(
+                            modifier = Modifier.weight(1f)
+                        )
+                        VoteButton(
+                            text = "Reject",
+                            icon = Icons.Default.ThumbDown,
+                            fill = PrintCoral,
                             onClick = { onVote("REJECT") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Destructive)
-                        ) {
-                            Icon(imageVector = Icons.Default.ThumbDown, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "Reject", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                        }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -358,26 +302,38 @@ fun ProposalCard(
 }
 
 @Composable
-fun StatusPill(status: String) {
-    val (bgColor, textColor, label) = when (status) {
-        "APPROVED" -> Triple(Mint.copy(alpha = 0.15f), Mint, "Approved")
-        "REJECTED" -> Triple(Destructive.copy(alpha = 0.15f), Destructive, "Rejected")
-        "EXPIRED" -> Triple(Muted.copy(alpha = 0.15f), Muted, "Expired")
-        else -> Triple(Amber.copy(alpha = 0.15f), Amber, "Voting active")
-    }
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(bgColor)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+private fun VoteButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    fill: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val press = rememberPrintPress(interactionSource)
+    Row(
+        modifier = modifier
+            .height(PrintTokens.TouchTarget)
+            .printSurface(shape = RoundedCornerShape(percent = 50), fill = fill, shadowOffset = 3.dp, pressProgress = press)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = textColor
-        )
+        Icon(imageVector = icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text, style = PrintType.Label.copy(fontSize = 15.sp), color = PrintInk)
     }
+}
+
+@Composable
+fun StatusPill(status: String) {
+    val (fill, label) = when (status) {
+        "APPROVED" -> PrintLeaf to "Approved"
+        "REJECTED" -> PrintCoral to "Rejected"
+        "EXPIRED" -> PrintPaper to "Expired"
+        else -> PrintSky to "Voting"
+    }
+    PrintChip(text = label, fill = fill)
 }
 
 @Composable
@@ -388,93 +344,42 @@ fun RequestDeleteProposalDialog(
 ) {
     var reason by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceRaised),
-            modifier = Modifier.fillMaxWidth()
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        com.collabsphere.app.view.components.WorkspaceDialogCard(
+            icon = Icons.Default.HowToVote,
+            accent = PrintCoral,
+            title = "Ask to delete",
+            subtitle = "Deleting “$taskName” needs a team vote. Tell everyone why.",
+            onClose = onDismiss
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(Amber.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.HowToVote,
-                        contentDescription = null,
-                        tint = Amber,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Text(
-                    text = "Request task deletion",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-
-                Text(
-                    text = "In CollabSphere, deleting '$taskName' requires team approval. Please provide a reason for the vote.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Muted
-                )
-
-                SkeuoTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    label = "Reason for deletion",
-                    placeholder = "e.g. Duplicate task, requirements changed...",
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = false,
-                    minLines = 3,
-                    maxLines = 5
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    }
-
-                    val canSubmit = reason.trim().isNotEmpty()
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (canSubmit) Amber else Amber.copy(alpha = 0.5f))
-                            .clickable(enabled = canSubmit) {
-                                onConfirm(reason.trim())
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Start vote",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
-                }
-            }
+            SkeuoTextField(
+                value = reason,
+                onValueChange = { reason = it },
+                label = "Reason",
+                placeholder = "e.g. Duplicate task, plans changed",
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false,
+                minLines = 3,
+                maxLines = 5
+            )
+            Spacer(Modifier.height(18.dp))
+            val canSubmit = reason.trim().isNotEmpty()
+            com.collabsphere.app.view.components.WorkspaceDialogButton(
+                text = "Start vote",
+                colors = listOf(PrintInk),
+                enabled = canSubmit,
+                onClick = { if (canSubmit) onConfirm(reason.trim()) }
+            )
+            Spacer(Modifier.height(12.dp))
+            PrintButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                primary = false,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

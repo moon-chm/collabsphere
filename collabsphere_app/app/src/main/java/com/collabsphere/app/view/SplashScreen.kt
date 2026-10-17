@@ -1,133 +1,147 @@
 package com.collabsphere.app.view
 
-import android.os.Build
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.EaseInOutQuad
-import androidx.compose.animation.core.EaseOutBack
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.collabsphere.app.R
+import com.collabsphere.app.ui.theme.BlobShape
+import com.collabsphere.app.ui.theme.CollabSphereMark
+import com.collabsphere.app.ui.theme.HalftonePatch
+import com.collabsphere.app.ui.theme.MisregisteredTitle
+import com.collabsphere.app.ui.theme.Muted
+import com.collabsphere.app.ui.theme.PrintCoral
+import com.collabsphere.app.ui.theme.PrintInk
+import com.collabsphere.app.ui.theme.PrintLeaf
+import com.collabsphere.app.ui.theme.PrintPaper
+import com.collabsphere.app.ui.theme.PrintSky
+import com.collabsphere.app.ui.theme.PrintStar
+import com.collabsphere.app.ui.theme.PrintTokens
+import com.collabsphere.app.ui.theme.PrintType
+import com.collabsphere.app.ui.theme.paperGrain
+import com.collabsphere.app.ui.theme.printSurface
+import com.collabsphere.app.ui.theme.rememberBlobPhase
+import com.collabsphere.app.ui.theme.rememberPrintReducedMotion
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SplashScreen(
     onSplashFinished: () -> Unit
 ) {
-    var logoScale by remember { mutableFloatStateOf(0.5f) }
-    var logoAlpha by remember { mutableFloatStateOf(0f) }
-    var logoOffsetY by remember { mutableFloatStateOf(0f) }
-
-    val textToType = "Collabsphere"
-    var typedText by remember { mutableStateOf("") }
-    var showCursor by remember { mutableStateOf(true) }
-
-    val animatedLogoScale by animateFloatAsState(
-        targetValue = logoScale,
-        animationSpec = tween(durationMillis = 650, easing = EaseOutBack),
-        label = "logoScale"
-    )
-    val animatedLogoAlpha by animateFloatAsState(
-        targetValue = logoAlpha,
-        animationSpec = tween(durationMillis = 650),
-        label = "logoAlpha"
-    )
-    val animatedLogoOffsetY by animateFloatAsState(
-        targetValue = logoOffsetY,
-        animationSpec = tween(durationMillis = 650, easing = EaseInOutQuad),
-        label = "logoOffset"
-    )
-
     val view = LocalView.current
-    val isDark = isSystemInDarkTheme()
-    val bgColor = if (isDark) Color.Black else Color.White
-    val textColor = if (isDark) Color.White else Color.Black
-
-    // Blinking cursor effect
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(500)
-            showCursor = !showCursor
-        }
-    }
+    val reduced = rememberPrintReducedMotion()
+    val logo = remember { Animatable(0f) }
+    val title = remember { Animatable(0f) }
+    val tagline = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // Step 1: scale and fade in
-        logoScale = 1f
-        logoAlpha = 1f
-        delay(650)
-        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        delay(150)
-
-        // Step 2: move slightly up
-        logoOffsetY = -100f
-
-        // Step 3: while shifting up, type text
-        delay(250)
-
-        for (i in textToType.indices) {
-            typedText = textToType.substring(0, i + 1)
-            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            delay(75)
+        if (reduced) {
+            logo.snapTo(1f)
+            title.snapTo(1f)
+            tagline.snapTo(1f)
+            delay(900)
+        } else {
+            logo.animateTo(1f, tween(600, easing = PrintTokens.SpringEasing))
+            view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+            launch { title.animateTo(1f, tween(450, easing = PrintTokens.SpringEasing)) }
+            delay(250)
+            tagline.animateTo(1f, tween(350))
+            delay(700)
         }
-
-        // Wait a bit to admire the result
-        delay(400)
-        
         onSplashFinished()
     }
 
+    val phase = rememberBlobPhase(9000)
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(bgColor),
+            .background(PrintPaper)
+            .paperGrain(),
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.collabsphere),
-            contentDescription = "App Logo",
+        Box(
             modifier = Modifier
-                .offset(y = animatedLogoOffsetY.dp)
-                .scale(animatedLogoScale)
-                .alpha(animatedLogoAlpha)
-                .size(150.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 80.dp, y = (-40).dp)
+                .size(260.dp)
+                .graphicsLayer { rotationZ = phase() * 25f }
+                .printSurface(shape = BlobShape(seed = 3, wobble = 0.12f), fill = PrintLeaf, shadow = null)
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-70).dp, y = 60.dp)
+                .size(220.dp)
+                .graphicsLayer { rotationZ = -phase() * 25f }
+                .printSurface(shape = BlobShape(seed = 11, wobble = 0.14f), fill = PrintSky, shadow = null)
+        )
+        HalftonePatch(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 10.dp, y = (-90).dp)
+                .size(140.dp)
+        )
+        PrintStar(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = 48.dp, y = 140.dp)
+                .size(24.dp),
+            color = PrintInk,
+            twinkle = true
+        )
+        PrintStar(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = (-56).dp, y = (-220).dp)
+                .size(16.dp),
+            color = PrintCoral,
+            twinkle = true
         )
 
-        if (typedText.isNotEmpty()) {
-            val displayText = if (showCursor) "$typedText|" else typedText
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            CollabSphereMark(size = 128.dp)
+
+            Spacer(Modifier.height(12.dp))
+
+            if (title.value > 0f) {
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        alpha = title.value.coerceIn(0f, 1f)
+                        translationY = (1f - title.value) * 16.dp.toPx()
+                    }
+                ) {
+                    MisregisteredTitle(text = "CollabSphere", style = PrintType.H1.copy(fontSize = 40.sp, lineHeight = 44.sp))
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
             Text(
-                text = displayText,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = textColor,
-                fontFamily = FontFamily.SansSerif,
-                modifier = Modifier.offset(y = 80.dp) // Below the shifted logo
+                text = "Where teams think together.",
+                style = PrintType.Body,
+                color = Muted,
+                modifier = Modifier.graphicsLayer { alpha = tagline.value }
             )
         }
     }

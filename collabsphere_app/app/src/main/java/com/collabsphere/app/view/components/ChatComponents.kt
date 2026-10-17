@@ -89,31 +89,15 @@ fun ChatDateSeparator(timestamp: Long, modifier: Modifier = Modifier) {
     ) {
         Box(
             modifier = Modifier
-                .drawWithCache {
-                    onDrawBehind {
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.12f),
-                            topLeft = Offset(0f, 1.5.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(12.dp.toPx())
-                        )
-                        drawRoundRect(
-                            color = SurfaceRaised.copy(alpha = 0.94f),
-                            cornerRadius = CornerRadius(12.dp.toPx())
-                        )
-                        drawRoundRect(
-                            color = Color.White.copy(alpha = 0.85f),
-                            cornerRadius = CornerRadius(12.dp.toPx()),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                    }
-                }
+                .clip(RoundedCornerShape(percent = 50))
+                .background(PrintPaper)
+                .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
                 .padding(horizontal = 14.dp, vertical = 4.dp)
         ) {
             Text(
                 text = chatDayLabel(timestamp),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                color = Muted
+                style = PrintType.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                color = PrintInk
             )
         }
     }
@@ -161,18 +145,8 @@ fun JumpToLatestButton(
             Box(
                 modifier = Modifier
                     .padding(top = if (unseenCount > 0) 8.dp else 0.dp)
-                    .size(44.dp)
-                    .drawWithCache {
-                        onDrawBehind {
-                            drawCircle(
-                                color = ShadowDark.copy(alpha = 0.30f),
-                                center = Offset(center.x, center.y + 3.dp.toPx())
-                            )
-                            drawCircle(brush = Brush.linearGradient(listOf(SurfaceRaised, Surface)))
-                            drawCircle(color = Color.White.copy(alpha = 0.9f), style = Stroke(1.dp.toPx()))
-                        }
-                    }
-                    .clip(CircleShape)
+                    .size(48.dp)
+                    .printSurface(shape = CircleShape, shadowOffset = 3.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -183,7 +157,7 @@ fun JumpToLatestButton(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = if (unseenCount > 0) "$unseenCount new messages, jump to latest" else "Jump to latest",
-                    tint = CoralStart,
+                    tint = PrintInk,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -205,15 +179,15 @@ fun UnreadCountBadge(count: Int, modifier: Modifier = Modifier) {
             .heightIn(min = 20.dp)
             .widthIn(min = 20.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFFFF6B57), CoralStart)))
-            .border(1.5.dp, Color.White, RoundedCornerShape(10.dp))
+            .background(PrintCoral)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(10.dp))
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = if (count > 99) "99+" else count.toString(),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-            color = Color.White,
+            style = PrintType.Caption.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, lineHeight = 14.sp),
+            color = PrintInk,
             maxLines = 1
         )
     }
@@ -267,11 +241,11 @@ fun ChatSearchBar(
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .height(50.dp)
             .skeuoInset(cornerRadius = 25.dp, depth = 3.dp, symmetric = true, shadowStrength = FieldInsetShadow)
-            .background(SurfaceRaised.copy(alpha = 0.6f), RoundedCornerShape(25.dp))
+
             .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+        Icon(Icons.Default.Search, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         BasicTextField(
             value = state.query,
@@ -280,8 +254,8 @@ fun ChatSearchBar(
                 state.position = 0
             },
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-            cursorBrush = SolidColor(CoralStart),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = PrintInk),
+            cursorBrush = SolidColor(PrintInk),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             modifier = Modifier
                 .weight(1f)
@@ -289,7 +263,7 @@ fun ChatSearchBar(
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (state.query.isEmpty()) {
-                        Text("Search in chat", style = MaterialTheme.typography.bodyLarge, color = Ink.copy(alpha = 0.40f))
+                        Text("Search in chat", style = MaterialTheme.typography.bodyLarge, color = Muted)
                     }
                     inner()
                 }
@@ -304,13 +278,13 @@ fun ChatSearchBar(
             )
         }
         IconButton(onClick = { if (matchCount > 0) state.position = (state.position + 1) % matchCount }, enabled = matchCount > 1) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Older match", tint = if (matchCount > 1) Ink else Muted.copy(alpha = 0.4f))
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Older match", tint = if (matchCount > 1) PrintInk else Muted.copy(alpha = 0.5f))
         }
         IconButton(onClick = { if (matchCount > 0) state.position = (state.position - 1 + matchCount) % matchCount }, enabled = matchCount > 1) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Newer match", tint = if (matchCount > 1) Ink else Muted.copy(alpha = 0.4f))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Newer match", tint = if (matchCount > 1) PrintInk else Muted.copy(alpha = 0.5f))
         }
         IconButton(onClick = { state.close() }) {
-            Icon(Icons.Default.Close, contentDescription = "Close search", tint = Muted)
+            Icon(Icons.Default.Close, contentDescription = "Close search", tint = PrintInk)
         }
     }
 }

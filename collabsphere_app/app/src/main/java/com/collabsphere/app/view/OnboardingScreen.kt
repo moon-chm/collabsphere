@@ -1,5 +1,6 @@
 package com.collabsphere.app.view
 
+import androidx.compose.foundation.border
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -48,50 +49,41 @@ import kotlinx.coroutines.launch
 // DESIGN TOKENS  (from Stitch project 6815327193169070909)
 // ─────────────────────────────────────────────────────────────────
 
-// Stitch palette overrides for onboarding
-private val OnboardCanvas   = Color(0xFFE8E4DA)  // warm oatmeal stage bg
-private val OnboardCard     = Color(0xFFF5F2EC)  // raised paper surface
-private val OnboardCardBg   = Color(0xFFECE7E3)  // sidebar / lighter tint
-private val InkPrimary      = Color(0xFF1C1C19)
-private val InkMuted        = Color(0xFF464652)
-private val BorderLight     = Color(0xFFECE7DE)
+private val OnboardCanvas   = PrintPaper
+private val OnboardCard     = PrintWhite
+private val OnboardCardBg   = PrintPaper
+private val InkPrimary      = PrintInk
+private val InkMuted        = PrintInk.copy(alpha = 0.72f)
+private val BorderLight     = PrintInk
 
-// Accent per page
-private val CoralAccent     = Color(0xFFE98272)
-private val CoralDark       = Color(0xFFBE5344)
-private val IndigoAccent    = Color(0xFF4A4DAC)
-private val IndigoDark      = Color(0xFF4F52B0)
-private val MintAccent      = Color(0xFF5CAE93)
-private val MintDark        = Color(0xFF357D66)
+private val CoralAccent     = PrintCoral
+private val CoralDark       = PrintRedDark
+private val IndigoAccent    = PrintSky
+private val MintAccent      = PrintLeaf
+private val MintDark        = PrintLeaf
 
-// Bubble colours
-private val BubbleLeft      = Color(0xFFEFECE5)
-private val BubbleLeftDM    = Color(0xFFECE7E1)
-private val BubbleRight     = Color(0xFFFCECE9)  // coral-tinted outgoing
-private val StickyNote      = Color(0xFFF9ECCF)
+private val BubbleLeft      = PrintPaper
+private val BubbleLeftDM    = PrintPaper
+private val BubbleRight     = Color(0xFFFFE1D6)
+private val StickyNote      = Color(0xFFF6D365)
 
 private data class OnboardPage(
     val accentColor: Color,
-    val accentDark : Color,
     val subLabel   : String,
     val headline   : String,
-    val body       : String,
-    val glowColor  : Color
+    val body       : String
 )
 
 private val pages = listOf(
-    OnboardPage(CoralAccent,  CoralDark,  "COLLABSPHERE",
+    OnboardPage(CoralAccent, "COLLABSPHERE",
         "Where teams\nthink together",
-        "One calm workspace for channels, messages, tasks, notes, and files.",
-        Color(0x4DFEECE9)),
-    OnboardPage(IndigoAccent, IndigoDark, "REAL-TIME CHANNELS & DMS",
+        "One calm workspace for channels, messages, tasks, notes, and files."),
+    OnboardPage(IndigoAccent, "REAL-TIME CHANNELS & DMS",
         "Chat at the\nspeed of thought.",
-        "Create channels, exchange DMs, and react — all in one place.",
-        Color(0x33C0C1FF)),
-    OnboardPage(MintAccent,   MintDark,   "TASKS · NOTES · FILES",
+        "Create channels, exchange DMs, and react — all in one place."),
+    OnboardPage(MintAccent, "TASKS · NOTES · FILES",
         "Everything\nin reach",
-        "Assign tasks, capture notes, and share files — all organized in your workspace.",
-        Color(0x3378BFA5))
+        "Assign tasks, capture notes, and share files — all organized in your workspace.")
 )
 
 // ─────────────────────────────────────────────────────────────────
@@ -110,12 +102,6 @@ fun OnboardingScreen(onFinish: () -> Unit) {
         animationSpec = tween(400, easing = FastOutSlowInEasing),
         label         = "accent"
     )
-    val animatedDark by animateColorAsState(
-        targetValue   = pages[current].accentDark,
-        animationSpec = tween(400, easing = FastOutSlowInEasing),
-        label         = "accentDark"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -150,7 +136,6 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 currentPage = current,
                 isLastPage  = isLast,
                 accentColor = animatedAccent,
-                accentDark  = animatedDark,
                 onNext = {
                     scope.launch {
                         pagerState.animateScrollToPage(current + 1)
@@ -180,13 +165,20 @@ private fun SimulatorStage(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // Ambient glow blob
+        val phase = rememberBlobPhase(9000)
         Box(
             modifier = Modifier
-                .size(220.dp)
-                .align(Alignment.Center)
-                .offset(y = (-20).dp)
-                .blur(60.dp)
-                .background(page.glowColor, CircleShape)
+                .size(200.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 60.dp, y = 10.dp)
+                .graphicsLayer { rotationZ = phase() * 30f }
+                .printSurface(shape = BlobShape(seed = pageIndex + 2, wobble = 0.14f), fill = page.accentColor, shadow = null)
+        )
+        HalftonePatch(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-24).dp, y = 8.dp)
+                .size(120.dp)
         )
 
         Column(
@@ -208,17 +200,17 @@ private fun SimulatorStage(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
-                            .background(page.accentColor, CircleShape)
+                            .size(12.dp)
+                            .printSurface(shape = BlobShape(seed = pageIndex + 5, wobble = 0.18f), fill = page.accentColor, shadow = null, outline = 1.5.dp)
                     )
                     Text(
                         text  = "STAGE 0${pageIndex + 1}",
                         style = TextStyle(
                             fontFamily   = ManropeFamily,
-                            fontSize     = 11.sp,
+                            fontSize     = 12.sp,
                             fontWeight   = FontWeight.Bold,
                             letterSpacing = 0.08.sp,
-                            color        = InkMuted
+                            color        = PrintInk
                         )
                     )
                 }
@@ -228,16 +220,18 @@ private fun SimulatorStage(
                     style    = TextStyle(
                         fontFamily = ManropeFamily,
                         fontSize   = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color      = InkMuted
+                        fontWeight = FontWeight.Bold,
+                        color      = PrintInk,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
                     ),
                     modifier = Modifier
+                        .heightIn(min = 44.dp)
                         .clip(RoundedCornerShape(50))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication        = null
                         ) { if (pageIndex != pages.lastIndex) onSkip() }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
                 )
             }
 
@@ -248,35 +242,9 @@ private fun SimulatorStage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(OnboardCard)
-                    .drawWithCache {
-                        onDrawBehind {
-                        // top highlight rim
-                        drawRoundRect(
-                            color        = Color.White.copy(alpha = 0.8f),
-                            size         = Size(size.width, 1.dp.toPx()),
-                            cornerRadius = CornerRadius(22.dp.toPx())
-                        )
-                        }
-                    }
+                    .padding(end = PrintTokens.ShadowOffset, bottom = PrintTokens.ShadowOffset)
+                    .printSurface(shape = RoundedCornerShape(22.dp), fill = OnboardCard)
             ) {
-                // Shadow via outer wrapper is done via elevation; here we use a subtle border
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .drawWithCache {
-                            onDrawBehind {
-                            drawRoundRect(
-                                color        = BorderLight,
-                                size         = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(22.dp.toPx()),
-                                style        = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
-                            )
-                            }
-                        }
-                )
-
                 when (pageIndex) {
                     0 -> WorkspaceSimulator(page = page, isActive = isActive)
                     1 -> DmSimulator(page = page, isActive = isActive)
@@ -451,13 +419,11 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Box(modifier = Modifier
-                            .size(12.dp)
-                            .background(CoralAccent.copy(alpha = 0.9f), CircleShape))
-                        Box(modifier = Modifier
-                            .size(12.dp)
-                            .offset(x = (-5).dp)
-                            .background(IndigoAccent.copy(alpha = 0.85f), CircleShape))
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(id = com.collabsphere.app.R.drawable.collabsphere),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text("CS", style = TextStyle(
                             fontFamily = NewsreaderFamily,
@@ -543,7 +509,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                 }
                 // Avatar stack K, D, S
                 Row(horizontalArrangement = Arrangement.spacedBy((-5).dp)) {
-                    listOf("K" to Color(0xFF357D66), "D" to IndigoAccent, "S" to CoralAccent)
+                    listOf("K" to PrintInk, "D" to IndigoAccent, "S" to CoralAccent)
                         .forEach { (l, c) ->
                             Box(modifier = Modifier
                                 .size(14.dp)
@@ -552,7 +518,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                                 Text(l, style = TextStyle(
                                     fontFamily = ManropeFamily,
                                     fontSize = 7.sp, fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = PrintInk
                                 ))
                             }
                         }
@@ -584,7 +550,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                         .background(MintAccent.copy(alpha = 0.6f), CircleShape),
                         contentAlignment = Alignment.Center) {
                         Text("A", style = TextStyle(fontFamily = ManropeFamily,
-                            fontSize = 8.sp, color = Color.White))
+                            fontSize = 8.sp, color = PrintInk))
                     }
                     TypingBubble(left = true, dot1Y = dotWave1, dot2Y = dotWave2, dot3Y = dotWave3)
                 }
@@ -604,7 +570,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                     contentAlignment = Alignment.Center) {
                     Text("A", style = TextStyle(fontFamily = ManropeFamily,
                         fontSize = 8.sp, fontWeight = FontWeight.SemiBold,
-                        color = Color.White))
+                        color = PrintInk))
                 }
                 Column {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -637,7 +603,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                         ) {
                             Text("👍 2", style = TextStyle(fontFamily = ManropeFamily,
                                 fontSize = 8.sp, fontWeight = FontWeight.SemiBold,
-                                color = CoralAccent))
+                                color = PrintRedDark))
                         }
                     }
                 }
@@ -660,7 +626,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                         .background(IndigoAccent.copy(alpha = 0.6f), CircleShape),
                         contentAlignment = Alignment.Center) {
                         Text("M", style = TextStyle(fontFamily = ManropeFamily,
-                            fontSize = 8.sp, color = Color.White))
+                            fontSize = 8.sp, color = PrintInk))
                     }
                 }
             }
@@ -695,7 +661,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                 Box(modifier = Modifier.size(18.dp).background(IndigoAccent, CircleShape),
                     contentAlignment = Alignment.Center) {
                     Text("M", style = TextStyle(fontFamily = ManropeFamily,
-                        fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
+                        fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = PrintInk))
                 }
             }
 
@@ -714,7 +680,7 @@ private fun WorkspaceSimulator(page: OnboardPage, isActive: Boolean) {
                     style = TextStyle(fontFamily = ManropeFamily, fontSize = 10.sp, color = InkMuted))
                 Box(modifier = Modifier.size(18.dp).background(CoralAccent, CircleShape),
                     contentAlignment = Alignment.Center) {
-                    Text("↑", style = TextStyle(fontSize = 10.sp, color = Color.White,
+                    Text("↑", style = TextStyle(fontSize = 10.sp, color = PrintInk,
                         fontWeight = FontWeight.Bold))
                 }
             }
@@ -809,10 +775,10 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                 // Avatar with online pip
                 Box {
                     Box(modifier = Modifier.size(24.dp)
-                        .background(Color(0xFFFFDAD4), CircleShape),
+                        .background(Color(0xFFFFE1D6), CircleShape),
                         contentAlignment = Alignment.Center) {
                         Text("P", style = TextStyle(fontFamily = ManropeFamily,
-                            fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CoralAccent))
+                            fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrintRedDark))
                     }
                     Box(modifier = Modifier.size(8.dp).align(Alignment.BottomEnd)
                         .background(MintDark, CircleShape))
@@ -853,11 +819,11 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                 Row(verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(modifier = Modifier.size(20.dp)
-                        .background(Color(0xFFFFDAD4), CircleShape),
+                        .background(Color(0xFFFFE1D6), CircleShape),
                         contentAlignment = Alignment.Center) {
                         Text("P", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                            color = CoralAccent))
+                            color = PrintRedDark))
                     }
                     Box {
                         Box(modifier = Modifier
@@ -877,7 +843,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                             .background(Color.White)
                             .padding(horizontal = 5.dp, vertical = 2.dp)) {
                             Text("❤️ 1", style = TextStyle(fontFamily = ManropeFamily,
-                                fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CoralAccent))
+                                fontSize = 8.sp, fontWeight = FontWeight.Bold, color = PrintRedDark))
                         }
                     }
                 }
@@ -893,7 +859,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     TypingDots(dot1Y = dotWave1, dot2Y = dotWave2, dot3Y = dotWave3,
-                        color = IndigoAccent)
+                        color = PrintInk)
                     Text("Priya is typing", style = TextStyle(fontFamily = ManropeFamily,
                         fontSize = 9.sp, color = InkMuted))
                 }
@@ -912,7 +878,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                     .background(IndigoAccent)
                     .padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Text("On it! Sending feedback now", style = TextStyle(
-                        fontFamily = ManropeFamily, fontSize = 11.sp, color = Color.White))
+                        fontFamily = ManropeFamily, fontSize = 11.sp, color = PrintInk))
                 }
             }
 
@@ -930,7 +896,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
             ) {
                 Box(modifier = Modifier.size(24.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFE1E0FF)),
+                    .background(PrintSky),
                     contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.AttachFile, contentDescription = "Attachment", tint = IndigoAccent, modifier = androidx.compose.ui.Modifier.size(14.dp))
                 }
@@ -941,9 +907,9 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
                         fontSize = 9.sp, color = InkMuted))
                 }
                 Box(modifier = Modifier.size(18.dp)
-                    .background(Color(0xFFE1E0FF), CircleShape),
+                    .background(PrintSky, CircleShape),
                     contentAlignment = Alignment.Center) {
-                    Text("↓", style = TextStyle(fontSize = 10.sp, color = IndigoAccent,
+                    Text("↓", style = TextStyle(fontSize = 10.sp, color = PrintInk,
                         fontWeight = FontWeight.Bold))
                 }
             }
@@ -951,7 +917,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
             // Delivered checkmark
             Box(modifier = Modifier.align(Alignment.End).alpha(checkA)) {
                 Text("✓✓ Delivered", style = TextStyle(fontFamily = ManropeFamily,
-                    fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = IndigoAccent))
+                    fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = PrintInk))
             }
         }
 
@@ -973,7 +939,7 @@ private fun DmSimulator(page: OnboardPage, isActive: Boolean) {
             Spacer(Modifier.width(6.dp))
             Box(modifier = Modifier.size(18.dp).background(IndigoAccent, CircleShape),
                 contentAlignment = Alignment.Center) {
-                Text("→", style = TextStyle(fontSize = 9.sp, color = Color.White,
+                Text("→", style = TextStyle(fontSize = 9.sp, color = PrintInk,
                     fontWeight = FontWeight.Bold))
             }
         }
@@ -1092,10 +1058,10 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = InkPrimary))
                     Box(modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFFA9F1D5))
+                        .background(PrintLeaf)
                         .padding(horizontal = 6.dp, vertical = 2.dp)) {
                         Text("Active", style = TextStyle(fontFamily = ManropeFamily,
-                            fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF002117)))
+                            fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrintInk))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
@@ -1104,7 +1070,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                             Box(modifier = Modifier.size(16.dp).background(c, CircleShape),
                                 contentAlignment = Alignment.Center) {
                                 Text(l, style = TextStyle(fontFamily = ManropeFamily,
-                                    fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                                    fontSize = 7.sp, fontWeight = FontWeight.Bold, color = PrintInk))
                             }
                         }
                 }
@@ -1132,7 +1098,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         .graphicsLayer { translationY = pillTodoY; alpha = pillTodoA }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFFD87870).copy(alpha = 0.18f))
+                        .background(PrintCoral.copy(alpha = 0.18f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(),
@@ -1140,13 +1106,13 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("Todo", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                            color = Color(0xFF9A4438)))
+                            color = PrintInk))
                         Box(modifier = Modifier.clip(RoundedCornerShape(50))
                             .background(Color.White.copy(alpha = 0.8f))
                             .padding(horizontal = 4.dp)) {
                             Text("0", style = TextStyle(fontFamily = ManropeFamily,
                                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF9A4438)))
+                                color = PrintInk))
                         }
                     }
                 }
@@ -1157,12 +1123,12 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                     .height(68.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .drawWithCache {
-                        val dashColor = Color(0xFF292825).copy(alpha = 0.18f)
+                        val dashColor = PrintInk.copy(alpha = 0.5f)
                         onDrawBehind {
                         drawRoundRect(color = dashColor,
                             cornerRadius = CornerRadius(12.dp.toPx()),
                             style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                width = 1.dp.toPx(),
+                                width = 1.5.dp.toPx(),
                                 pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
                                     floatArrayOf(6f, 6f), 0f)
                             ))
@@ -1186,7 +1152,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         .graphicsLayer { translationY = pillProgY; alpha = pillProgA }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFFE8B45E).copy(alpha = 0.22f))
+                        .background(Color(0xFFF6D365).copy(alpha = 0.22f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(),
@@ -1194,7 +1160,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("In Prog", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                            color = Color(0xFF8C5B18)))
+                            color = PrintInk))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.clip(RoundedCornerShape(50))
@@ -1202,7 +1168,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                                 .padding(horizontal = 4.dp)) {
                                 Text("2", style = TextStyle(fontFamily = ManropeFamily,
                                     fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF8C5B18)))
+                                    color = PrintInk))
                             }
                             // +1 badge
                             Box(modifier = Modifier
@@ -1211,7 +1177,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                                 .background(MintDark)
                                 .padding(horizontal = 4.dp, vertical = 1.dp)) {
                                 Text("+1", style = TextStyle(fontFamily = ManropeFamily,
-                                    fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                                    fontSize = 9.sp, fontWeight = FontWeight.Bold, color = PrintInk))
                             }
                         }
                     }
@@ -1225,18 +1191,18 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFFDF9F4))
+                        .background(PrintPaper)
                         .padding(8.dp)
                 ) {
                     Box(modifier = Modifier.width(3.dp).height(36.dp)
-                        .background(Color(0xFFE8B45E), RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
+                        .background(Color(0xFFF6D365), RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text("Design login screen", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = InkPrimary))
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("✓", style = TextStyle(fontSize = 11.sp, color = MintDark))
+                            Text("✓", style = TextStyle(fontSize = 11.sp, color = PrintLeafDark))
                             Text("UX Specs", style = TextStyle(fontFamily = ManropeFamily,
                                 fontSize = 9.sp, color = InkMuted))
                         }
@@ -1248,11 +1214,11 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         .graphicsLayer { translationY = fixCardY; alpha = fixCardA }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFFDF9F4))
+                        .background(PrintPaper)
                         .padding(8.dp)
                 ) {
                     Box(modifier = Modifier.width(3.dp).height(32.dp)
-                        .background(Color(0xFFE8B45E), RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
+                        .background(Color(0xFFF6D365), RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text("Fix API bug", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 11.sp, color = InkPrimary))
@@ -1261,9 +1227,9 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("#v1.4", style = TextStyle(fontFamily = ManropeFamily,
-                                fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = CoralAccent))
+                                fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = PrintRedDark))
                             Box(modifier = Modifier.size(18.dp)
-                                .background(Color(0xFFFFDAD4), CircleShape),
+                                .background(Color(0xFFFFE1D6), CircleShape),
                                 contentAlignment = Alignment.Center) {
                                 Text("JS", style = TextStyle(fontFamily = ManropeFamily,
                                     fontSize = 8.sp, fontWeight = FontWeight.Bold, color = CoralDark))
@@ -1280,7 +1246,7 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         .graphicsLayer { translationY = pillDoneY; alpha = pillDoneA }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF78BFA5).copy(alpha = 0.25f))
+                        .background(PrintLeaf.copy(alpha = 0.25f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(),
@@ -1288,13 +1254,13 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("Done", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2F6E58)))
+                            color = PrintInk))
                         Box(modifier = Modifier.clip(RoundedCornerShape(50))
                             .background(Color.White.copy(alpha = 0.8f))
                             .padding(horizontal = 4.dp)) {
                             Text("1", style = TextStyle(fontFamily = ManropeFamily,
                                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF2F6E58)))
+                                color = PrintInk))
                         }
                     }
                 }
@@ -1304,11 +1270,11 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         .graphicsLayer { translationX = doneCardX; alpha = doneCardA }
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFFDF9F4).copy(alpha = 0.9f))
+                        .background(PrintPaper.copy(alpha = 0.9f))
                         .padding(8.dp)
                 ) {
                     Box(modifier = Modifier.width(3.dp).height(32.dp)
-                        .background(Color(0xFF78BFA5), RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
+                        .background(PrintLeaf, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)))
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text("Write tests", style = TextStyle(fontFamily = ManropeFamily,
                             fontSize = 11.sp, color = InkMuted,
@@ -1317,10 +1283,10 @@ private fun KanbanSimulator(page: OnboardPage, isActive: Boolean) {
                         Row(modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End) {
                             Box(modifier = Modifier.size(16.dp)
-                                .background(Color(0xFF78BFA5).copy(alpha = 0.2f), CircleShape),
+                                .background(PrintLeaf.copy(alpha = 0.2f), CircleShape),
                                 contentAlignment = Alignment.Center) {
                                 Text("✓", style = TextStyle(fontSize = 11.sp,
-                                    color = Color(0xFF2F6E58), fontWeight = FontWeight.Bold))
+                                    color = PrintInk, fontWeight = FontWeight.Bold))
                             }
                         }
                     }
@@ -1371,7 +1337,6 @@ private fun BottomCard(
     currentPage: Int,
     isLastPage : Boolean,
     accentColor: Color,
-    accentDark : Color,
     onNext     : () -> Unit,
     onFinish   : () -> Unit
 ) {
@@ -1379,18 +1344,7 @@ private fun BottomCard(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(OnboardCard)
-            .drawWithCache {
-                onDrawBehind {
-                // Top highlight rim (white border)
-                drawRoundRect(
-                    color        = Color.White.copy(alpha = 0.8f),
-                    size         = Size(size.width, 1.dp.toPx()),
-                    cornerRadius = CornerRadius(28.dp.toPx())
-                )
-                }
-            }
+            .printSurface(shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), fill = OnboardCard, shadow = null)
             .padding(horizontal = 24.dp)
             .padding(top = 20.dp, bottom = 24.dp)
     ) {
@@ -1405,10 +1359,10 @@ private fun BottomCard(
                     text  = page.subLabel,
                     style = TextStyle(
                         fontFamily    = ManropeFamily,
-                        fontSize      = 11.sp,
+                        fontSize      = 12.sp,
                         fontWeight    = FontWeight.Bold,
                         letterSpacing = 0.12.sp,
-                        color         = accentColor
+                        color         = PrintInk
                     )
                 )
                 // Pill dot indicators
@@ -1422,29 +1376,21 @@ private fun BottomCard(
                             label         = "dot$i"
                         )
                         Box(modifier = Modifier
-                            .height(8.dp)
+                            .height(10.dp)
                             .width(dotWidth)
                             .clip(CircleShape)
-                            .background(
-                                if (isActive) accentColor
-                                else InkPrimary.copy(alpha = 0.15f)
-                            ))
+                            .background(if (isActive) accentColor else PrintWhite)
+                            .border(1.5.dp, PrintInk, CircleShape))
                     }
                 }
             }
 
             // Headline
-            Text(
-                text  = page.headline,
-                style = TextStyle(
-                    fontFamily    = NewsreaderFamily,
-                    fontSize      = 28.sp,
-                    fontWeight    = FontWeight.SemiBold,
-                    lineHeight    = 34.sp,
-                    letterSpacing = (-0.015).sp,
-                    color         = InkPrimary
-                )
-            )
+            Column {
+                page.headline.split("\n").forEach { line ->
+                    MisregisteredTitle(text = line, style = PrintType.H1.copy(fontSize = 30.sp, lineHeight = 34.sp))
+                }
+            }
 
             // Body
             Text(
@@ -1461,19 +1407,11 @@ private fun BottomCard(
 
             // CTA button
             CtaButton(
-                text       = if (isLastPage) "Get started" else "Continue",
-                accentColor = accentColor,
-                accentDark  = accentDark,
-                onClick     = if (isLastPage) onFinish else onNext
+                text    = if (isLastPage) "Get started" else "Continue",
+                onClick = if (isLastPage) onFinish else onNext
             )
 
             // Android home bar gesture indicator
-            Box(modifier = Modifier
-                .width(128.dp)
-                .height(4.dp)
-                .align(Alignment.CenterHorizontally)
-                .clip(CircleShape)
-                .background(InkPrimary.copy(alpha = 0.2f)))
         }
     }
 }
@@ -1484,70 +1422,16 @@ private fun BottomCard(
 
 @Composable
 private fun CtaButton(
-    text       : String,
-    accentColor: Color,
-    accentDark : Color,
-    onClick    : () -> Unit
+    text   : String,
+    onClick: () -> Unit
 ) {
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue   = if (pressed) 0.98f else 1f,
-        animationSpec = tween(80),
-        label         = "btnScale"
-    )
-    val offsetY by animateDpAsState(
-        targetValue   = if (pressed) 2.dp else 0.dp,
-        animationSpec = tween(80),
-        label         = "btnY"
-    )
-
-    Box(
+    PrintButton(
+        text = "$text  →",
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .scale(scale)
-            .offset(y = offsetY)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.verticalGradient(listOf(accentColor, accentDark))
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication        = null
-            ) {
-                pressed = true
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        // Top rim highlight
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).align(Alignment.TopCenter)
-            .background(Color.White.copy(alpha = 0.4f)))
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            Text(
-                text  = text,
-                style = TextStyle(
-                    fontFamily = ManropeFamily,
-                    fontSize   = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color      = Color.White
-                )
-            )
-            Text("→", style = TextStyle(fontSize = 16.sp, color = Color.White,
-                fontWeight = FontWeight.Bold))
-        }
-    }
-
-    LaunchedEffect(pressed) {
-        if (pressed) {
-            kotlinx.coroutines.delay(150)
-            pressed = false
-        }
-    }
+            .height(56.dp)
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -1561,7 +1445,7 @@ private fun TypingBubble(
     dot2Y    : Float,
     dot3Y    : Float,
     color    : Color = BubbleLeft,
-    dotColor : Color = Color(0xFF464652).copy(alpha = 0.6f)
+    dotColor : Color = PrintInk.copy(alpha = 0.6f)
 ) {
     val shape = if (left)
         RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp, bottomStart = 4.dp, topStart = 12.dp)

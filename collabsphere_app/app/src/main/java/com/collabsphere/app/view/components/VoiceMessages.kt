@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.foundation.border
 import android.content.Context
 import android.media.MediaPlayer
 import android.media.MediaRecorder
@@ -123,9 +124,9 @@ fun VoiceRecordingBar(
                 .clickable(onClick = onCancel),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Delete, contentDescription = "Discard recording", tint = DestructiveStart)
+            Icon(Icons.Default.Delete, contentDescription = "Discard recording", tint = PrintRedDark)
         }
-        Box(Modifier.size(8.dp).clip(CircleShape).background(DestructiveStart))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(PrintRisoRed).border(1.5.dp, PrintInk, CircleShape))
         Spacer(Modifier.width(8.dp))
         Text(
             text = formatDuration(elapsed),
@@ -144,7 +145,7 @@ fun VoiceRecordingBar(
                         .width(3.dp)
                         .fillMaxHeight((0.12f + level * 0.88f).coerceIn(0.12f, 1f))
                         .clip(RoundedCornerShape(2.dp))
-                        .background(CoralStart.copy(alpha = 0.75f))
+                        .background(PrintCoral.copy(alpha = 0.35f))
                 )
             }
         }
@@ -153,11 +154,11 @@ fun VoiceRecordingBar(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(CoralStart)
+                .background(PrintCoral)
                 .clickable(onClick = onSend),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send voice message", tint = Color.White, modifier = Modifier.size(19.dp))
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send voice message", tint = PrintInk, modifier = Modifier.size(19.dp))
         }
     }
 }
@@ -255,8 +256,8 @@ fun VoiceMessagePlayer(url: String, onDarkBubble: Boolean, modifier: Modifier = 
             delay(200)
         } while (playing || (duration == 0L && waits++ < 50))
     }
-    val tint = if (onDarkBubble) Color.White else CoralStart
-    val track = if (onDarkBubble) Color.White.copy(alpha = 0.35f) else CoralStart.copy(alpha = 0.2f)
+    val tint = if (onDarkBubble) PrintPaper else PrintInk
+    val track = if (onDarkBubble) PrintPaper.copy(alpha = 0.35f) else PrintInk.copy(alpha = 0.2f)
     val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
     Row(
@@ -267,7 +268,7 @@ fun VoiceMessagePlayer(url: String, onDarkBubble: Boolean, modifier: Modifier = 
             modifier = Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(if (onDarkBubble) Color.White.copy(alpha = 0.22f) else CoralStart.copy(alpha = 0.12f))
+                .background(if (onDarkBubble) PrintPaper.copy(alpha = 0.22f) else PrintCoral)
                 .clickable { VoicePlayback.toggle(url) },
             contentAlignment = Alignment.Center
         ) {

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +43,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
@@ -61,16 +63,56 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.collabsphere.app.ui.theme.CoralStart
 import com.collabsphere.app.ui.theme.Ink
 import com.collabsphere.app.ui.theme.Muted
-import com.collabsphere.app.ui.theme.SurfaceRaised
+import com.collabsphere.app.ui.theme.PrintCoral
+import com.collabsphere.app.ui.theme.PrintInk
+import com.collabsphere.app.ui.theme.PrintPaper
+import com.collabsphere.app.ui.theme.PrintTokens
+import com.collabsphere.app.ui.theme.PrintType
+import com.collabsphere.app.ui.theme.PrintWhite
+import com.collabsphere.app.ui.theme.printAccentFor
+import com.collabsphere.app.ui.theme.printSurface
 
 val ChatBubbleTail: Dp = 7.dp
-val OwnBubbleColor = Color(0xFF2E2B29)
+val OwnBubbleColor = PrintInk
+val ChatBubbleOutline: Dp = 1.5.dp
+
+fun Modifier.chatBubbleSurface(isOwn: Boolean, shape: Shape): Modifier =
+    if (isOwn) this.background(OwnBubbleColor, shape)
+    else this.background(PrintWhite, shape).border(ChatBubbleOutline, PrintInk, shape)
+
+fun Modifier.chatComposerDock(): Modifier =
+    this.printSurface(shape = RoundedCornerShape(28.dp), shadowOffset = 3.dp)
+
+fun Modifier.chatComposerField(focused: Boolean): Modifier =
+    this
+        .clip(RoundedCornerShape(23.dp))
+        .background(PrintPaper)
+        .border(if (focused) PrintTokens.Outline else ChatBubbleOutline, PrintInk, RoundedCornerShape(23.dp))
+
+fun Modifier.chatSendButton(enabled: Boolean, pressProgress: () -> Float): Modifier =
+    this.printSurface(
+        shape = CircleShape,
+        fill = if (enabled) PrintCoral else PrintPaper,
+        shadow = if (enabled) PrintInk else null,
+        shadowOffset = 3.dp,
+        pressProgress = pressProgress
+    )
+
+fun Modifier.chatHeaderBar(): Modifier =
+    this.drawBehind {
+        drawRect(PrintPaper)
+        drawRect(
+            color = PrintInk,
+            topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - PrintTokens.Outline.toPx()),
+            size = Size(size.width, PrintTokens.Outline.toPx())
+        )
+    }
 
 class ChatBubbleShape(
     private val isOwn: Boolean,
@@ -151,19 +193,20 @@ fun ComposerActionsButton(
     Box(modifier = modifier.size(40.dp), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .clip(CircleShape)
-                .background(if (expanded) CoralStart.copy(alpha = 0.14f) else Color.Transparent)
+                .background(if (expanded) PrintCoral else Color.Transparent)
+                .border(1.5.dp, if (expanded) PrintInk else Color.Transparent, CircleShape)
                 .clickable { onExpandedChange(!expanded) },
             contentAlignment = Alignment.Center
         ) {
             if (busy && !expanded) {
-                CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = CoralStart)
+                CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = PrintInk)
             } else {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = if (expanded) "Close attachments" else "Open attachments",
-                    tint = if (expanded) CoralStart else Muted,
+                    tint = PrintInk,
                     modifier = Modifier.size(24.dp).rotate(rotation)
                 )
             }
@@ -188,10 +231,9 @@ fun ComposerActionsButton(
                 ) {
                     Column(
                         modifier = Modifier
-                            .width(196.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(SurfaceRaised)
-                            .border(1.dp, Muted.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
+                            .padding(end = 4.dp, bottom = 4.dp)
+                            .width(204.dp)
+                            .printSurface(shape = RoundedCornerShape(20.dp))
                             .padding(vertical = 8.dp)
                     ) {
                         actions.forEachIndexed { index, action ->
@@ -208,28 +250,33 @@ fun ComposerActionsButton(
                                         onExpandedChange(false)
                                         action.onClick()
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                    .heightIn(min = 52.dp)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(action.tint.copy(alpha = if (action.enabled) 1f else 0.35f)),
+                                        .printSurface(
+                                            shape = CircleShape,
+                                            fill = if (action.enabled) printAccentFor(action.tint) else PrintPaper,
+                                            shadow = null,
+                                            outline = 1.5.dp
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = action.icon,
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint = if (action.enabled) PrintInk else Muted,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }
                                 Text(
                                     text = action.label,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = if (action.enabled) Ink else Muted
+                                    style = PrintType.Body.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                    color = if (action.enabled) PrintInk else Muted
                                 )
                             }
                         }
@@ -267,7 +314,8 @@ fun ComposerEmojiPanel(
                 .height(290.dp)
                 .padding(horizontal = 8.dp)
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(SurfaceRaised)
+                .background(PrintWhite)
+                .border(1.5.dp, PrintInk, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
         )
     }
 }

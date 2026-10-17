@@ -158,16 +158,11 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(PrintPaper)
+            .paperGrain()
             .systemBarsPadding()
     ) {
-        // Inner wave shape
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 100.dp) // Leave space at bottom for social/footer
-                .skeuoWaveBackground()
-        )
+        AuthBackdrop()
 
         Column(
             modifier = Modifier
@@ -177,43 +172,35 @@ fun LoginScreen(
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(8.dp))
             
-            // ── Brand mark (CollabSphere Identity) ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.collabsphere),
-                    contentDescription = "CollabSphere Logo",
-                    modifier = Modifier.size(64.dp)
-                )
+                CollabSphereMark(size = 40.dp)
+                Text(text = "CollabSphere", style = PrintType.H3, color = PrintInk)
             }
-            
+
             Spacer(Modifier.height(24.dp))
 
-            // ── Headline ──
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start
             ) {
+                MisregisteredTitle(text = "Welcome", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
+                MisregisteredTitle(text = "back.", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Welcome",
-                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-                Text(
-                    text = "Back.",
-                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
+                    text = "Pick up right where your team left off.",
+                    style = PrintType.Body,
+                    color = Muted
                 )
             }
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(32.dp))
 
-            // ── Form Fields (Directly on Wave Background) ──
-            // Email field
             SkeuoTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -228,7 +215,7 @@ fun LoginScreen(
                     Icon(
                         Icons.Outlined.Email,
                         contentDescription = null,
-                        tint = CoralStart.copy(alpha = 0.75f),
+                        tint = PrintInk,
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -243,7 +230,6 @@ fun LoginScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Password field
             SkeuoTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -260,7 +246,7 @@ fun LoginScreen(
                     Icon(
                         Icons.Outlined.Lock,
                         contentDescription = null,
-                        tint = CoralStart.copy(alpha = 0.75f),
+                        tint = PrintInk,
                         modifier = Modifier.size(18.dp)
                     )
                 },
@@ -270,7 +256,7 @@ fun LoginScreen(
                             imageVector = if (passwordVisible) Icons.Outlined.Visibility
                                           else Icons.Outlined.VisibilityOff,
                             contentDescription = if (passwordVisible) "Hide" else "Show",
-                            tint = if (passwordVisible) CoralStart else Muted,
+                            tint = PrintInk,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -279,7 +265,6 @@ fun LoginScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Forgot Password Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -287,8 +272,8 @@ fun LoginScreen(
             ) {
                 Text(
                     text = "Forgot password?",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = CoralStart,
+                    style = PrintType.Label.copy(fontSize = 14.sp, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                    color = PrintInk,
                     modifier = Modifier
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -296,7 +281,8 @@ fun LoginScreen(
                         ) {
                             showForgotPasswordDialog = true
                         }
-                        .padding(4.dp)
+                        .heightIn(min = 44.dp)
+                        .padding(horizontal = 4.dp, vertical = 12.dp)
                 )
             }
 
@@ -308,7 +294,7 @@ fun LoginScreen(
                 Text(
                     text = loginStatus.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = DestructiveStart,
+                    color = PrintRedDark,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -318,27 +304,25 @@ fun LoginScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            // CTA Button
             SkeuoPrimaryButton(
                 text = "Login",
                 isLoading = isLoading,
                 enabled = !isLoading,
-                accentColor = CoralStart,
+                accentColor = PrintInk,
                 onClick = { handleLogin() }
             )
 
             Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(32.dp))
 
-            // ── Footer ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = Muted.copy(alpha = 0.2f))
-                Text("or", style = MaterialTheme.typography.bodySmall, color = Muted)
-                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = Muted.copy(alpha = 0.2f))
+                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = PrintInk.copy(alpha = 0.2f), thickness = 1.5.dp)
+                Text("or", style = PrintType.Caption, color = Muted)
+                Divider(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), color = PrintInk.copy(alpha = 0.2f), thickness = 1.5.dp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -355,8 +339,8 @@ fun LoginScreen(
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = "Register",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = IndigoStart,
+                    style = PrintType.Label.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                    color = PrintInk,
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .clickable(
@@ -376,7 +360,6 @@ fun LoginScreen(
             Spacer(Modifier.height(24.dp))
         }
 
-        // Dialogs
         if (showForgotPasswordDialog) {
             ForgotPasswordDialog(
                 initialEmail = email,
@@ -466,7 +449,7 @@ fun ForgotPasswordDialog(
                         placeholder = "",
                         keyboardType = KeyboardType.Email,
                         leadingIcon = {
-                            Icon(Icons.Outlined.Email, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Email, null, tint = PrintInk, modifier = Modifier.size(20.dp))
                         }
                     )
 
@@ -476,7 +459,7 @@ fun ForgotPasswordDialog(
                         text = "Send Reset Code",
                         isLoading = isLoading,
                         enabled = !isLoading,
-                        accentColor = CoralStart,
+                        accentColor = PrintInk,
                         onClick = { onRequestCode(emailInput.trim()) }
                     )
                 } else {
@@ -487,7 +470,7 @@ fun ForgotPasswordDialog(
                         placeholder = "123456",
                         keyboardType = KeyboardType.Number,
                         leadingIcon = {
-                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(20.dp))
                         }
                     )
 
@@ -499,7 +482,7 @@ fun ForgotPasswordDialog(
                         keyboardType = KeyboardType.Password,
                         visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         leadingIcon = {
-                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(20.dp))
                         }
                     )
 
@@ -511,7 +494,7 @@ fun ForgotPasswordDialog(
                         keyboardType = KeyboardType.Password,
                         visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         leadingIcon = {
-                            Icon(Icons.Outlined.Lock, null, tint = CoralStart, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(20.dp))
                         }
                     )
 
@@ -521,7 +504,7 @@ fun ForgotPasswordDialog(
                         text = "Reset Password",
                         isLoading = isLoading,
                         enabled = !isLoading,
-                        accentColor = CoralStart,
+                        accentColor = PrintInk,
                         onClick = { onResetPassword(emailInput.trim(), otpInput.trim(), newPassword, confirmPassword) }
                     )
                 }
@@ -584,7 +567,7 @@ fun VerifyEmailDialog(
                     placeholder = "123456",
                     keyboardType = KeyboardType.Number,
                     leadingIcon = {
-                        Icon(Icons.Outlined.Lock, null, tint = MintGreen, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(20.dp))
                     }
                 )
 
@@ -594,7 +577,7 @@ fun VerifyEmailDialog(
                     text = "Verify & Sign In",
                     isLoading = isLoading,
                     enabled = !isLoading,
-                    accentColor = MintGreen,
+                    accentColor = PrintInk,
                     onClick = { onVerify(otpInput.trim()) }
                 )
 
@@ -609,15 +592,15 @@ fun VerifyEmailDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isLoading) {
-                        CollabSpinner(modifier = Modifier.size(16.dp), color = IndigoStart, strokeWidth = 2.dp)
+                        CollabSpinner(modifier = Modifier.size(16.dp), color = PrintInk, strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Refresh, null, tint = PrintInk, modifier = Modifier.size(16.dp))
                     }
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Resend Code",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = IndigoStart
+                        color = PrintInk
                     )
                 }
 
@@ -637,117 +620,43 @@ fun VerifyEmailDialog(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SHARED SKEUOMORPHIC COMPONENTS (used by Login + Register)
-// ─────────────────────────────────────────────────────────────────
-
-/** Raised circular brand mark with letter and dual shadow */
 @Composable
-internal fun SkeuoBrandMark(letter: String, accentColor: Color) {
-    Box(
-        modifier = Modifier
-            .size(84.dp)
-            .drawWithCache {
-                val r = size.minDimension / 2f
-                onDrawBehind {
-                // 1. Soft deep ambient drop shadow underneath
-                drawCircle(
-                    color  = Color(0xFF2C201A).copy(alpha = 0.12f),
-                    radius = r,
-                    center = Offset(center.x + 3.dp.toPx(), center.y + 6.dp.toPx())
-                )
-                // 2. Contact drop shadow
-                drawCircle(
-                    color  = Color(0xFF2C201A).copy(alpha = 0.15f),
-                    radius = r,
-                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 3.dp.toPx())
-                )
-                // 3. Top-left specular halo
-                drawCircle(
-                    color  = Color.White.copy(alpha = 0.95f),
-                    radius = r,
-                    center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                )
-                // 4. Medallion disk body
-                drawCircle(
-                    color = SurfaceRaised,
-                    radius = r
-                )
-                // 5. Specular rim highlight hugging top edge
-                drawCircle(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.85f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = size.height * 0.6f
-                    ),
-                    radius = r - 0.5.dp.toPx(),
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                }
-            }
-            .clip(CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        // Accent sphere inside
+internal fun AuthBackdrop() {
+    val phase = rememberBlobPhase(9000)
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .drawWithCache {
-                    val r = size.minDimension / 2f
-                    onDrawBehind {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(accentColor, accentColor.copy(alpha = 0.75f)),
-                            center = Offset(center.x - 6.dp.toPx(), center.y - 6.dp.toPx()),
-                            radius = r
-                        )
-                    )
-                    // Specular spot reflection
-                    drawCircle(
-                        color  = Color.White.copy(alpha = 0.40f),
-                        radius = 8.dp.toPx(),
-                        center = Offset(center.x - 10.dp.toPx(), center.y - 10.dp.toPx())
-                    )
-                    }
-                }
-                .clip(CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text  = letter,
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
-            )
-        }
-    }
-}
-
-/** Raised card wrapping the form fields using the centralized skeuoFloatingCard modifier */
-@Composable
-internal fun SkeuoFormCard(content: @Composable ColumnScope.() -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .skeuoFloatingCard(cornerRadius = 24.dp, surfaceColor = SurfaceRaised)
-    ) {
-        Column(
+                .align(Alignment.TopEnd)
+                .offset(x = 70.dp, y = (-50).dp)
+                .size(230.dp)
+                .graphicsLayer { alpha = 0.9f }
+                .printSurface(shape = BlobShape(seed = 3, wobble = 0.12f), fill = PrintLeaf, shadow = null)
+        )
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            content  = content
+                .align(Alignment.TopEnd)
+                .offset(x = (-40).dp, y = 120.dp)
+                .size(70.dp)
+                .graphicsLayer { rotationZ = phase() * 40f }
+                .printSurface(shape = BlobShape(seed = 8, wobble = 0.18f), fill = PrintCoral, shadow = null)
+        )
+        PrintStar(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-120).dp, y = 60.dp)
+                .size(22.dp),
+            color = PrintInk,
+            twinkle = true
+        )
+        HalftonePatch(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-20).dp, y = 10.dp)
+                .size(160.dp)
         )
     }
 }
 
-/**
- * The auth pages stay put while the keyboard is closed; while it is open the form may scroll so every
- * field above the keyboard can be reached, and it settles back to the top once the keyboard closes.
- * Returns whether user scrolling is currently allowed.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun rememberKeyboardOnlyScroll(scrollState: androidx.compose.foundation.ScrollState): Boolean {
@@ -755,10 +664,9 @@ internal fun rememberKeyboardOnlyScroll(scrollState: androidx.compose.foundation
     LaunchedEffect(imeVisible) {
         if (!imeVisible) scrollState.animateScrollTo(0)
     }
-    return imeVisible
+    return imeVisible || scrollState.maxValue > 0
 }
 
-/** Inset text field delegating to centralized SkeuoTextField */
 @Composable
 internal fun SkeuoTextField(
     value               : String,
@@ -790,7 +698,6 @@ internal fun SkeuoTextField(
     )
 }
 
-/** Skeuomorphic primary CTA button — Neumorphic pill shape with accent text */
 @Composable
 internal fun SkeuoPrimaryButton(
     text       : String,
@@ -799,62 +706,25 @@ internal fun SkeuoPrimaryButton(
     accentColor: Color,
     onClick    : () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
     val haptics = LocalHapticFeedback.current
-
-    LaunchedEffect(isPressed) {
-        if (isPressed) {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
-    }
-
-    val scale by animateFloatAsState(
-        targetValue   = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label         = "btnScale"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoRaised(cornerRadius = 28.dp, elevation = if (isPressed) 2.dp else 8.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFF7F1EA),
-                        Color(0xFFEDE4D8),
-                        Color(0xFFE5DAD0)
-                    )
-                )
-            )
-            .clickable(
-                enabled           = enabled && !isLoading,
-                interactionSource = interactionSource,
-                indication        = null,
-                onClick           = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        PrintButton(
+            text = if (isLoading) "" else text,
+            onClick = {
+                if (!isLoading) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
+            },
+            enabled = enabled || isLoading,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (isLoading) {
             com.collabsphere.app.view.components.CollabSpinner(
-                modifier = Modifier.size(24.dp),
-                color = accentColor
-            )
-        } else {
-            Text(
-                text  = text,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = if (enabled) accentColor else Muted
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(24.dp),
+                color = PrintPaper
             )
         }
     }

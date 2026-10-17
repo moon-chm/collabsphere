@@ -14,6 +14,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -70,6 +71,14 @@ import com.collabsphere.app.ui.theme.MintGreen
 import com.collabsphere.app.ui.theme.Muted
 import com.collabsphere.app.ui.theme.SurfaceRaised
 import com.collabsphere.app.ui.theme.skeuoRaised
+import com.collabsphere.app.ui.theme.PrintCoral
+import com.collabsphere.app.ui.theme.PrintInk
+import com.collabsphere.app.ui.theme.PrintLeaf
+import com.collabsphere.app.ui.theme.PrintPaper
+import com.collabsphere.app.ui.theme.PrintRisoRed
+import com.collabsphere.app.ui.theme.PrintSky
+import com.collabsphere.app.ui.theme.PrintType
+import com.collabsphere.app.ui.theme.printSurface
 import androidx.compose.ui.graphics.Brush
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,10 +104,10 @@ import java.util.concurrent.atomic.AtomicLong
 // ─────────────────────────────────────────────────────────────────
 
 enum class ToastType(val title: String, val accent: Color, val icon: ImageVector) {
-    Success("Success", MintGreen, Icons.Rounded.CheckCircle),
-    Error("Something went wrong", DestructiveStart, Icons.Rounded.ErrorOutline),
-    Warning("Heads up", AmberWarn, Icons.Rounded.WarningAmber),
-    Info("Info", IndigoStart, Icons.Rounded.Info)
+    Success("Success", PrintLeaf, Icons.Rounded.CheckCircle),
+    Error("Something went wrong", PrintRisoRed, Icons.Rounded.ErrorOutline),
+    Warning("Heads up", PrintCoral, Icons.Rounded.WarningAmber),
+    Info("Info", PrintSky, Icons.Rounded.Info)
 }
 
 data class ToastMessage(
@@ -269,17 +278,7 @@ private fun ToastCard(toast: ToastMessage, onDismiss: () -> Unit) {
                     onVerticalDrag = { _, delta -> dragY = (dragY + delta).coerceAtMost(0f) }
                 )
             }
-            .skeuoRaised(cornerRadius = 18.dp, elevation = 8.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFF7F1EA),
-                        Color(0xFFEDE4D8),
-                        Color(0xFFE5DAD0)
-                    )
-                )
-            )
+            .printSurface(shape = RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -287,66 +286,50 @@ private fun ToastCard(toast: ToastMessage, onDismiss: () -> Unit) {
             )
             .semantics { liveRegion = LiveRegionMode.Polite }
     ) {
-        // Left accent stripe
-        Box(
-            Modifier
-                .align(Alignment.CenterStart)
-                .width(5.dp)
-                .fillMaxHeight()
-                .background(accent)
-        )
-
         Column {
             Row(
-                modifier = Modifier.padding(start = 18.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(accent.copy(alpha = 0.14f)),
+                        .size(40.dp)
+                        .printSurface(shape = CircleShape, fill = accent, shadow = null),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(toast.type.icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                    Icon(toast.type.icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = toast.type.title,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        ),
-                        color = accent
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                        color = PrintInk
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = toast.message,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 14.5.sp,
-                            lineHeight = 20.sp
-                        ),
-                        color = Ink,
+                        style = PrintType.Body.copy(fontSize = 15.sp, lineHeight = 21.sp),
+                        color = PrintInk,
                         maxLines = 4
                     )
                 }
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = Muted, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = PrintInk, modifier = Modifier.size(20.dp))
                 }
             }
             // Time-remaining bar
             Box(
                 Modifier
                     .fillMaxWidth(remaining.value)
-                    .height(3.dp)
-                    .background(accent.copy(alpha = 0.55f))
+                    .height(4.dp)
+                    .background(accent)
             )
         }
     }
@@ -370,17 +353,25 @@ fun InlineStatusBanner(message: String?, modifier: Modifier = Modifier, type: To
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(resolved.accent.copy(alpha = 0.10f))
+                .background(PrintPaper)
+                .border(1.5.dp, PrintInk, RoundedCornerShape(14.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(resolved.icon, contentDescription = null, tint = resolved.accent, modifier = Modifier.size(18.dp))
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .printSurface(shape = CircleShape, fill = resolved.accent, shadow = null, outline = 1.5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(resolved.icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
+            }
             Spacer(Modifier.width(10.dp))
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp, lineHeight = 18.sp),
-                color = Ink
+                style = PrintType.Caption.copy(fontSize = 14.sp, lineHeight = 19.sp),
+                color = PrintInk
             )
         }
     }

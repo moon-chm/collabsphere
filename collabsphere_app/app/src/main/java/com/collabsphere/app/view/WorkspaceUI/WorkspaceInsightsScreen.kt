@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -56,11 +57,12 @@ import com.collabsphere.app.viewmodel.AnalyticsRange
 import com.collabsphere.app.viewmodel.AnalyticsUiState
 import com.collabsphere.app.viewmodel.WorkspaceAnalyticsViewModel
 
-/** One colour per kind of work, used by the share bar, the legend and the breakdown. */
-private val TaskColor = CoralStart
-private val NoteColor = Amber
-private val FileColor = Mint
-private val GitHubColor = IndigoStart
+private val TaskColor = PrintCoral
+private val NoteColor = PrintSky
+private val FileColor = PrintLeaf
+private val GitHubColor = PrintInk
+
+private fun onFill(color: Color): Color = if (color == PrintInk) PrintPaper else PrintInk
 
 @Composable
 fun WorkspaceInsightsScreen(
@@ -75,7 +77,8 @@ fun WorkspaceInsightsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(PrintPaper)
+            .paperGrain()
             .statusBarsPadding()
     ) {
         // ── Header ──
@@ -95,11 +98,7 @@ fun WorkspaceInsightsScreen(
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Insights",
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
+                MisregisteredTitle(text = "Insights", style = PrintType.H2)
                 Text(
                     text = workspaceName,
                     style = MaterialTheme.typography.bodySmall,
@@ -161,19 +160,14 @@ private fun RangeSelector(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
-            .skeuoInset(
-                cornerRadius = 24.dp,
-                depth = 3.dp,
-                symmetric = true,
-                shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow
-            )
-            .padding(5.dp),
+            .skeuoInset(cornerRadius = 24.dp)
+            .padding(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AnalyticsRange.entries.forEach { option ->
             val isSelected = option == selected
             val textColor by animateColorAsState(
-                targetValue = if (isSelected) Color.White else Muted,
+                targetValue = if (isSelected) PrintPaper else PrintInk,
                 animationSpec = tween(200),
                 label = "rangeText"
             )
@@ -183,12 +177,13 @@ private fun RangeSelector(
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(19.dp))
                     .then(
-                        if (isSelected) Modifier.background(Brush.linearGradient(listOf(CoralStart, CoralEnd)))
+                        if (isSelected) Modifier.background(PrintInk)
                         else Modifier
                     )
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+                        indication = null,
+                        role = androidx.compose.ui.semantics.Role.Tab
                     ) { onSelect(option) },
                 contentAlignment = Alignment.Center
             ) {
@@ -211,11 +206,12 @@ private fun InsightsContent(
 ) {
     val me = data.members.firstOrNull { it.userId == currentUserId }
     // Scales every member's bar against the busiest member, so bars compare across the team.
+    val entranceRegistry = rememberEntranceRegistry()
     val maxTotal = data.members.maxOfOrNull { it.total }?.coerceAtLeast(1) ?: 1
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 4.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "totals") { TotalsCard(data.totals, data.hasGitHub, range) }
@@ -243,6 +239,7 @@ private fun InsightsContent(
 
         itemsIndexed(data.members, key = { _, it -> "member-${it.userId}" }) { index, member ->
             MemberCard(
+                modifier = Modifier.printListEntrance(member.userId, index, entranceRegistry),
                 member = member,
                 rank = index + 1,
                 isMe = member.userId == currentUserId,
@@ -280,18 +277,18 @@ private fun TotalsCard(totals: ContributionCounts, hasGitHub: Boolean, range: An
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = if (range == AnalyticsRange.ALL) "Workspace so far" else "Last ${range.label}",
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = Muted
+            text = (if (range == AnalyticsRange.ALL) "Workspace so far" else "Last ${range.label}").uppercase(),
+            style = PrintType.Tiny,
+            color = PrintInk
         )
         val tiles = buildList {
             add(StatTile(Icons.Outlined.CheckCircle, TaskColor, totals.tasksCompleted, "Tasks done"))
-            add(StatTile(Icons.Outlined.CheckCircle, TaskColor.copy(alpha = 0.7f), totals.tasksCreated, "Tasks created"))
+            add(StatTile(Icons.Outlined.CheckCircle, TaskColor, totals.tasksCreated, "Tasks created"))
             add(StatTile(Icons.Outlined.Description, NoteColor, totals.notesWritten, "Notes"))
             add(StatTile(Icons.Outlined.Folder, FileColor, totals.filesUploaded, "Files"))
             if (hasGitHub) {
                 add(StatTile(Icons.Outlined.AccountTree, GitHubColor, totals.commits, "Commits"))
-                add(StatTile(Icons.Outlined.AccountTree, GitHubColor.copy(alpha = 0.7f), totals.pullRequestsMerged, "PRs merged"))
+                add(StatTile(Icons.Outlined.AccountTree, GitHubColor, totals.pullRequestsMerged, "PRs merged"))
             }
         }
         tiles.chunked(2).forEach { row ->
@@ -310,18 +307,18 @@ private fun StatTileView(tile: StatTile, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Background.copy(alpha = 0.55f))
+            .background(PrintPaper)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(tile.color.copy(alpha = 0.14f)),
+                .size(36.dp)
+                .printSurface(shape = CircleShape, fill = tile.color, shadow = null, outline = 1.5.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(tile.icon, contentDescription = null, tint = tile.color, modifier = Modifier.size(18.dp))
+            Icon(tile.icon, contentDescription = null, tint = onFill(tile.color), modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(10.dp))
         Column {
@@ -356,7 +353,7 @@ private fun Legend(showGitHub: Boolean) {
 @Composable
 private fun LegendDot(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color).border(1.dp, PrintInk, CircleShape))
         Spacer(Modifier.width(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = Muted)
     }
@@ -364,6 +361,7 @@ private fun LegendDot(color: Color, label: String) {
 
 @Composable
 private fun MemberCard(
+    modifier: Modifier = Modifier,
     member: MemberContribution,
     rank: Int,
     isMe: Boolean,
@@ -375,7 +373,7 @@ private fun MemberCard(
     val c = member.counts
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .skeuoFloatingCard(cornerRadius = 22.dp)
             .clip(RoundedCornerShape(22.dp))
@@ -400,7 +398,7 @@ private fun MemberCard(
                     )
                     if (isMe) {
                         Spacer(Modifier.width(6.dp))
-                        Chip(text = "You", color = CoralStart)
+                        PrintChip(text = "You", fill = PrintCoral)
                     }
                 }
                 Spacer(Modifier.height(2.dp))
@@ -432,7 +430,7 @@ private fun MemberCard(
             Icon(
                 imageVector = Icons.Outlined.KeyboardArrowDown,
                 contentDescription = if (expanded) "Hide details" else "Show details",
-                tint = Muted,
+                tint = PrintInk,
                 modifier = Modifier
                     .padding(start = 4.dp)
                     .size(20.dp)
@@ -476,7 +474,7 @@ private fun MemberCard(
 private fun ShareBar(counts: ContributionCounts, total: Int, maxTotal: Int, showGitHub: Boolean) {
     val fill by animateFloatAsState(
         targetValue = if (total == 0) 0f else total.toFloat() / maxTotal,
-        animationSpec = tween(450),
+        animationSpec = tween(700, easing = PrintTokens.SpringEasing),
         label = "shareFill"
     )
     val segments = listOfNotNull(
@@ -490,15 +488,16 @@ private fun ShareBar(counts: ContributionCounts, total: Int, maxTotal: Int, show
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(10.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .background(Background)
+            .height(14.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(PrintPaper)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(7.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxHeight()
-                .fillMaxWidth(fill)
-                .clip(RoundedCornerShape(5.dp))
+                .fillMaxWidth(fill.coerceIn(0f, 1f))
+                .clip(RoundedCornerShape(7.dp))
         ) {
             segments.forEach { (color, value) ->
                 Box(
@@ -515,7 +514,7 @@ private fun ShareBar(counts: ContributionCounts, total: Int, maxTotal: Int, show
 @Composable
 private fun BreakdownRow(color: Color, label: String, value: Int, isSnapshot: Boolean = false, suffix: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color).border(1.dp, PrintInk, CircleShape))
         Spacer(Modifier.width(10.dp))
         Text(
             text = label + if (isSnapshot) " (now)" else "",
@@ -541,14 +540,13 @@ private fun MemberAvatar(member: MemberContribution) {
         Text(
             text = member.username.take(1).uppercase(),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Muted
+            color = PrintInk
         )
     }
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(CircleShape)
-            .background(Background),
+            .printSurface(shape = CircleShape, fill = PrintSky, shadow = null, outline = 1.5.dp),
         contentAlignment = Alignment.Center
     ) {
         val url = member.avatarUrl
@@ -588,7 +586,8 @@ private fun LinkGitHubHint() {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(GitHubColor.copy(alpha = 0.08f))
+            .background(PrintPaper)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -32,7 +33,7 @@ fun isStalePending(id: Int, sentAt: Long?, now: Long): Boolean =
 fun PendingMessageLabel(stale: Boolean, onDarkBubble: Boolean, onRetry: () -> Unit) {
     val color = when {
         onDarkBubble -> Color.White
-        stale -> DestructiveStart
+        stale -> PrintRedDark
         else -> Muted
     }
     Row(
@@ -52,7 +53,7 @@ fun PendingMessageLabel(stale: Boolean, onDarkBubble: Boolean, onRetry: () -> Un
         )
         Text(
             text = if (stale) "Not sent · Tap to retry" else "Sending…",
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             color = color
         )
     }

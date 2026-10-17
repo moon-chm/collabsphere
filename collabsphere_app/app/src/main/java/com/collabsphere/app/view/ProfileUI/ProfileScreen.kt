@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.view.components.chatHeaderBar
 import com.collabsphere.app.view.components.CollabSpinner
 import com.collabsphere.app.view.components.SkeuoTextField
 
@@ -343,11 +345,10 @@ fun ProfileScreen(
                 val sourceUri = Uri.fromFile(sourceFile)
                 val destUri = Uri.fromFile(destFile)
 
-                // Coral accent colors matching the app's skeuomorphic theme
                 // uCrop 2.2.11+ is edge-to-edge: the toolbar color also fills the status bar area,
                 // and the separate status-bar color option no longer exists.
-                val toolbarColor = AndroidColor.parseColor("#E8784A")   // CoralStart
-                val activeCtrlColor = AndroidColor.parseColor("#E8784A")
+                val toolbarColor = AndroidColor.parseColor("#1E2A5A")
+                val activeCtrlColor = AndroidColor.parseColor("#F28B6C")
 
                 val cropIntent = UCrop.of(sourceUri, destUri)
                     .withAspectRatio(1f, 1f)        // Force 1:1 for perfect circular avatar
@@ -392,21 +393,7 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawWithCache {
-onDrawBehind {
-                        drawRect(
-                            color = ShadowDark.copy(alpha = 0.12f),
-                            topLeft = Offset(0f, size.height),
-                            size = Size(size.width, 3.dp.toPx())
-                        )
-                        drawRect(color = SurfaceRaised)
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.85f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
-                        )
-                    }
-}
+                    .chatHeaderBar()
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -418,24 +405,7 @@ onDrawBehind {
                         onClick = onBack,
                         modifier = Modifier
                             .size(40.dp)
-                            .drawWithCache {
-onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.90f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = Surface,
-                                    radius = size.minDimension / 2f
-                                )
-                            }
-}
+                            .printSurface(shape = CircleShape, shadowOffset = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -447,8 +417,8 @@ onDrawBehind {
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Profile",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
+                        style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                        color = PrintInk
                     )
                 }
             }
@@ -475,20 +445,7 @@ onDrawBehind {
                     Box(
                         modifier = Modifier
                             .size(100.dp)
-                            .drawWithCache {
-onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.35f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 3.dp.toPx(), center.y + 5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.95f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 2.5.dp.toPx(), center.y - 2.5.dp.toPx())
-                                )
-                            }
-}
+                            .printSurface(shape = CircleShape, fill = PrintPaper, shadowOffset = 3.dp)
                             .clip(CircleShape)
                             .background(
                                 brush = Brush.linearGradient(
@@ -513,17 +470,7 @@ onDrawBehind {
                                 modifier = Modifier
                                     .size(72.dp)
                                     .clip(CircleShape)
-                                    .drawWithCache {
-onDrawBehind {
-                                        drawCircle(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(CoralLight, CoralStart),
-                                                center = Offset(center.x - 7.dp.toPx(), center.y - 7.dp.toPx()),
-                                                radius = size.minDimension / 2f
-                                            )
-                                        )
-                                    }
-},
+                                    .printSurface(shape = CircleShape, fill = PrintCoral, shadow = null, outline = 1.5.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 val initial = userName.trim().take(1).uppercase().ifEmpty { "U" }
@@ -533,7 +480,7 @@ onDrawBehind {
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 32.sp
                                     ),
-                                    color = Color.White
+                                    color = PrintInk
                                 )
                             }
                         }
@@ -580,21 +527,7 @@ onDrawBehind {
                     Box(
                         modifier = Modifier
                             .size(30.dp)
-                            .drawWithCache {
-onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.30f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 1.5.dp.toPx(), center.y + 2.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.90f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx())
-                                )
-                                drawCircle(color = CoralStart)
-                            }
-}
+                            .printSurface(shape = CircleShape, fill = PrintCoral, shadowOffset = 2.dp)
                             .clip(CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -610,7 +543,7 @@ onDrawBehind {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
                             contentDescription = "Change profile picture",
-                            tint = Color.White,
+                            tint = PrintInk,
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -638,40 +571,21 @@ onDrawBehind {
                 ) {
                     Text(
                         text = userName.ifEmpty { "Welcome" },
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onBackground,
+                        style = PrintType.H2,
+                        color = PrintInk,
                         textAlign = TextAlign.Center
                     )
 
                     // Debossed user id pill
                     Box(
                         modifier = Modifier
-                            .drawWithCache {
-onDrawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.15f),
-                                    topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = ShadowLight.copy(alpha = 0.85f),
-                                    topLeft = Offset(-1.dp.toPx(), -1.dp.toPx()),
-                                    size = Size(size.width + 1.dp.toPx(), size.height + 1.dp.toPx()),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = Surface,
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                            }
-}
+                            .clip(RoundedCornerShape(12.dp)).background(PrintPaper).border(1.5.dp, PrintInk, RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = 5.dp)
                     ) {
                         Text(
                             text = "Member ID: #$userId",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = IndigoStart
+                            color = PrintInk
                         )
                     }
 
@@ -693,7 +607,7 @@ onDrawBehind {
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Mint)
+                                .background(PrintLeaf)
                         )
                         Text(
                             text = "Online now",
@@ -717,42 +631,7 @@ onDrawBehind {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.24f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = SurfaceRaised,
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            // Specular hairline highlight hugging rounded contour
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.70f),
-                                        Color.White.copy(alpha = 0.15f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = 24.dp.toPx()
-                                ),
-                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                cornerRadius = CornerRadius(24.dp.toPx()),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                        }
-}
+                        .printSurface(shape = RoundedCornerShape(24.dp))
                         .padding(20.dp)
                 ) {
                     Column(
@@ -775,7 +654,7 @@ onDrawBehind {
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
-                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    tint = PrintInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -793,7 +672,7 @@ onDrawBehind {
                                 Icon(
                                     imageVector = Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = CoralStart.copy(alpha = 0.75f),
+                                    tint = PrintInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -816,14 +695,7 @@ onDrawBehind {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .drawWithCache {
-onDrawBehind {
-                                    drawRoundRect(
-                                        color = Surface,
-                                        cornerRadius = CornerRadius(14.dp.toPx())
-                                    )
-                                }
-}
+                                .clip(RoundedCornerShape(14.dp)).background(PrintPaper).border(1.5.dp, PrintInk, RoundedCornerShape(14.dp))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -835,7 +707,7 @@ onDrawBehind {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
-                                    tint = IndigoStart,
+                                    tint = PrintInk,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
@@ -848,8 +720,8 @@ onDrawBehind {
                                 checked = changePasswordChecked,
                                 onCheckedChange = onChangePasswordCheckedChange,
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = CoralStart,
+                                    checkedThumbColor = PrintInk,
+                                    checkedTrackColor = PrintLeaf,
                                     uncheckedThumbColor = Muted,
                                     uncheckedTrackColor = Surface
                                 )
@@ -872,14 +744,14 @@ onDrawBehind {
                                     imeAction = ImeAction.Next,
                                     visualTransformation = if (showCurrentPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                     leadingIcon = {
-                                        Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Lock, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                                     },
                                     trailingIcon = {
                                         IconButton(onClick = { showCurrentPassword = !showCurrentPassword }) {
                                             Icon(
                                                 imageVector = if (showCurrentPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                                 contentDescription = "Toggle password visibility",
-                                                tint = if (showCurrentPassword) CoralStart else Muted,
+                                                tint = PrintInk,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
@@ -898,14 +770,14 @@ onDrawBehind {
                                     imeAction = ImeAction.Done,
                                     visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
                                     leadingIcon = {
-                                        Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Lock, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                                     },
                                     trailingIcon = {
                                         IconButton(onClick = { showNewPassword = !showNewPassword }) {
                                             Icon(
                                                 imageVector = if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                                 contentDescription = "Toggle password visibility",
-                                                tint = if (showNewPassword) CoralStart else Muted,
+                                                tint = PrintInk,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
@@ -925,23 +797,7 @@ onDrawBehind {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.24f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                        }
-}
+                        .printSurface(shape = RoundedCornerShape(24.dp))
                         .padding(20.dp)
                 ) {
                     Column(
@@ -967,7 +823,7 @@ onDrawBehind {
                                 Icon(
                                     imageVector = Icons.Default.Email,
                                     contentDescription = null,
-                                    tint = IndigoStart,
+                                    tint = PrintInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
@@ -979,14 +835,14 @@ onDrawBehind {
                                 Icon(
                                     imageVector = if (isEmailVerified) Icons.Default.CheckCircle else Icons.Default.Warning,
                                     contentDescription = if (isEmailVerified) "Verified" else "Unverified",
-                                    tint = if (isEmailVerified) Mint else AmberWarn,
+                                    tint = if (isEmailVerified) PrintLeafDark else PrintRedDark,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                             Text(
                                 text = "Change",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = CoralStart,
+                                color = PrintInk,
                                 modifier = Modifier.clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
@@ -1017,7 +873,7 @@ onDrawBehind {
                                     Text(
                                         text = "Verify",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = Mint,
+                                        color = PrintLeafDark,
                                         modifier = Modifier.clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null
@@ -1048,23 +904,7 @@ onDrawBehind {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.24f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                        }
-}
+                        .printSurface(shape = RoundedCornerShape(24.dp))
                         .padding(20.dp)
                 ) {
                     Column(
@@ -1119,7 +959,7 @@ onDrawBehind {
                                     RadioButton(
                                         selected = selected,
                                         onClick = { onProfileVisibilityChange(value) },
-                                        colors = RadioButtonDefaults.colors(selectedColor = CoralStart)
+                                        colors = RadioButtonDefaults.colors(selectedColor = PrintInk)
                                     )
                                     Text(label, style = MaterialTheme.typography.bodyMedium, color = Ink)
                                 }
@@ -1130,7 +970,7 @@ onDrawBehind {
                         Text(
                             text = if (isSavingPrivacy) "Saving..." else "Save privacy settings",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = CoralStart,
+                            color = PrintInk,
                             modifier = Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -1180,52 +1020,7 @@ val isSubmissionReady = userName.isNotBlank() &&
                         .fillMaxWidth()
                         .height(54.dp)
                         .graphicsLayer { scaleX = updateScale; scaleY = updateScale }
-                        .drawWithCache {
-onDrawBehind {
-                            val shadowOffset = if (updatePressed) 2.dp else 5.dp
-                            val shadowAlpha = if (updatePressed) 0.12f else 0.32f
-
-                            drawRoundRect(
-                                color = CoralStart.copy(alpha = shadowAlpha * updateAlpha),
-                                topLeft = Offset(0f, shadowOffset.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = Color.White.copy(alpha = 0.25f),
-                                topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            drawRoundRect(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        CoralStart.copy(alpha = updateAlpha),
-                                        CoralEnd.copy(alpha = updateAlpha)
-                                    ),
-                                    start = Offset(0f, 0f),
-                                    end = Offset(size.width, size.height)
-                                ),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            // Specular hairline highlight hugging rounded contour
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.35f),
-                                        Color.White.copy(alpha = 0.10f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = 16.dp.toPx()
-                                ),
-                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                cornerRadius = CornerRadius(16.dp.toPx()),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                        }
-}
+                        .printSurface(shape = RoundedCornerShape(16.dp), fill = PrintInk, shadow = PrintCoral, shadowOffset = 3.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -1246,7 +1041,7 @@ onDrawBehind {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = PrintPaper,
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
@@ -1255,7 +1050,7 @@ onDrawBehind {
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             ),
-                            color = Color.White
+                            color = PrintPaper
                         )
                     }
                 }
@@ -1267,23 +1062,7 @@ onDrawBehind {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawWithCache {
-onDrawBehind {
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.24f),
-                                topLeft = Offset(5.dp.toPx(), 7.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-3.5.dp.toPx(), -3.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                        }
-}
+                        .printSurface(shape = RoundedCornerShape(24.dp))
                         .padding(20.dp)
                 ) {
                     Column(
@@ -1336,33 +1115,7 @@ onDrawBehind {
                         .fillMaxWidth()
                         .height(52.dp)
                         .graphicsLayer { scaleX = logoutScale; scaleY = logoutScale }
-                        .drawWithCache {
-onDrawBehind {
-                            val shadowOffset = if (logoutPressed) 1.dp else 3.dp
-                            drawRoundRect(
-                                color = ShadowDark.copy(alpha = 0.18f),
-                                topLeft = Offset(0f, shadowOffset.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = ShadowLight.copy(alpha = 0.85f),
-                                topLeft = Offset(-1.5.dp.toPx(), -1.5.dp.toPx()),
-                                size = Size(size.width, size.height),
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = SurfaceRaised,
-                                cornerRadius = CornerRadius(16.dp.toPx())
-                            )
-                            // Destructive subtle border
-                            drawRoundRect(
-                                color = Destructive.copy(alpha = 0.35f),
-                                cornerRadius = CornerRadius(16.dp.toPx()),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2.dp.toPx())
-                            )
-                        }
-}
+                        .clip(RoundedCornerShape(16.dp)).background(PrintPaper).border(1.5.dp, PrintInk, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -1427,7 +1180,7 @@ onDrawBehind {
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Next,
                         leadingIcon = {
-                            Icon(Icons.Default.Email, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Email, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1441,14 +1194,14 @@ onDrawBehind {
                         imeAction = ImeAction.Done,
                         visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Lock, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                         },
                         trailingIcon = {
                             IconButton(onClick = { showPw = !showPw }) {
                                 Icon(
                                     imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = "Toggle password visibility",
-                                    tint = if (showPw) CoralStart else Muted,
+                                    tint = PrintInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -1462,7 +1215,7 @@ onDrawBehind {
                     onClick = onSubmitEmailChange,
                     enabled = newEmailInput.isNotBlank() && emailChangePassword.isNotBlank()
                 ) {
-                    Text("Update email", color = CoralStart, fontWeight = FontWeight.Bold)
+                    Text("Update email", color = PrintInk, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1505,14 +1258,14 @@ onDrawBehind {
                         imeAction = ImeAction.Done,
                         visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, null, tint = DestructiveStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Lock, null, tint = PrintRedDark, modifier = Modifier.size(18.dp))
                         },
                         trailingIcon = {
                             IconButton(onClick = { showPw = !showPw }) {
                                 Icon(
                                     imageVector = if (showPw) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = "Toggle password visibility",
-                                    tint = if (showPw) DestructiveStart else Muted,
+                                    tint = PrintInk,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -1554,8 +1307,8 @@ private fun PrivacyToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = CoralStart,
+                checkedThumbColor = PrintInk,
+                checkedTrackColor = PrintLeaf,
                 uncheckedThumbColor = Muted,
                 uncheckedTrackColor = Surface
             )

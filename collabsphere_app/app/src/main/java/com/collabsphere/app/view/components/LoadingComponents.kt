@@ -70,7 +70,7 @@ import com.collabsphere.app.ui.theme.skeuoRaised
 @Composable
 fun CollabSpinner(
     modifier: Modifier = Modifier,
-    color: Color = CoralStart,
+    color: Color = com.collabsphere.app.ui.theme.PrintInk,
     strokeWidth: Dp = 3.dp,
     trackColor: Color = color.copy(alpha = 0.14f)
 ) {
@@ -117,12 +117,7 @@ fun CollabSpinner(
 
         rotate(rotation) {
             drawArc(
-                brush = Brush.sweepGradient(
-                    0f to color.copy(alpha = 0f),
-                    (sweep / 360f) to color,
-                    1f to color.copy(alpha = 0f),
-                    center = center
-                ),
+                color = color,
                 startAngle = 0f,
                 sweepAngle = sweep,
                 useCenter = false,
@@ -141,7 +136,7 @@ fun CollabSpinner(
 @Composable
 fun CollabLinearLoader(
     modifier: Modifier = Modifier,
-    color: Color = CoralStart,
+    color: Color = com.collabsphere.app.ui.theme.PrintInk,
     trackColor: Color = color.copy(alpha = 0.15f)
 ) {
     val transition = rememberInfiniteTransition(label = "collabLinear")
@@ -165,14 +160,11 @@ fun CollabLinearLoader(
             .drawBehind {
                 val segment = size.width * 0.38f
                 val start = -segment + (size.width + segment) * progress
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(color.copy(alpha = 0f), color, color.copy(alpha = 0f)),
-                        startX = start,
-                        endX = start + segment
-                    ),
+                drawRoundRect(
+                    color = color,
                     topLeft = Offset(start, 0f),
-                    size = Size(segment, size.height)
+                    size = Size(segment, size.height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
                 )
             }
     )
@@ -186,7 +178,7 @@ fun CollabLinearLoader(
 fun LoadingState(
     modifier: Modifier = Modifier,
     message: String? = null,
-    color: Color = CoralStart
+    color: Color = com.collabsphere.app.ui.theme.PrintInk
 ) {
     Column(
         modifier = modifier
@@ -224,7 +216,7 @@ fun LoadingState(
 fun InlineLoadingRow(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = CoralStart,
+    color: Color = com.collabsphere.app.ui.theme.PrintInk,
     textColor: Color = Ink.copy(alpha = 0.75f)
 ) {
     Row(

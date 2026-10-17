@@ -116,14 +116,14 @@ fun DeleteWorkspaceScreen(
             imeAction = ImeAction.Done,
             onImeAction = submit,
             leadingIcon = {
-                Icon(Icons.Outlined.Lock, contentDescription = null, tint = Destructive, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Lock, contentDescription = null, tint = com.collabsphere.app.ui.theme.PrintRedDark, modifier = Modifier.size(20.dp))
             },
             trailingIcon = {
                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                     Icon(
                         imageVector = if (isPasswordVisible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                         contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
-                        tint = Muted,
+                        tint = com.collabsphere.app.ui.theme.PrintInk,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -146,15 +146,15 @@ fun DeleteWorkspaceScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(48.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .clickable(enabled = !isDeletingWorkspace, onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "Keep workspace",
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = Muted
+                style = com.collabsphere.app.ui.theme.PrintType.Label,
+                color = com.collabsphere.app.ui.theme.PrintInk
             )
         }
     }

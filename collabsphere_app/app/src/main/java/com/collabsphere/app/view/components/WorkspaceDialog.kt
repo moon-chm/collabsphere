@@ -58,10 +58,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.collabsphere.app.ui.theme.Ink
+import com.collabsphere.app.ui.theme.BlobShape
 import com.collabsphere.app.ui.theme.Muted
-import com.collabsphere.app.ui.theme.SurfaceRaised
-import com.collabsphere.app.ui.theme.skeuoFloatingCard
+import com.collabsphere.app.ui.theme.PrintCoral
+import com.collabsphere.app.ui.theme.PrintIconButton
+import com.collabsphere.app.ui.theme.PrintInk
+import com.collabsphere.app.ui.theme.PrintPaper
+import com.collabsphere.app.ui.theme.PrintRedDark
+import com.collabsphere.app.ui.theme.PrintTokens
+import com.collabsphere.app.ui.theme.PrintType
+import com.collabsphere.app.ui.theme.isDestructiveColor
+import com.collabsphere.app.ui.theme.printAccentFor
+import com.collabsphere.app.ui.theme.printSurface
+import com.collabsphere.app.ui.theme.rememberPrintPress
+import com.collabsphere.app.ui.theme.rememberPrintReducedMotion
 
 @Composable
 fun WorkspaceDialogCard(
@@ -75,9 +85,11 @@ fun WorkspaceDialogCard(
     successMessage: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val reduced = rememberPrintReducedMotion()
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        entrance.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow))
+        if (reduced) entrance.animateTo(1f, tween(150))
+        else entrance.animateTo(1f, tween(380, easing = PrintTokens.SpringEasing))
     }
 
     Box(
@@ -94,11 +106,13 @@ fun WorkspaceDialogCard(
                 .graphicsLayer {
                     val p = entrance.value
                     alpha = p.coerceIn(0f, 1f)
-                    scaleX = 0.9f + 0.1f * p
-                    scaleY = 0.9f + 0.1f * p
-                    translationY = (1f - p) * 40.dp.toPx()
+                    if (!reduced) {
+                        scaleX = 0.9f + 0.1f * p
+                        scaleY = 0.9f + 0.1f * p
+                        translationY = (1f - p) * 40.dp.toPx()
+                    }
                 }
-                .skeuoFloatingCard(cornerRadius = 28.dp, surfaceColor = SurfaceRaised)
+                .printSurface(shape = RoundedCornerShape(28.dp))
         ) {
             AnimatedContent(
                 targetState = successMessage,
@@ -122,14 +136,14 @@ fun WorkspaceDialogCard(
                         Spacer(Modifier.height(14.dp))
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Ink,
+                            style = PrintType.H2.copy(fontSize = 24.sp, lineHeight = 28.sp),
+                            color = PrintInk,
                             textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = PrintType.Body.copy(fontSize = 15.sp, lineHeight = 22.sp),
                             color = Muted,
                             textAlign = TextAlign.Center
                         )
@@ -140,22 +154,19 @@ fun WorkspaceDialogCard(
             }
 
             if (successMessage == null) {
-                Box(
+                PrintIconButton(
+                    icon = Icons.Default.Close,
+                    contentDescription = "Close",
+                    onClick = onClose,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .clickable(enabled = closeEnabled, onClick = onClose),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Muted.copy(alpha = if (closeEnabled) 0.8f else 0.3f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                        .padding(12.dp),
+                    fill = PrintPaper,
+                    size = 40.dp,
+                    iconSize = 18.dp,
+                    shadow = false,
+                    enabled = closeEnabled
+                )
             }
         }
     }
@@ -167,15 +178,15 @@ private fun WorkspaceDialogBadge(icon: ImageVector, accent: Color) {
     LaunchedEffect(Unit) {
         pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
     }
+    val blob = remember { BlobShape(seed = 17, wobble = 0.14f) }
     Box(
         modifier = Modifier
-            .size(60.dp)
+            .size(64.dp)
             .graphicsLayer { scaleX = pop.value; scaleY = pop.value }
-            .clip(CircleShape)
-            .background(accent.copy(alpha = 0.12f)),
+            .printSurface(shape = blob, fill = printAccentFor(accent), shadow = null),
         contentAlignment = Alignment.Center
     ) {
-        Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(28.dp))
+        Icon(imageVector = icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(28.dp))
     }
 }
 
@@ -200,8 +211,11 @@ private fun WorkspaceSuccessState(message: String, accent: Color) {
                 .size(76.dp)
                 .graphicsLayer { scaleX = ring.value; scaleY = ring.value }
         ) {
-            drawCircle(color = accent.copy(alpha = 0.14f))
-            drawCircle(color = accent, radius = size.minDimension * 0.36f)
+            val fill = printAccentFor(accent)
+            val radius = size.minDimension * 0.42f
+            drawCircle(color = PrintInk, radius = radius, center = Offset(center.x + 4.dp.toPx(), center.y + 4.dp.toPx()))
+            drawCircle(color = fill, radius = radius)
+            drawCircle(color = PrintInk, radius = radius, style = Stroke(2.dp.toPx()))
             val w = size.width
             val h = size.height
             val start = Offset(w * 0.36f, h * 0.51f)
@@ -224,16 +238,16 @@ private fun WorkspaceSuccessState(message: String, accent: Color) {
             if (tick.value > 0f) {
                 drawPath(
                     path = path,
-                    color = Color.White,
-                    style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    color = PrintInk,
+                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 )
             }
         }
         Spacer(Modifier.height(16.dp))
         Text(
             text = message,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Ink,
+            style = PrintType.H3,
+            color = PrintInk,
             textAlign = TextAlign.Center
         )
     }
@@ -250,24 +264,25 @@ fun WorkspaceDialogButton(
     loadingText: String = text
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "workspaceDialogButtonScale"
-    )
-    val fill by animateFloatAsState(
-        targetValue = if (enabled || loading) 1f else 0.45f,
-        animationSpec = tween(220),
-        label = "workspaceDialogButtonFill"
-    )
+    val press = rememberPrintPress(interaction)
+    val active = enabled || loading
+    val destructive = colors.firstOrNull()?.let(::isDestructiveColor) == true
+    val fill = when {
+        !active -> PrintPaper
+        destructive -> PrintRedDark
+        else -> PrintInk
+    }
+    val content = if (active) PrintPaper else PrintInk.copy(alpha = 0.45f)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = fill }
-            .clip(RoundedCornerShape(16.dp))
-            .background(Brush.linearGradient(colors))
+            .height(PrintTokens.ButtonHeight)
+            .printSurface(
+                shape = RoundedCornerShape(percent = 50),
+                fill = fill,
+                shadow = if (active) (if (destructive) PrintInk else PrintCoral) else null,
+                pressProgress = if (active) press else ({ 0f })
+            )
             .clickable(interactionSource = interaction, indication = null, enabled = !loading, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -278,15 +293,53 @@ fun WorkspaceDialogButton(
         ) { isLoading ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 if (isLoading) {
-                    CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                    CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = content)
                     Spacer(Modifier.width(10.dp))
                 }
                 Text(
                     text = if (isLoading) loadingText else text,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
-                    color = Color.White
+                    style = PrintType.Label,
+                    color = content
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun PrintConfirmDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    icon: ImageVector = androidx.compose.material.icons.Icons.Default.Close,
+    destructive: Boolean = true,
+    dismissLabel: String = "Cancel"
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        WorkspaceDialogCard(
+            icon = icon,
+            accent = if (destructive) com.collabsphere.app.ui.theme.PrintRisoRed else com.collabsphere.app.ui.theme.PrintSky,
+            title = title,
+            subtitle = message,
+            onClose = onDismiss
+        ) {
+            WorkspaceDialogButton(
+                text = confirmLabel,
+                colors = listOf(if (destructive) com.collabsphere.app.ui.theme.PrintRedDark else PrintInk),
+                onClick = onConfirm
+            )
+            Spacer(Modifier.height(12.dp))
+            com.collabsphere.app.ui.theme.PrintButton(
+                text = dismissLabel,
+                onClick = onDismiss,
+                primary = false,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

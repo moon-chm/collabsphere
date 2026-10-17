@@ -69,8 +69,8 @@ fun Modifier.shimmerEffect(
 }
 
 private const val SHIMMER_DURATION_MS = 1400L
-private val ShimmerBase = Color(0xFFE2DCD1)
-private val ShimmerHighlight = Color(0xFFF8F5EF)
+private val ShimmerBase = Color(0xFFEEE8DC)
+private val ShimmerHighlight = Color(0xFFFBF5EA)
 
 /** Text-line placeholder. */
 @Composable
@@ -145,7 +145,7 @@ fun UserListSkeleton(modifier: Modifier = Modifier, count: Int = 5, trailing: Bo
                 }
             }
             if (i < count - 1) {
-                androidx.compose.material3.Divider(color = ShadowDark.copy(alpha = 0.05f), thickness = 1.dp)
+                androidx.compose.material3.Divider(color = PrintInk.copy(alpha = 0.12f), thickness = 1.5.dp)
             }
         }
     }
@@ -606,18 +606,8 @@ fun TaskSkeletonList(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .width(300.dp)
                     .fillMaxHeight()
-                    .drawBehind {
-                            drawRoundRect(
-                                color = com.collabsphere.app.ui.theme.ShadowDark.copy(alpha = 0.08f),
-                                topLeft = androidx.compose.ui.geometry.Offset(2.dp.toPx(), 4.dp.toPx()),
-                                size = androidx.compose.ui.geometry.Size(size.width, size.height),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = com.collabsphere.app.ui.theme.SurfaceRaised,
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24.dp.toPx())
-                            )
-                    }
+                    .padding(end = PrintTokens.ShadowOffset, bottom = PrintTokens.ShadowOffset)
+                    .printSurface(shape = RoundedCornerShape(24.dp), fill = PrintPaper)
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

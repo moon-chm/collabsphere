@@ -1,6 +1,8 @@
 package com.collabsphere.app.view.WorkspaceUI
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,9 +102,14 @@ fun WorkspaceSearchScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
-            }
+            SkeuoActionIconButton(
+                onClick = onBack,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                size = 44.dp,
+                iconSize = 22.dp,
+                tint = Ink
+            )
             var isSearchFocused by remember { mutableStateOf(false) }
             Row(
                 modifier = Modifier
@@ -115,7 +122,7 @@ fun WorkspaceSearchScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Search, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
                 BasicTextField(
                     value = query,
                     onValueChange = viewModel::onQueryChange,
@@ -124,16 +131,16 @@ fun WorkspaceSearchScreen(
                         .focusRequester(focusRequester)
                         .onFocusChanged { isSearchFocused = it.isFocused },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                    cursorBrush = SolidColor(CoralStart),
+                    textStyle = PrintType.Body.copy(color = PrintInk),
+                    cursorBrush = SolidColor(PrintInk),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (query.isEmpty()) {
                                 Text(
                                     text = "Search $workspaceName",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Ink.copy(alpha = 0.40f),
+                                    style = PrintType.Body,
+                                    color = Muted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -146,11 +153,12 @@ fun WorkspaceSearchScreen(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Clear search",
-                        tint = Muted,
+                        tint = PrintInk,
                         modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(50))
                             .clickable { viewModel.onQueryChange("") }
+                            .padding(8.dp)
+                            .size(20.dp)
                     )
                 }
             }
@@ -164,21 +172,21 @@ fun WorkspaceSearchScreen(
                 SearchUiState.Idle -> {
                     com.collabsphere.app.view.components.SkeuoEmptyState(
                         icon = Icons.Default.Search,
-                        title = "Search Workspace",
+                        title = "Search this workspace",
                         description = if (query.trim().isEmpty()) "Search messages, DMs, tasks, notes and files in this workspace."
                             else "Type at least ${WorkspaceSearchViewModel.MIN_QUERY_LENGTH} characters.",
                         modifier = Modifier.fillMaxSize()
                     )
                 }
                 SearchUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
+                    CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
                 }
                 is SearchUiState.Error -> {
                     com.collabsphere.app.view.components.SkeuoEmptyState(
                         icon = Icons.Default.Search, // Or warning icon
                         title = "Search failed",
                         description = current.message,
-                        actionLabel = "Try Again",
+                        actionLabel = "Try again",
                         onAction = { viewModel.retry() },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -213,23 +221,23 @@ private fun SearchResultsList(
         modifier = Modifier
             .fillMaxSize()
             .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 48.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         section("Channel messages", "messages", response.messages, { it.id.toString() }) { hit ->
-            ResultRow(Icons.Outlined.Tag, "#${hit.channelName} · ${hit.userName}", hit.content) { onMessageClick(hit) }
+            ResultRow(Icons.Outlined.Tag, "#${hit.channelName} · ${hit.userName}", hit.content, PrintSky) { onMessageClick(hit) }
         }
         section("Direct messages", "dms", response.directMessages, { it.id.toString() }) { hit ->
-            ResultRow(Icons.Outlined.ChatBubbleOutline, hit.partnerName, hit.content) { onDmClick(hit) }
+            ResultRow(Icons.Outlined.ChatBubbleOutline, hit.partnerName, hit.content, PrintCoral) { onDmClick(hit) }
         }
         section("Tasks", "tasks", response.tasks, { it.id.toString() }) { hit ->
-            ResultRow(Icons.Outlined.CheckBox, hit.taskName, taskStatusLabel(hit.status)) { onTaskClick(hit) }
+            ResultRow(Icons.Outlined.CheckBox, hit.taskName, taskStatusLabel(hit.status), PrintLeaf) { onTaskClick(hit) }
         }
         section("Notes", "notes", response.notes, { it.id.toString() }) { hit ->
-            ResultRow(Icons.Outlined.Description, hit.notesName, hit.snippet) { onNoteClick(hit) }
+            ResultRow(Icons.Outlined.Description, hit.notesName, hit.snippet, PrintSky) { onNoteClick(hit) }
         }
         section("Files", "files", response.files, { it.id.toString() }) { hit ->
-            ResultRow(Icons.Outlined.Folder, hit.fileName, hit.mimeType) { onFileClick(hit) }
+            ResultRow(Icons.Outlined.Folder, hit.fileName, hit.mimeType, PrintCoral) { onFileClick(hit) }
         }
     }
 }
@@ -244,40 +252,50 @@ private fun <T> LazyListScope.section(
     if (hits.isEmpty()) return
     item(key = "header_$keyPrefix") {
         Text(
-            text = "$title (${hits.size})",
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-            color = Muted,
-            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+            text = "${title.uppercase()} · ${hits.size}",
+            style = PrintType.Tiny,
+            color = PrintInk,
+            modifier = Modifier.padding(top = 16.dp, bottom = 2.dp)
         )
     }
     items(hits, key = { "${keyPrefix}_${idOf(it)}" }) { row(it) }
 }
 
 @Composable
-private fun ResultRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+private fun ResultRow(icon: ImageVector, title: String, subtitle: String, accent: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    val rowShape = RoundedCornerShape(PrintTokens.RadiusSmall)
+    val tagShape = remember(title) { BlobShape(seed = title.hashCode(), wobble = 0.14f) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .skeuoFloatingCard(cornerRadius = 14.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(rowShape)
+            .background(PrintWhite)
+            .border(1.5.dp, PrintInk, rowShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .printSurface(shape = tagShape, fill = accent, shadow = null, outline = 1.5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = Ink,
+                style = PrintType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                color = PrintInk,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (subtitle.isNotBlank()) {
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = PrintType.Caption,
                     color = Muted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis

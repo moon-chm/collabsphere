@@ -1,5 +1,6 @@
 package com.collabsphere.util
 
+import jakarta.activation.DataHandler
 import jakarta.mail.Authenticator
 import jakarta.mail.Message
 import jakarta.mail.PasswordAuthentication
@@ -9,6 +10,7 @@ import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeBodyPart
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.internet.MimeMultipart
+import jakarta.mail.util.ByteArrayDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -162,10 +164,29 @@ object EmailService {
     /**
      * Sends an email via Google Gmail REST API over HTTPS (Port 443).
      */
-    private fun alternativeContent(htmlBody: String, textBody: String): MimeMultipart =
+    private val logoBytes: ByteArray? by lazy {
+        EmailService::class.java.getResourceAsStream("/email/logo.png")?.use { it.readBytes() }
+    }
+
+    internal fun alternativeContent(htmlBody: String, textBody: String): MimeMultipart =
         MimeMultipart("alternative").apply {
             addBodyPart(MimeBodyPart().apply { setText(textBody, "UTF-8", "plain") })
-            addBodyPart(MimeBodyPart().apply { setText(htmlBody, "UTF-8", "html") })
+            val htmlPart = MimeBodyPart().apply { setText(htmlBody, "UTF-8", "html") }
+            val logo = logoBytes
+            if (logo != null && htmlBody.contains("cid:${EmailTemplates.LOGO_CID}")) {
+                val related = MimeMultipart("related").apply {
+                    addBodyPart(htmlPart)
+                    addBodyPart(MimeBodyPart().apply {
+                        dataHandler = DataHandler(ByteArrayDataSource(logo, "image/png"))
+                        contentID = "<${EmailTemplates.LOGO_CID}>"
+                        disposition = MimeBodyPart.INLINE
+                        fileName = "collabsphere.png"
+                    })
+                }
+                addBodyPart(MimeBodyPart().apply { setContent(related) })
+            } else {
+                addBodyPart(htmlPart)
+            }
         }
 
     private fun sendViaGmailApi(to: String, subject: String, htmlBody: String, textBody: String): Boolean {

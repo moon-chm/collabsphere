@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.view.components.chatHeaderBar
 import com.collabsphere.app.view.components.CollabSpinner
 
 import androidx.compose.foundation.clickable
@@ -52,12 +54,7 @@ fun BlockedUsersScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawWithCache {
-                        onDrawBehind {
-                        drawRect(color = SurfaceRaised)
-                        drawRect(color = Color.White.copy(alpha = 0.85f), topLeft = Offset(0f, 0f), size = Size(size.width, 1.dp.toPx()))
-                        }
-                    }
+                    .chatHeaderBar()
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -78,7 +75,7 @@ fun BlockedUsersScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && blockedUsers.isEmpty() -> {
-                    CollabSpinner(modifier = Modifier.align(Alignment.Center), color = CoralStart)
+                    CollabSpinner(modifier = Modifier.align(Alignment.Center), color = PrintInk)
                 }
                 blockedUsers.isEmpty() -> {
                     Text(
@@ -102,7 +99,7 @@ fun BlockedUsersScreen(
                                     Text(
                                         text = "Unblock",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = Mint,
+                                        color = PrintLeafDark,
                                         modifier = Modifier.clickable { viewModel.onUnblock(user.id) }
                                     )
                                 }

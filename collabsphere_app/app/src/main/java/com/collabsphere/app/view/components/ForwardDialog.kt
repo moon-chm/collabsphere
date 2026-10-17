@@ -89,7 +89,7 @@ fun ForwardDialog(
                     items(channels, key = { "c${it.id}" }) { channel ->
                         ForwardRow(
                             title = "#${channel.channelName}",
-                            leading = { Icon(Icons.Default.Tag, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp)) },
+                            leading = { Icon(Icons.Default.Tag, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp)) },
                             enabled = !sending
                         ) {
                             forward("#${channel.channelName}") {
@@ -117,7 +117,7 @@ fun ForwardDialog(
                                 Text(
                                     text = person.name.take(1).uppercase(),
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = IndigoStart
+                                    color = PrintInk
                                 )
                             },
                             enabled = !sending

@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,7 +99,7 @@ fun StandupDialog(
         ) {
             if (loading) {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp), contentAlignment = Alignment.Center) {
-                    CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = CoralStart)
+                    CollabSpinner(modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp, color = PrintInk)
                 }
                 return@WorkspaceDialogCard
             }

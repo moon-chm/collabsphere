@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -71,22 +72,22 @@ fun PinnedMessagesBanner(
                 .width(3.5.dp)
                 .height(26.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(Brush.verticalGradient(listOf(CoralLight, CoralStart)))
+                .background(PrintCoral)
         )
         Box(
             modifier = Modifier
                 .size(30.dp)
                 .clip(CircleShape)
-                .background(CoralStart.copy(alpha = 0.12f)),
+                .background(PrintCoral.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.PushPin, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (count > 1) "Pinned · $count messages" else "Pinned message",
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = CoralStart
+                color = PrintInk
             )
             Text(
                 text = preview,
@@ -129,7 +130,7 @@ fun PinnedMessagesDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(IndigoStart.copy(alpha = 0.06f))
+                            .background(PrintSky.copy(alpha = 0.35f))
                             .clickable { onSelect(message) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -138,7 +139,7 @@ fun PinnedMessagesDialog(
                             Text(
                                 text = message.userName,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = IndigoStart
+                                color = PrintInk
                             )
                             Text(
                                 text = message.pinnedPreview(),
@@ -155,7 +156,7 @@ fun PinnedMessagesDialog(
                 }
             }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                Text("Close", color = CoralStart, fontWeight = FontWeight.Bold)
+                Text("Close", color = PrintInk, fontWeight = FontWeight.Bold)
             }
         }
     }

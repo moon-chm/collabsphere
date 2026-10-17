@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.UserUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.view.components.chatHeaderBar
 import com.collabsphere.app.view.components.CollabSpinner
 
 import androidx.compose.foundation.background
@@ -70,16 +72,7 @@ fun PublicProfileScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawWithCache {
-                        onDrawBehind {
-                        drawRect(color = SurfaceRaised)
-                        drawRect(
-                            color = Color.White.copy(alpha = 0.85f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, 1.dp.toPx())
-                        )
-                        }
-                    }
+                    .chatHeaderBar()
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -100,7 +93,7 @@ fun PublicProfileScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading && profile == null -> {
-                    CollabSpinner(modifier = Modifier.align(Alignment.Center), color = CoralStart)
+                    CollabSpinner(modifier = Modifier.align(Alignment.Center), color = PrintInk)
                 }
                 notFound -> {
                     Column(
@@ -138,14 +131,13 @@ fun PublicProfileScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(70.dp)
-                                        .clip(CircleShape)
-                                        .background(brush = Brush.linearGradient(listOf(CoralLight, CoralStart))),
+                                        .printSurface(shape = CircleShape, fill = PrintCoral, shadow = null, outline = 1.5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = p.username.trim().take(1).uppercase().ifEmpty { "U" },
                                         style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold, fontSize = 30.sp),
-                                        color = Color.White
+                                        color = PrintInk
                                     )
                                 }
                             }
@@ -174,7 +166,7 @@ fun PublicProfileScreen(
                             Text(
                                 text = "${p.careerTitle} · Level ${p.careerLevel}$badgeSuffix",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                color = CoralStart,
+                                color = PrintInk,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -220,14 +212,7 @@ fun PublicProfileScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp)
-                                .drawWithCache {
-                                    val color = if (isBlocked) Mint else Destructive
-                                    onDrawBehind {
-                                    drawRoundRect(color = ShadowDark.copy(alpha = 0.18f), topLeft = Offset(0f, 3.dp.toPx()), size = Size(size.width, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
-                                    drawRoundRect(color = SurfaceRaised, cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()))
-                                    drawRoundRect(color = color.copy(alpha = 0.35f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2.dp.toPx()))
-                                    }
-                                }
+                                .clip(RoundedCornerShape(16.dp)).background(PrintPaper).border(1.5.dp, PrintInk, RoundedCornerShape(16.dp))
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },

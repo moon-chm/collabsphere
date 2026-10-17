@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.NotificationUI
 
+import com.collabsphere.app.view.components.chatHeaderBar
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -114,18 +115,16 @@ fun NotificationsScreen(
     }
 
     if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            containerColor = SurfaceRaised,
-            title = { Text("Clear all notifications?", fontWeight = FontWeight.Bold, color = Ink) },
-            text = { Text("This permanently removes every notification in your inbox.", color = Muted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmClear = false
-                    viewModel.onClearAll()
-                }) { Text("Clear all", color = Destructive, fontWeight = FontWeight.Bold) }
+        com.collabsphere.app.view.components.PrintConfirmDialog(
+            title = "Clear all notifications?",
+            message = "This permanently removes every notification in your inbox.",
+            confirmLabel = "Clear all",
+            icon = Icons.Default.DoneAll,
+            onConfirm = {
+                confirmClear = false
+                viewModel.onClearAll()
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel", color = Muted) } }
+            onDismiss = { confirmClear = false }
         )
     }
 
@@ -136,7 +135,7 @@ fun NotificationsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(SurfaceRaised)
+                    .chatHeaderBar()
                     .statusBarsPadding()
             ) {
                 Row(
@@ -149,32 +148,40 @@ fun NotificationsScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
                     }
-                    Text(
-                        text = "Notifications",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-                    if (unreadCount > 0) {
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .background(CoralStart)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = if (unreadCount > 99) "99+" else unreadCount.toString(),
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Notifications",
+                            style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                            color = PrintInk,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (unreadCount > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(PrintCoral)
+                                    .border(1.5.dp, PrintInk, RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = PrintInk
+                                )
+                            }
                         }
                     }
-                    Spacer(Modifier.weight(1f))
                     IconButton(onClick = { viewModel.onMarkAllRead() }, enabled = unreadCount > 0) {
                         Icon(
                             Icons.Default.DoneAll,
                             contentDescription = "Mark all as read",
-                            tint = if (unreadCount > 0) CoralStart else Muted.copy(alpha = 0.4f)
+                            tint = if (unreadCount > 0) PrintInk else PrintInk.copy(alpha = 0.4f)
                         )
                     }
                     Box {
@@ -245,11 +252,11 @@ fun NotificationsScreen(
                             stickyHeader(key = "header_${section.title}") {
                                 Text(
                                     text = section.title,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Muted,
+                                    style = PrintType.Tiny,
+                                    color = PrintInk,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.background)
+                                        .background(PrintPaper)
                                         .padding(start = 4.dp, top = 12.dp, bottom = 6.dp)
                                 )
                             }
@@ -281,7 +288,7 @@ fun NotificationsScreen(
                         if (isLoadingMore) {
                             item(key = "loading_more") {
                                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                    com.collabsphere.app.view.components.CollabSpinner(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = CoralStart)
+                                    com.collabsphere.app.view.components.CollabSpinner(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = PrintInk)
                                 }
                             }
                         }
@@ -294,34 +301,35 @@ fun NotificationsScreen(
 
 @Composable
 private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
-    val background by animateColorAsState(if (selected) CoralStart else Color.Transparent, label = "filterBg")
+    val background by animateColorAsState(if (selected) PrintInk else PrintWhite, label = "filterBg")
     val shape = RoundedCornerShape(50)
     Row(
         modifier = Modifier
             .clip(shape)
             .background(background)
-            .border(1.dp, if (selected) CoralStart else Muted.copy(alpha = 0.25f), shape)
+            .border(1.5.dp, PrintInk, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .heightIn(min = 40.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = if (selected) Color.White else Ink
+            color = if (selected) PrintPaper else PrintInk
         )
         if (count > 0) {
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (selected) Color.White.copy(alpha = 0.25f) else CoralStart.copy(alpha = 0.14f))
+                    .background(PrintCoral)
                     .padding(horizontal = 6.dp, vertical = 1.dp)
             ) {
                 Text(
                     text = if (count > 99) "99+" else count.toString(),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                    color = if (selected) Color.White else CoralStart
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
+                    color = PrintInk
                 )
             }
         }
@@ -363,8 +371,8 @@ private fun SwipeableNotification(
         backgroundContent = {
             val direction = state.dismissDirection
             val (color, icon, label, alignment) = when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> SwipeVisual(MintGreen, Icons.Default.DoneAll, "Mark read", Alignment.CenterStart)
-                SwipeToDismissBoxValue.EndToStart -> SwipeVisual(DestructiveStart, Icons.Default.DeleteOutline, "Remove", Alignment.CenterEnd)
+                SwipeToDismissBoxValue.StartToEnd -> SwipeVisual(PrintLeaf, Icons.Default.DoneAll, "Mark read", Alignment.CenterStart)
+                SwipeToDismissBoxValue.EndToStart -> SwipeVisual(PrintCoral, Icons.Default.DeleteOutline, "Remove", Alignment.CenterEnd)
                 SwipeToDismissBoxValue.Settled -> SwipeVisual(Color.Transparent, null, "", Alignment.Center)
             }
             Box(
@@ -372,13 +380,14 @@ private fun SwipeableNotification(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(18.dp))
                     .background(color)
+                    .then(if (icon != null) Modifier.border(1.5.dp, PrintInk, RoundedCornerShape(18.dp)) else Modifier)
                     .padding(horizontal = 20.dp),
                 contentAlignment = alignment
             ) {
                 if (icon != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                        Text(label, color = Color.White, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                        Icon(icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
+                        Text(label, color = PrintInk, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
                     }
                 }
             }
@@ -402,15 +411,14 @@ private fun InboxEmptyState(filter: InboxFilter) {
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(CoralStart.copy(alpha = 0.10f)),
+                .size(80.dp)
+                .printSurface(shape = BlobShape(seed = 4, wobble = 0.14f), fill = PrintSky, shadow = null),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.NotificationsNone, contentDescription = null, tint = CoralStart, modifier = Modifier.size(34.dp))
+            Icon(Icons.Default.NotificationsNone, contentDescription = null, tint = PrintInk, modifier = Modifier.size(34.dp))
         }
         Spacer(Modifier.height(16.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Ink)
+        Text(title, style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 26.sp), color = PrintInk)
         Spacer(Modifier.height(6.dp))
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
@@ -427,11 +435,11 @@ private fun iconFor(type: String): ImageVector = when (type) {
 }
 
 private fun accentFor(type: String): Color = when (type) {
-    "MENTION" -> CoralStart
-    "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE" -> MintGreen
-    "DM", "CHANNEL_MESSAGE" -> IndigoStart
-    "LEVEL_UP", "BADGE_UNLOCKED" -> Color(0xFFE0A526)
-    else -> Color(0xFF5B6270)
+    "MENTION" -> PrintCoral
+    "TASK_ASSIGNED", "TASK_UPDATED", "TASK_DUE" -> PrintLeaf
+    "DM", "CHANNEL_MESSAGE" -> PrintSky
+    "LEVEL_UP", "BADGE_UNLOCKED" -> Color(0xFFF6D365)
+    else -> PrintPaper
 }
 
 @Composable
@@ -453,8 +461,8 @@ private fun NotificationRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(if (unread) SurfaceRaised else Surface)
-            .border(1.dp, if (unread) accent.copy(alpha = 0.22f) else Muted.copy(alpha = 0.10f), RoundedCornerShape(18.dp))
+            .background(if (unread) PrintWhite else PrintPaper)
+            .border(if (unread) 2.dp else 1.5.dp, if (unread) PrintInk else PrintInk.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -468,11 +476,10 @@ private fun NotificationRow(
                     Box(
                         modifier = Modifier
                             .size(42.dp)
-                            .clip(CircleShape)
-                            .background(accent.copy(alpha = 0.14f)),
+                            .printSurface(shape = CircleShape, fill = accent, shadow = null, outline = 1.5.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(iconFor(notification.type), contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                        Icon(iconFor(notification.type), contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
                     }
                 }
                 val avatarUrl = notification.actorAvatarUrl
@@ -492,13 +499,11 @@ private fun NotificationRow(
                             .align(Alignment.BottomEnd)
                             .size(20.dp)
                             .clip(CircleShape)
-                            .background(SurfaceRaised)
-                            .padding(2.dp)
-                            .clip(CircleShape)
-                            .background(accent),
+                            .background(accent)
+                            .border(1.5.dp, PrintInk, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(iconFor(notification.type), contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                        Icon(iconFor(notification.type), contentDescription = null, tint = PrintInk, modifier = Modifier.size(12.dp))
                     }
                 }
             }
@@ -509,8 +514,8 @@ private fun NotificationRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = notification.title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium),
-                        color = Ink,
+                        style = PrintType.Body.copy(fontSize = 15.sp, fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium),
+                        color = PrintInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -519,11 +524,11 @@ private fun NotificationRow(
                     Text(
                         text = NotificationInbox.relativeTime(notification.createdAt, now),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal),
-                        color = if (unread) accent else Muted
+                        color = if (unread) PrintInk else Muted
                     )
                     if (unread) {
                         Spacer(Modifier.width(6.dp))
-                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(accent))
+                        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(PrintCoral).border(1.5.dp, PrintInk, CircleShape))
                     }
                 }
                 if (notification.body.isNotBlank()) {
@@ -531,7 +536,7 @@ private fun NotificationRow(
                     Text(
                         text = notification.body,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (unread) Ink.copy(alpha = 0.8f) else Muted,
+                        color = if (unread) PrintInk else Muted,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -550,34 +555,36 @@ private fun NotificationRow(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MintGreen)
+                                .clip(RoundedCornerShape(50))
+                                .background(PrintLeaf)
+                                .border(1.5.dp, PrintInk, RoundedCornerShape(50))
                                 .clickable(enabled = !isInvitationActionPending) {
                                     onAcceptInvitation?.invoke(notification.referenceId, notification.id)
                                 }
-                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = if (isInvitationActionPending) "Working…" else "Accept",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
+                                color = PrintInk
                             )
                         }
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, Muted.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(50))
+                                .background(PrintWhite)
+                                .border(1.5.dp, PrintInk, RoundedCornerShape(50))
                                 .clickable(enabled = !isInvitationActionPending) {
                                     onDeclineInvitation?.invoke(notification.referenceId, notification.id)
                                 }
-                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = if (isInvitationActionPending) "Working…" else "Decline",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = Muted
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = PrintInk
                             )
                         }
                     }

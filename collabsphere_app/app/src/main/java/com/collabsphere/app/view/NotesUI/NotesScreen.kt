@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -79,7 +80,7 @@ fun NotesScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(PrintPaper)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Row
@@ -90,49 +91,19 @@ fun NotesScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Notes",
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Notes count pill
-                    Box(
-                        modifier = Modifier
-                            .drawWithCache {
-                                onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.12f),
-                                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        color = SurfaceRaised,
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                }
-                            }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "${notes?.size ?: "…"} notes",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = Muted
-                        )
-                    }
-
-                    // Tactile Header Action Button
-                    SkeuoHeaderActionButton(
-                        text = "New Note",
-                        icon = Icons.Default.Add,
-                        onClick = { showCreateDialog = true }
-                    )
+                    MisregisteredTitle(text = "Notes", style = PrintType.H2)
+                    PrintChip(text = "${notes?.size ?: "…"} notes", fill = PrintSky)
                 }
+                Spacer(Modifier.width(12.dp))
+                SkeuoHeaderActionButton(
+                    text = "New note",
+                    icon = Icons.Default.Add,
+                    onClick = { showCreateDialog = true }
+                )
             }
 
             androidx.compose.animation.Crossfade(
@@ -147,8 +118,8 @@ fun NotesScreen(
                     state.isEmpty() -> {
                         com.collabsphere.app.view.components.SkeuoEmptyState(
                             icon = Icons.Default.Description,
-                            title = "No notes found",
-                            description = "Tap 'Add note' below to jot down quick thoughts, project summaries, and shared documentation.",
+                            title = "No notes yet",
+                            description = "Tap “New note” to jot down ideas, meeting notes and shared docs.",
                             actionLabel = null,
                             onAction = {},
                             modifier = Modifier.fillMaxSize()
@@ -156,26 +127,29 @@ fun NotesScreen(
                     }
                     else -> {
                         val listState = rememberLazyListState()
+                        val entranceRegistry = rememberEntranceRegistry()
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .fadingScrollEdges(listState = listState, top = 20.dp, bottom = 48.dp),
                             contentPadding = PaddingValues(
-                                start = 18.dp,
-                                end = 18.dp,
+                                start = 20.dp,
+                                end = 20.dp,
                                 top = 6.dp,
                                 bottom = 96.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(state, key = { it.id }) { note ->
+                            itemsIndexed(state, key = { _, it -> it.id }) { index, note ->
                                 SkeuoNotesItem(
                                     notes = note,
                                     deleteNote = { noteToDelete = note },
                                     updateNote = { noteToEdit = note },
                                     togglePin = { viewModel.togglePin(note) },
-                                    modifier = Modifier.animateItem()
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .printListEntrance(note.id, index, entranceRegistry)
                                 )
                             }
                         }
@@ -241,19 +215,13 @@ fun SkeuoNotesItem(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "notesScale"
-    )
+    val press = rememberPrintPress(interactionSource)
+    val tagShape = remember(notes.id) { BlobShape(seed = notes.id, wobble = 0.14f) }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoFloatingCard(cornerRadius = 18.dp, isPressed = isPressed)
-            .clip(RoundedCornerShape(18.dp))
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), pressProgress = press)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -272,11 +240,16 @@ fun SkeuoNotesItem(
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Note Icon in debossed squircle well
-                SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .printSurface(shape = tagShape, fill = if (notes.isPinned) PrintCoral else PrintSky, shadow = null),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = Icons.Default.StickyNote2,
                         contentDescription = null,
-                        tint = Color(0xFF2C221E),
+                        tint = PrintInk,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -284,11 +257,8 @@ fun SkeuoNotesItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = notes.notesName,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.5.sp
-                        ),
-                        color = Color(0xFF1F1A17),
+                        style = PrintType.H3,
+                        color = PrintInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -296,12 +266,9 @@ fun SkeuoNotesItem(
                         Spacer(modifier = Modifier.height(2.dp))
                         MarkdownText(
                             text = notes.description,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.5.sp,
-                                lineHeight = 18.sp
-                            ),
-                            color = Color(0xFF6E635C),
-                            linkColor = IndigoStart,
+                            style = PrintType.Caption,
+                            color = Muted,
+                            linkColor = PrintInk,
                             maxLines = 1
                         )
                     }
@@ -316,31 +283,28 @@ fun SkeuoNotesItem(
                     onClick = togglePin,
                     icon = Icons.Default.PushPin,
                     contentDescription = if (notes.isPinned) "Unpin note" else "Pin note",
-                    tint = if (notes.isPinned) CoralStart else Muted,
-                    size = 32.dp,
-                    iconSize = 16.dp
+                    tint = PrintInk,
+                    fill = if (notes.isPinned) PrintCoral else PrintWhite,
+                    size = 36.dp,
+                    iconSize = 18.dp
                 )
-
-                Spacer(modifier = Modifier.width(6.dp))
 
                 SkeuoActionIconButton(
                     onClick = updateNote,
                     icon = Icons.Default.Edit,
                     contentDescription = "Edit note",
-                    tint = IndigoStart,
-                    size = 32.dp,
-                    iconSize = 16.dp
+                    tint = PrintInk,
+                    size = 36.dp,
+                    iconSize = 18.dp
                 )
-
-                Spacer(modifier = Modifier.width(6.dp))
 
                 SkeuoActionIconButton(
                     onClick = deleteNote,
                     icon = Icons.Default.DeleteOutline,
                     contentDescription = "Delete note",
                     tint = DestructiveStart,
-                    size = 32.dp,
-                    iconSize = 16.dp
+                    size = 36.dp,
+                    iconSize = 18.dp
                 )
             }
         }
@@ -366,19 +330,11 @@ fun CreateNotesBottomSheet(
             viewModel.clearInputs()
         },
         sheetState = sheetState,
-        containerColor = SurfaceRaised,
-        scrimColor = Color.Black.copy(alpha = 0.45f),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 12.dp, bottom = 8.dp)
-                    .width(36.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Muted.copy(alpha = 0.4f))
-            )
-        },
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        containerColor = PrintWhite,
+        scrimColor = PrintInk.copy(alpha = 0.45f),
+        dragHandle = { PrintSheetHandle() },
+        shape = PrintSheetShape,
+        modifier = Modifier.printSheetOutline()
     ) {
         Column(
             modifier = Modifier
@@ -402,28 +358,23 @@ fun CreateNotesBottomSheet(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(CoralStart, CoralEnd)
-                                )
-                            ),
+                            .size(48.dp)
+                            .printSurface(shape = BlobShape(seed = 9, wobble = 0.14f), fill = PrintSky, shadow = null),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Description,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
 
                     Column {
                         Text(
                             text = if (isEditMode) "Edit note" else "New note",
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Ink
+                            style = PrintType.H2.copy(fontSize = 24.sp, lineHeight = 28.sp),
+                            color = PrintInk
                         )
                         Text(
                             text = if (isEditMode) "Update note contents" else "Capture ideas, minutes, or documentation",
@@ -433,34 +384,26 @@ fun CreateNotesBottomSheet(
                     }
                 }
 
-                IconButton(
+                PrintIconButton(
+                    icon = Icons.Default.Close,
+                    contentDescription = "Close",
                     onClick = {
                         onDismiss()
                         viewModel.clearInputs()
                     },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Surface)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Muted,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    fill = PrintPaper,
+                    size = 40.dp,
+                    iconSize = 18.dp,
+                    shadow = false
+                )
             }
 
             // SECTION: NOTE DETAILS
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "NOTE DETAILS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    ),
-                    color = Muted
+                    style = PrintType.Tiny,
+                    color = PrintInk
                 )
 
                 com.collabsphere.app.view.components.SkeuoTextField(
@@ -472,8 +415,8 @@ fun CreateNotesBottomSheet(
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = null,
-                            tint = CoralStart.copy(alpha = 0.75f),
-                            modifier = Modifier.size(18.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 )
@@ -484,7 +427,7 @@ fun CreateNotesBottomSheet(
                     value = description,
                     onValueChange = { viewModel.onNotesDescChange(it) },
                     label = "Content",
-                    placeholder = "Write your note here (Markdown supported)...",
+                    placeholder = "Write your note here (Markdown works)",
                     imeAction = ImeAction.Default,
                     singleLine = false,
                     minLines = 5,
@@ -494,80 +437,27 @@ fun CreateNotesBottomSheet(
 
             Spacer(Modifier.height(4.dp))
 
-            // Action Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Surface)
-                        .clickable {
-                            onDismiss()
-                            viewModel.clearInputs()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Cancel",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = Muted
-                    )
+            val canSubmit = name.trim().isNotEmpty()
+            com.collabsphere.app.view.components.WorkspaceDialogButton(
+                text = if (isEditMode) "Save note" else "Create note",
+                colors = listOf(PrintInk),
+                enabled = canSubmit,
+                onClick = {
+                    if (canSubmit) {
+                        if (isEditMode) onConfirmUpdate() else viewModel.createNote()
+                        onDismiss()
+                    }
                 }
-
-                val canSubmit = name.trim().isNotEmpty()
-                val submitAlpha = if (canSubmit) 1f else 0.65f
-                Box(
-                    modifier = Modifier
-                        .weight(1.3f)
-                        .height(48.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                                drawRoundRect(
-                                    color = CoralStart.copy(alpha = 0.28f * submitAlpha),
-                                    topLeft = Offset(0f, 3.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            CoralStart.copy(alpha = submitAlpha),
-                                            CoralEnd.copy(alpha = submitAlpha)
-                                        ),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                            }
-                        }
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(enabled = canSubmit) {
-                            if (canSubmit) {
-                                if (isEditMode) {
-                                    onConfirmUpdate()
-                                } else {
-                                    viewModel.createNote()
-                                }
-                                onDismiss()
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isEditMode) "Save Note" else "Create Note",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = Color.White.copy(alpha = if (canSubmit) 1f else 0.85f)
-                    )
-                }
-            }
+            )
+            PrintButton(
+                text = "Cancel",
+                onClick = {
+                    onDismiss()
+                    viewModel.clearInputs()
+                },
+                primary = false,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -594,115 +484,12 @@ fun DeleteNoteConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawWithCache {
-                    onDrawBehind {
-                    drawRoundRect(
-                        color = ShadowDark.copy(alpha = 0.35f),
-                        topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = ShadowLight.copy(alpha = 0.90f),
-                        topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = SurfaceRaised,
-                        cornerRadius = CornerRadius(24.dp.toPx())
-                    )
-                                    }
-                }
-                .padding(24.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(Destructive.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.WarningAmber,
-                        contentDescription = null,
-                        tint = Destructive,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Text(
-                    text = "Delete note",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink
-                )
-
-                Text(
-                    text = "Are you sure you want to delete '$noteName'? This action cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Muted,
-                    textAlign = TextAlign.Center
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Surface)
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, color = Muted)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRoundRect(
-                                    color = Destructive.copy(alpha = 0.3f),
-                                    topLeft = Offset(0f, 2.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(Destructive, Color(0xFFB52E2E)),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(12.dp.toPx())
-                                )
-                                                            }
-                            }
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = onConfirm),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Delete",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-        }
-    }
+    com.collabsphere.app.view.components.PrintConfirmDialog(
+        title = "Delete “$noteName”?",
+        message = "This note will be removed for everyone in the workspace.",
+        confirmLabel = "Delete note",
+        icon = Icons.Default.DeleteOutline,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss
+    )
 }

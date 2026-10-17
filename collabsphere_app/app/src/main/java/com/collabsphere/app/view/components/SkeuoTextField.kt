@@ -72,58 +72,18 @@ fun SkeuoTextField(
         animationSpec = tween(durationMillis = 220),
         label = "focusRing"
     )
-    val ringColor = if (isError) DestructiveStart else CoralStart
+    val ringColor = if (isError) PrintRedDark else PrintLeafDark
     val ringAlpha = if (isError) 1f else focusRingAlpha
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (!label.isNullOrBlank()) {
-            Box(
-                modifier = Modifier
-                    .padding(start = if (cornerRadius > 18.dp) 16.dp else 8.dp)
-                    .drawWithCache {
-                        val cr = 20.dp.toPx()
-                        onDrawBehind {
-                            drawRoundRect(
-                                color = Color(0xFF2C201A).copy(alpha = 0.06f),
-                                topLeft = Offset(0f, 1.5.dp.toPx()),
-                                size = size,
-                                cornerRadius = CornerRadius(cr)
-                            )
-                            drawRoundRect(
-                                color = Color(0xFFF0EBE3),
-                                cornerRadius = CornerRadius(cr)
-                            )
-                            drawRoundRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.80f),
-                                        Color.Transparent
-                                    ),
-                                    startY = 0f,
-                                    endY = cr
-                                ),
-                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                cornerRadius = CornerRadius(cr),
-                                style = Stroke(width = 1.dp.toPx())
-                            )
-                        }
-                    }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text  = label,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize   = 10.sp,
-                        letterSpacing = 0.3.sp
-                    ),
-                    color = if (isError) DestructiveStart
-                    else if (isFocused) CoralStart
-                    else Ink.copy(alpha = 0.60f)
-                )
-            }
-            Spacer(Modifier.height(5.dp))
+            Text(
+                text = label,
+                style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                color = if (isError) PrintRedDark else PrintInk,
+                modifier = Modifier.padding(start = if (cornerRadius > 18.dp) 16.dp else 8.dp)
+            )
+            Spacer(Modifier.height(6.dp))
         }
 
         val containerModifier = Modifier
@@ -137,15 +97,16 @@ fun SkeuoTextField(
                 val cr = cornerRadius.toPx()
                 onDrawBehind {
                     if (ringAlpha > 0f) {
+                        val reach = 2.dp.toPx() + 1.5.dp.toPx()
                         drawRoundRect(
-                            color = ringColor.copy(alpha = 0.55f * ringAlpha),
-                            topLeft = Offset(-2.dp.toPx(), -2.dp.toPx()),
+                            color = ringColor.copy(alpha = ringAlpha),
+                            topLeft = Offset(-reach, -reach),
                             size = Size(
-                                size.width + 4.dp.toPx(),
-                                size.height + 4.dp.toPx()
+                                size.width + reach * 2f,
+                                size.height + reach * 2f
                             ),
-                            cornerRadius = CornerRadius(cr + 2.dp.toPx()),
-                            style = Stroke(width = 1.5.dp.toPx())
+                            cornerRadius = CornerRadius(cr + reach),
+                            style = Stroke(width = 3.dp.toPx())
                         )
                     }
                 }
@@ -186,8 +147,8 @@ fun SkeuoTextField(
                     singleLine = singleLine,
                     minLines = minLines,
                     maxLines = maxLines,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                    cursorBrush = SolidColor(CoralStart),
+                    textStyle = PrintType.Body.copy(color = PrintInk),
+                    cursorBrush = SolidColor(PrintInk),
                     visualTransformation = visualTransformation,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboardType,
@@ -202,8 +163,8 @@ fun SkeuoTextField(
                             if (value.isEmpty()) {
                                 Text(
                                     text = placeholder,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Ink.copy(alpha = 0.40f)
+                                    style = PrintType.Body,
+                                    color = Muted
                                 )
                             }
                             innerTextField()
@@ -235,13 +196,13 @@ fun SkeuoTextField(
                 Icon(
                     Icons.Outlined.ErrorOutline,
                     contentDescription = null,
-                    tint = DestructiveStart,
-                    modifier = Modifier.size(13.dp)
+                    tint = PrintRedDark,
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text  = errorMessage ?: "",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-                    color = DestructiveStart
+                    style = PrintType.Caption,
+                    color = PrintRedDark
                 )
             }
         }

@@ -60,7 +60,7 @@ fun MessageInfoDialog(
             sentAt?.let { InfoRow(Icons.Default.Schedule, "Sent", messageInfoTime(it)) }
             editedAt?.let { InfoRow(Icons.Default.Edit, "Edited", messageInfoTime(it)) }
             statusLine?.let { (read, label) ->
-                InfoRow(if (read) Icons.Default.DoneAll else Icons.Default.Done, "Status", label, tint = if (read) Mint else Muted)
+                InfoRow(if (read) Icons.Default.DoneAll else Icons.Default.Done, "Status", label, tint = if (read) PrintLeafDark else Muted)
             }
             if (sections.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.padding(top = 6.dp)) {
@@ -94,7 +94,7 @@ fun MessageInfoDialog(
 }
 
 @Composable
-private fun InfoRow(icon: ImageVector, label: String, value: String, tint: Color = CoralStart) {
+private fun InfoRow(icon: ImageVector, label: String, value: String, tint: Color = PrintInk) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -3,6 +3,8 @@ package com.collabsphere.app.view.WorkspaceUI
 import kotlinx.coroutines.flow.catch
 import com.collabsphere.app.view.components.AppToast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,29 +119,28 @@ fun WorkspaceMembersDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(SurfaceRaised)
+                .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard))
                 .padding(20.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Members",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Ink,
+                    style = PrintType.H2.copy(fontSize = 26.sp, lineHeight = 30.sp),
+                    color = PrintInk,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = onInviteClick) {
-                    Icon(Icons.Default.GroupAdd, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("Invite", color = CoralStart, fontWeight = FontWeight.Bold)
-                }
+                SkeuoHeaderActionButton(
+                    text = "Invite",
+                    icon = Icons.Default.GroupAdd,
+                    onClick = onInviteClick
+                )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             when {
-                loadFailed && members == null -> Text("Couldn't load members.", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                loadFailed && members == null -> Text("Couldn't load members.", color = Muted, style = PrintType.Body)
                 members == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CollabSpinner(color = CoralStart, modifier = Modifier.size(28.dp))
+                    CollabSpinner(modifier = Modifier.size(28.dp))
                 }
                 else -> {
                     val listState = rememberLazyListState()
@@ -148,7 +149,7 @@ fun WorkspaceMembersDialog(
                         modifier = Modifier
                             .heightIn(max = 420.dp)
                             .fadingScrollEdges(listState = listState, top = 16.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                     items(members.orEmpty(), key = { it.userId }) { member ->
                         MemberRow(
@@ -183,25 +184,32 @@ fun WorkspaceMembersDialog(
             }
         }
 
-            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                Text("Close", color = Muted)
-            }
+            Spacer(Modifier.height(12.dp))
+            PrintButton(
+                text = "Close",
+                onClick = onDismiss,
+                primary = false,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 
     confirmation?.let { pending ->
         AlertDialog(
             onDismissRequest = { confirmation = null },
-            title = { Text(pending.title) },
-            text = { Text(pending.message) },
+            containerColor = PrintWhite,
+            shape = RoundedCornerShape(PrintTokens.RadiusCard),
+            modifier = Modifier.border(PrintTokens.Outline, PrintInk, RoundedCornerShape(PrintTokens.RadiusCard)),
+            title = { Text(pending.title, style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 26.sp), color = PrintInk) },
+            text = { Text(pending.message, style = PrintType.Body, color = PrintInk) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmation = null
                     pending.action()
-                }) { Text("Confirm", color = DestructiveStart, fontWeight = FontWeight.Bold) }
+                }) { Text("Confirm", style = PrintType.Label, color = PrintRedDark) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmation = null }) { Text("Cancel", color = Muted) }
+                TextButton(onClick = { confirmation = null }) { Text("Cancel", style = PrintType.Label, color = PrintInk) }
             }
         )
     }
@@ -222,42 +230,36 @@ private fun MemberRow(
     val canRemove = !isSelf && WorkspaceRoles.canRemove(myRole, member.role, isSelf = false)
     val canLeave = isSelf && member.role != WorkspaceRoles.OWNER
     val badgeColor = when (member.role) {
-        WorkspaceRoles.OWNER -> CoralStart
-        WorkspaceRoles.ADMIN -> IndigoStart
-        else -> Mint
+        WorkspaceRoles.OWNER -> PrintCoral
+        WorkspaceRoles.ADMIN -> PrintSky
+        else -> PrintLeaf
     }
+    val rowShape = RoundedCornerShape(PrintTokens.RadiusSmall)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Ink.copy(alpha = 0.03f))
-            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            .clip(rowShape)
+            .background(PrintPaper)
+            .border(1.5.dp, PrintInk, rowShape)
+            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (isSelf) "${member.userName} (you)" else member.userName,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = Ink,
+                style = PrintType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                color = PrintInk,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(member.email, style = MaterialTheme.typography.labelSmall, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(member.email, style = PrintType.Caption, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(
-            text = roleLabel(member.role),
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = badgeColor,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(badgeColor.copy(alpha = 0.12f))
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-        )
+        PrintChip(text = roleLabel(member.role), fill = badgeColor)
         if (canChangeRole || canRemove || canLeave) {
             Box {
                 IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Member actions", tint = Muted)
+                    Icon(Icons.Default.MoreVert, contentDescription = "Member actions", tint = PrintInk)
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     if (canChangeRole && member.role == WorkspaceRoles.MEMBER) {
@@ -268,13 +270,13 @@ private fun MemberRow(
                     }
                     if (canRemove) {
                         DropdownMenuItem(
-                            text = { Text("Remove from workspace", color = DestructiveStart) },
+                            text = { Text("Remove from workspace", color = PrintRedDark) },
                             onClick = { menuOpen = false; onRemove() }
                         )
                     }
                     if (canLeave) {
                         DropdownMenuItem(
-                            text = { Text("Leave workspace", color = DestructiveStart) },
+                            text = { Text("Leave workspace", color = PrintRedDark) },
                             onClick = { menuOpen = false; onLeave() }
                         )
                     }

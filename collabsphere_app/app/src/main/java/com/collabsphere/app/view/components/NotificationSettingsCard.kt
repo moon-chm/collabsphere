@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.components
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -73,7 +75,7 @@ fun NotificationSettingsCard() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Default.Bedtime, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Bedtime, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
             Text(
                 text = "Notifications",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -97,8 +99,8 @@ fun NotificationSettingsCard() {
                 checked = settings.enabled,
                 onCheckedChange = { enabled -> scope.launch { store.update(settings.copy(enabled = enabled)) } },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = CoralStart,
+                    checkedThumbColor = PrintInk,
+                    checkedTrackColor = PrintLeaf,
                     uncheckedThumbColor = Muted,
                     uncheckedTrackColor = Surface
                 )
@@ -136,7 +138,7 @@ private fun TimeChip(label: String, value: String, onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = Muted)
-        Text(value, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = CoralStart)
+        Text(value, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = PrintInk)
     }
 }
 
@@ -157,7 +159,7 @@ private fun QuietHoursTimeDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = { onConfirm(state.hour * 60 + state.minute) }) {
-                Text("Set", color = CoralStart, fontWeight = FontWeight.Bold)
+                Text("Set", color = PrintInk, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.UserUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.view.components.chatHeaderBar
 import com.collabsphere.app.view.components.CollabSpinner
 
 import androidx.compose.foundation.layout.*
@@ -51,12 +53,7 @@ fun UserSearchScreen(
                     .fillMaxWidth()
                     .statusBarsPadding()
                     .height(64.dp)
-                    .drawWithCache {
-                        onDrawBehind {
-                        drawRect(color = SurfaceRaised)
-                        drawRect(color = Color.White.copy(alpha = 0.85f), topLeft = Offset(0f, 0f), size = Size(size.width, 1.dp.toPx()))
-                        }
-                    }
+                    .chatHeaderBar()
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -89,7 +86,7 @@ fun UserSearchScreen(
                     modifier = Modifier.fillMaxSize().padding(start = 18.dp, end = 18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Search, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     BasicTextField(
                         value = query,
@@ -99,7 +96,7 @@ fun UserSearchScreen(
                             .onFocusChanged { isSearchFocused = it.isFocused },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
-                        cursorBrush = SolidColor(CoralStart),
+                        cursorBrush = SolidColor(PrintInk),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Search),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -115,7 +112,7 @@ fun UserSearchScreen(
                         }
                     )
                     if (isSearching) {
-                        CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = CoralStart)
+                        CollabSpinner(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = PrintInk)
                     }
                 }
             }

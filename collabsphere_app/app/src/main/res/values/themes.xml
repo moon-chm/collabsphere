@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.CollabSphere" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.CollabSphere" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/print_paper</item>
+        <item name="android:statusBarColor">@color/print_paper</item>
+        <item name="android:navigationBarColor">@color/print_paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 
     <style name="Theme.UCropCustom" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:fitsSystemWindows">true</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:statusBarColor">#C95E30</item>
+        <item name="android:statusBarColor">@color/print_ink</item>
     </style>
 </resources>

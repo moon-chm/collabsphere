@@ -149,212 +149,56 @@ fun WorkspaceDetailedScreen(
     }
     var memberEmailInput by remember { mutableStateOf("") }
 
-    // Skeuomorphic Add Member Dialog
     if (showAddMemberDialog) {
-        Dialog(onDismissRequest = {
+        val dismissInvite = {
             showAddMemberDialog = false
             memberEmailInput = ""
-        }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .drawWithCache {
-                        onDrawBehind {
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.35f),
-                            topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(24.dp.toPx())
-                        )
-                        drawRoundRect(
-                            color = ShadowLight.copy(alpha = 0.90f),
-                            topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(24.dp.toPx())
-                        )
-                        drawRoundRect(
-                            color = SurfaceRaised,
-                            cornerRadius = CornerRadius(24.dp.toPx())
-                        )
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.75f),
-                                    Color.White.copy(alpha = 0.15f),
-                                    Color.Transparent
-                                ),
-                                startY = 0f,
-                                endY = 24.dp.toPx()
-                            ),
-                            topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                            size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                            cornerRadius = CornerRadius(24.dp.toPx()),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                                            }
-                    }
-                    .padding(24.dp)
+        }
+        Dialog(
+            onDismissRequest = dismissInvite,
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            com.collabsphere.app.view.components.WorkspaceDialogCard(
+                icon = Icons.Default.GroupAdd,
+                accent = CoralStart,
+                title = "Invite a teammate",
+                subtitle = "We'll email them a code to join $workspaceName.",
+                onClose = dismissInvite,
+                closeEnabled = !isSendingInvitation
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Header badge
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(
-                                    color = ShadowDark.copy(alpha = 0.25f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x + 2.dp.toPx(), center.y + 3.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = ShadowLight.copy(alpha = 0.9f),
-                                    radius = size.minDimension / 2f,
-                                    center = Offset(center.x - 1.5.dp.toPx(), center.y - 1.5.dp.toPx())
-                                )
-                                drawCircle(
-                                    color = Surface,
-                                    radius = size.minDimension / 2f
-                                )
-                                                            }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
+                val canAdd = memberEmailInput.trim().isNotEmpty()
+                com.collabsphere.app.view.components.SkeuoTextField(
+                    value = memberEmailInput,
+                    onValueChange = { memberEmailInput = it },
+                    label = "Email address",
+                    placeholder = "colleague@company.com",
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Done,
+                    onImeAction = {
+                        val email = memberEmailInput.trim()
+                        if (email.isNotEmpty() && !isSendingInvitation) onAddMemberSubmit(email)
+                    },
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.GroupAdd,
+                            imageVector = Icons.Default.Email,
                             contentDescription = null,
-                            tint = CoralStart,
-                            modifier = Modifier.size(26.dp)
+                            tint = PrintInk,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    Text(
-                        text = "Invite team member",
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-
-                    Text(
-                        text = "Enter email address to send an invitation to $workspaceName. An invitation code will be emailed.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Muted,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    // Inset debossed email field
-                    com.collabsphere.app.view.components.SkeuoTextField(
-                        value = memberEmailInput,
-                        onValueChange = { memberEmailInput = it },
-                        placeholder = "colleague@company.com",
-                        keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Done,
-                        onImeAction = {
-                            val email = memberEmailInput.trim()
-                            if (email.isNotEmpty()) {
-                                onAddMemberSubmit(email)
-                                showAddMemberDialog = false
-                                memberEmailInput = ""
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Email,
-                                contentDescription = null,
-                                tint = CoralStart.copy(alpha = 0.75f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Cancel button
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.15f),
-                                        topLeft = Offset(0f, 2.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        color = Surface,
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                                                    }
-                                }
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    showAddMemberDialog = false
-                                    memberEmailInput = ""
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Cancel",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Muted
-                            )
-                        }
-
-                        // Add button
-                        val canAdd = memberEmailInput.trim().isNotEmpty()
-                        val addAlpha = if (canAdd) 1f else 0.72f
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = CoralStart.copy(alpha = 0.25f * addAlpha),
-                                        topLeft = Offset(0f, 2.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        brush = Brush.linearGradient(
-                                            colors = listOf(
-                                                CoralStart.copy(alpha = addAlpha),
-                                                CoralEnd.copy(alpha = addAlpha)
-                                            ),
-                                            start = Offset(0f, 0f),
-                                            end = Offset(size.width, size.height)
-                                        ),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                                                    }
-                                }
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = !isSendingInvitation) {
-                                    val email = memberEmailInput.trim()
-                                    if (email.isNotEmpty()) {
-                                        onAddMemberSubmit(email)
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSendingInvitation) {
-                                CollabSpinner(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Text(
-                                    text = "Send Invite",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                        }
+                )
+                Spacer(Modifier.height(20.dp))
+                com.collabsphere.app.view.components.WorkspaceDialogButton(
+                    text = "Send invite",
+                    colors = listOf(PrintInk),
+                    enabled = canAdd,
+                    loading = isSendingInvitation,
+                    loadingText = "Sending invite",
+                    onClick = {
+                        val email = memberEmailInput.trim()
+                        if (email.isNotEmpty()) onAddMemberSubmit(email)
                     }
-                }
+                )
             }
         }
     }
@@ -368,164 +212,93 @@ fun WorkspaceDetailedScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
-                    // Floating Context Pill
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .height(52.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.15f),
-                                        topLeft = Offset(0f, 4.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(26.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        color = SurfaceRaised.copy(alpha = 0.95f),
-                                        cornerRadius = CornerRadius(26.dp.toPx())
-                                    )
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        topLeft = Offset(0f, -1.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(26.dp.toPx()),
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
+                            .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 4.dp)
+                            .height(56.dp)
+                            .printSurface(shape = RoundedCornerShape(percent = 50), shadowOffset = 3.dp)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
+                        SkeuoActionIconButton(
+                            onClick = onBack,
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            size = 40.dp,
+                            iconSize = 20.dp,
+                            tint = Ink
+                        )
+                        Text(
+                            text = workspaceName,
+                            style = PrintType.H3.copy(fontFamily = FrauncesFamily, fontSize = 19.sp),
+                            color = PrintInk,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .weight(1f)
+                                .padding(horizontal = 10.dp)
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Back button
                             SkeuoActionIconButton(
-                                onClick = onBack,
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
+                                onClick = onInsightsClick,
+                                icon = Icons.Outlined.Insights,
+                                contentDescription = "Workspace insights",
                                 size = 36.dp,
                                 iconSize = 18.dp,
                                 tint = Ink
                             )
-
-                            // Workspace Title
-                            Text(
-                                text = workspaceName,
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = Ink,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 12.dp)
+                            SkeuoActionIconButton(
+                                onClick = {
+                                    muteScope.launch {
+                                        muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
+                                            .onSuccess {
+                                                AppToast.show(if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs")
+                                            }
+                                            .onFailure {
+                                                AppToast.error("Couldn't update mute. Check your connection.")
+                                            }
+                                    }
+                                },
+                                icon = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
+                                contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
+                                size = 36.dp,
+                                iconSize = 18.dp,
+                                tint = Ink
                             )
-
-                            // Trailing action icons with consistent spacing
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Insights (contribution analytics)
-                                SkeuoActionIconButton(
-                                    onClick = onInsightsClick,
-                                    icon = Icons.Outlined.Insights,
-                                    contentDescription = "Workspace insights",
-                                    size = 32.dp,
-                                    iconSize = 16.dp,
-                                    tint = IndigoStart
-                                )
-
-                                // Mute / Unmute
-                                SkeuoActionIconButton(
-                                    onClick = {
-                                        muteScope.launch {
-                                            muteRepo.setMuted(workspaceId, null, !isWorkspaceMuted)
-                                                .onSuccess {
-                                                    AppToast.show(if (isWorkspaceMuted) "Workspace channels unmuted" else "Workspace channels muted — you'll still get @mentions and DMs")
-                                                }
-                                                .onFailure {
-                                                    AppToast.error("Couldn't update mute. Check your connection.")
-                                                }
-                                        }
-                                    },
-                                    icon = if (isWorkspaceMuted) Icons.Default.NotificationsOff else Icons.Default.Notifications,
-                                    contentDescription = if (isWorkspaceMuted) "Unmute workspace" else "Mute workspace",
-                                    size = 32.dp,
-                                    iconSize = 16.dp,
-                                    tint = if (isWorkspaceMuted) Muted else IndigoStart
-                                )
-
-                                // Search
-                                SkeuoActionIconButton(
-                                    onClick = onSearchClick,
-                                    icon = Icons.Default.Search,
-                                    contentDescription = "Search workspace",
-                                    size = 32.dp,
-                                    iconSize = 16.dp,
-                                    tint = IndigoStart
-                                )
-
-                                // Members / Add Member
-                                SkeuoActionIconButton(
-                                    onClick = { showMembersDialog = true },
-                                    icon = Icons.Default.GroupAdd,
-                                    contentDescription = "Add Member",
-                                    size = 32.dp,
-                                    iconSize = 16.dp,
-                                    tint = CoralStart
-                                )
-                            }
+                            SkeuoActionIconButton(
+                                onClick = onSearchClick,
+                                icon = Icons.Default.Search,
+                                contentDescription = "Search workspace",
+                                size = 36.dp,
+                                iconSize = 18.dp,
+                                tint = Ink
+                            )
+                            SkeuoActionIconButton(
+                                onClick = { showMembersDialog = true },
+                                icon = Icons.Default.GroupAdd,
+                                contentDescription = "Members",
+                                size = 36.dp,
+                                iconSize = 18.dp,
+                                tint = Ink
+                            )
                         }
                     }
-                // Ultra-frosted Tactile Capsule Dock
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(start = 14.dp, end = 18.dp, top = 8.dp, bottom = 16.dp)
                         .height(68.dp)
-                        .drawWithCache {
-                            onDrawBehind {
-                                val cr = size.height / 2f
-                                // 1. Ambient capsule drop shadow
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.12f),
-                                    topLeft = Offset(0f, 8.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(cr)
-                                )
-                                // 2. Frosted glassmorphic body
-                                drawRoundRect(
-                                    color = SurfaceRaised.copy(alpha = 0.85f),
-                                    cornerRadius = CornerRadius(cr)
-                                )
-                                // 3. Subtle perimeter boundary
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.05f),
-                                    cornerRadius = CornerRadius(cr),
-                                    style = Stroke(width = 1.dp.toPx())
-                                )
-                                // 4. Inner specular highlight
-                                drawRoundRect(
-                                    color = Color.White.copy(alpha = 0.95f),
-                                    topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                    size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                                    cornerRadius = CornerRadius(cr),
-                                    style = Stroke(width = 1.dp.toPx())
-                                )
-                            }
-                        }
-                        .padding(horizontal = 6.dp),
+                        .printSurface(shape = RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SkeuoTabItem(
@@ -632,7 +405,6 @@ fun WorkspaceDetailedScreen(
     }
 }
 
-/** Individual skeuomorphic bottom tab squircle tile matching reference image */
 @Composable
 private fun RowScope.SkeuoTabItem(
     selected: Boolean,
@@ -641,79 +413,58 @@ private fun RowScope.SkeuoTabItem(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val targetScale = if (isPressed) 0.93f else 1.0f
-    val scale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "tabScale"
-    )
-
+    val reduced = rememberPrintReducedMotion()
     val weight by animateFloatAsState(
         targetValue = if (selected) 2.5f else 1f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
+        animationSpec = if (reduced) tween(150) else spring(dampingRatio = 0.75f, stiffness = 320f),
         label = "tabWeight"
     )
-
-    val selectedAccent = CoralStart
-    val unselectedIconColor = Muted
-    
-    val iconColor by animateColorAsState(
-        targetValue = if (selected) Color.White else unselectedIconColor,
+    val fill by animateColorAsState(
+        targetValue = if (selected) PrintLeaf else Color.Transparent,
         animationSpec = tween(180),
-        label = "tabIconColor"
+        label = "tabFill"
     )
-
-    val textColor by animateColorAsState(
-        targetValue = if (selected) Color.White else unselectedIconColor,
+    val outline by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
         animationSpec = tween(180),
-        label = "tabTextColor"
+        label = "tabOutline"
     )
+    val iconPop = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(selected) {
+        if (selected && !reduced) {
+            iconPop.snapTo(0.7f)
+            iconPop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f))
+        }
+    }
 
     Box(
         modifier = Modifier
             .weight(weight)
-            .height(52.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+            .height(50.dp)
             .drawWithCache {
+                val cr = CornerRadius(size.height / 2f)
+                val stroke = 2.dp.toPx()
                 onDrawBehind {
-                    val cr = size.height / 2f
-                    if (selected) {
-                        // Glowing tactile Coral Pill
+                    drawRoundRect(color = fill, cornerRadius = cr)
+                    if (outline > 0f) {
                         drawRoundRect(
-                            brush = Brush.linearGradient(listOf(CoralStart, CoralEnd)),
-                            cornerRadius = CornerRadius(cr)
-                        )
-                        // Specular highlight
-                        drawRoundRect(
-                            color = Color.White.copy(alpha = 0.4f),
-                            topLeft = Offset(0f, 0f),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(cr),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                        // Inner glow/shadow
-                        drawRoundRect(
-                            color = Color.White.copy(alpha = 0.2f),
-                            topLeft = Offset(0f, 1.dp.toPx()),
-                            size = Size(size.width, size.height - 2.dp.toPx()),
-                            cornerRadius = CornerRadius(cr),
-                            style = Stroke(width = 1.dp.toPx())
+                            color = PrintInk.copy(alpha = outline),
+                            topLeft = Offset(stroke / 2f, stroke / 2f),
+                            size = Size(size.width - stroke, size.height - stroke),
+                            cornerRadius = CornerRadius(size.height / 2f - stroke / 2f),
+                            style = Stroke(stroke)
                         )
                     }
                 }
             }
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(percent = 50))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = androidx.compose.ui.semantics.Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -723,18 +474,21 @@ private fun RowScope.SkeuoTabItem(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = iconColor,
-                modifier = Modifier.size(24.dp)
+                tint = PrintInk,
+                modifier = Modifier
+                    .size(24.dp)
+                    .graphicsLayer {
+                        scaleX = iconPop.value
+                        scaleY = iconPop.value
+                    }
             )
             androidx.compose.animation.AnimatedVisibility(visible = selected) {
                 Row {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = textColor,
+                        style = PrintType.Caption.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                        color = PrintInk,
                         maxLines = 1,
                         overflow = TextOverflow.Clip
                     )

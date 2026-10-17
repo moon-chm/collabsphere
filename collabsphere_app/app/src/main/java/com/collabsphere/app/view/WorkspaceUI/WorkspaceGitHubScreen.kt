@@ -209,26 +209,26 @@ private fun GitHubLoadErrorView(onRetry: () -> Unit) {
             imageVector = Icons.Default.Sync,
             contentDescription = "Error",
             modifier = Modifier.size(56.dp),
-            tint = Color(0xFF70625E)
+            tint = Muted
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Could not load GitHub data",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF2C2A28)
+            color = PrintInk
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "Check your connection and try again.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF70625E),
+            color = Muted,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2A28))
+            colors = ButtonDefaults.buttonColors(containerColor = PrintInk)
         ) {
             Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
@@ -249,7 +249,7 @@ private fun OwnerOnlyView() {
             imageVector = Icons.Default.Code,
             contentDescription = "GitHub",
             modifier = Modifier.size(64.dp),
-            tint = Color(0xFF4F423F)
+            tint = PrintInk
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -262,7 +262,7 @@ private fun OwnerOnlyView() {
         Text(
             text = "Only the workspace owner can connect GitHub and link a repository.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF70625E),
+            color = Muted,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
@@ -280,7 +280,7 @@ private fun NotConnectedView(onConnect: () -> Unit) {
             imageVector = Icons.Default.Code,
             contentDescription = "GitHub",
             modifier = Modifier.size(64.dp),
-            tint = Color(0xFF4F423F)
+            tint = PrintInk
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -293,14 +293,14 @@ private fun NotConnectedView(onConnect: () -> Unit) {
         Text(
             text = "Link a repository to this workspace to track commits, PRs, and branch activity directly from CollabSphere.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF70625E),
+            color = Muted,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onConnect,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2A28))
+            colors = ButtonDefaults.buttonColors(containerColor = PrintInk)
         ) {
             Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
@@ -337,7 +337,7 @@ private fun RepoPickerView(
         Text(
             text = "GitHub is connected! Choose which repository to link to this workspace.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF70625E)
+            color = Muted
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -351,13 +351,13 @@ private fun RepoPickerView(
                     Text(
                         text = "No repositories found",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFF70625E)
+                        color = Muted
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Make sure you gave the GitHub App access to at least one repository.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9E8E89),
+                        color = Muted,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -386,7 +386,7 @@ private fun RepoPickerView(
                         Icon(
                             imageVector = if (repo.isPrivate) Icons.Default.Lock else Icons.Default.LockOpen,
                             contentDescription = null,
-                            tint = Color(0xFF70625E),
+                            tint = Muted,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -395,17 +395,17 @@ private fun RepoPickerView(
                                 text = repo.fullName,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 15.sp,
-                                color = Color(0xFF2C2A28)
+                                color = PrintInk
                             )
                             Text(
                                 text = "Branch: ${repo.defaultBranch}",
                                 fontSize = 12.sp,
-                                color = Color(0xFF9E8E89)
+                                color = Muted
                             )
                         }
                         Text(
                             text = "Link",
-                            color = Color(0xFF2C2A28),
+                            color = PrintInk,
                             fontWeight = FontWeight.Medium,
                             fontSize = 14.sp
                         )
@@ -422,7 +422,7 @@ private fun RepoPickerView(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Cancel", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                Text("Cancel", fontSize = 13.sp, color = PrintInk)
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -430,7 +430,7 @@ private fun RepoPickerView(
             onClick = onDisconnect,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
-            Text("Disconnect GitHub Account", color = Color(0xFF9E8E89), fontSize = 13.sp)
+            Text("Disconnect GitHub Account", color = PrintRedDark, fontSize = 13.sp)
         }
     }
 }
@@ -590,7 +590,7 @@ private fun ConnectedView(
                                 Text(
                                     text = contributor.username,
                                     fontSize = 14.sp,
-                                    color = Color(0xFF2C2A28),
+                                    color = PrintInk,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -599,7 +599,7 @@ private fun ConnectedView(
                                     Text(
                                         text = githubName,
                                         fontSize = 12.sp,
-                                        color = Color(0xFF9E8E89),
+                                        color = Muted,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -608,7 +608,7 @@ private fun ConnectedView(
                             Text(
                                 text = "${contributor.commits} commits",
                                 fontSize = 13.sp,
-                                color = Color(0xFF70625E)
+                                color = Muted
                             )
                         }
                     }
@@ -647,7 +647,7 @@ private fun ConnectedView(
                     title = "Recent pull requests",
                     action = {
                         TextButton(onClick = onViewAllPullRequests) {
-                            Text("View all", color = Color(0xFF2C2A28), fontSize = 13.sp)
+                            Text("View all", color = PrintInk, fontSize = 13.sp)
                         }
                     }
                 ) {
@@ -677,7 +677,7 @@ private fun ConnectedView(
                             title = release.name ?: release.tagName,
                             subtitle = "${release.author ?: "Unknown"} · ${if (release.publishedAt != null) relativeTime(release.publishedAt) else "Draft"}",
                             badge = if (release.prerelease) "Pre-release" else if (release.draft) "Draft" else "Release",
-                            badgeColor = if (release.prerelease) Color(0xFFE3B341) else if (release.draft) Color(0xFF6E7781) else Color(0xFF2DA44E),
+                            badgeColor = if (release.prerelease) PrintCoral else if (release.draft) PrintPaper else PrintLeaf,
                             url = release.htmlUrl
                         )
                     }
@@ -694,7 +694,7 @@ private fun ConnectedView(
                             title = "#${issue.number} ${issue.title}",
                             subtitle = "${issue.displayAuthor} · ${relativeTime(issue.createdAt)}",
                             badge = if (issue.state == "open") "Open" else "Closed",
-                            badgeColor = if (issue.state == "open") Color(0xFF2DA44E) else Color(0xFF6F42C1),
+                            badgeColor = if (issue.state == "open") PrintLeaf else PrintSky,
                             url = issue.url
                         )
                     }
@@ -711,7 +711,7 @@ private fun ConnectedView(
                             title = commit.message.ifBlank { commit.sha.take(7) },
                             subtitle = "${commit.displayAuthor} · ${relativeTime(commit.commitDate)}",
                             badge = commit.sha.take(7),
-                            badgeColor = Color(0xFF70625E),
+                            badgeColor = PrintPaper,
                             url = commit.url,
                             ci = commit.ciStatus
                         )
@@ -741,14 +741,14 @@ private fun ConnectedView(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Add Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                        Text("Add Repo", fontSize = 13.sp, color = PrintInk)
                     }
                     OutlinedButton(
                         onClick = onRemoveRepo,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Remove Repo", fontSize = 13.sp, color = Color(0xFF2C2A28))
+                        Text("Remove Repo", fontSize = 13.sp, color = PrintInk)
                     }
                 }
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -794,8 +794,7 @@ private fun ContributorAvatar(contributor: GitHubContributorStats) {
     Box(
         modifier = Modifier
             .size(32.dp)
-            .clip(CircleShape)
-            .background(Color(0xFFEDE8DF)),
+            .printSurface(shape = CircleShape, fill = PrintSky, shadow = null, outline = 1.5.dp),
         contentAlignment = Alignment.Center
     ) {
         val initial: @Composable () -> Unit = {
@@ -803,7 +802,7 @@ private fun ContributorAvatar(contributor: GitHubContributorStats) {
                 text = contributor.username.take(1).uppercase(),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF70625E)
+                color = Muted
             )
         }
         if (avatarUrl != null) {
@@ -846,7 +845,7 @@ private fun NotifyChannelPicker(
                         selectedName != null -> "#$selectedName"
                         else -> "Off"
                     },
-                    color = Color(0xFF2C2A28)
+                    color = PrintInk
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -886,7 +885,7 @@ private fun SectionCard(
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f))
+            Text(title, style = PrintType.H3.copy(fontFamily = FrauncesFamily), color = PrintInk, modifier = Modifier.weight(1f))
             action?.invoke()
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -895,29 +894,29 @@ private fun SectionCard(
 }
 
 private fun ciIndicator(ci: String?): Pair<String, Color>? = when (ci) {
-    "success" -> "✓" to Color(0xFF2DA44E)
-    "failure" -> "✗" to Color(0xFFCF222E)
-    "pending" -> "●" to Color(0xFFBF8700)
+    "success" -> "✓" to PrintLeafDark
+    "failure" -> "✗" to PrintRedDark
+    "pending" -> "●" to PrintInk
     else -> null
 }
 
 internal fun pullRequestStatus(pr: GitHubPullRequestItem): Pair<String, Color> = when {
-    pr.mergedAt != null -> "Merged" to Color(0xFF6F42C1)
-    pr.state == "open" -> "Open" to Color(0xFF2DA44E)
-    else -> "Closed" to Color(0xFFCF222E)
+    pr.mergedAt != null -> "Merged" to PrintSky
+    pr.state == "open" -> "Open" to PrintLeaf
+    else -> "Closed" to PrintCoral
 }
 
 internal fun checkSuiteStatus(suite: GitHubCheckSuiteItem): Pair<String, Color> {
     if (suite.status != "completed") {
-        return "Running" to Color(0xFFBF8700)
+        return "Running" to PrintPaper
     }
     return when (suite.conclusion) {
-        "success" -> "Passed" to Color(0xFF2DA44E)
-        "failure", "timed_out", "action_required", "startup_failure" -> "Failed" to Color(0xFFCF222E)
-        "cancelled" -> "Cancelled" to Color(0xFF70625E)
-        "skipped" -> "Skipped" to Color(0xFF70625E)
-        "neutral" -> "Neutral" to Color(0xFF70625E)
-        else -> "Unknown" to Color(0xFF70625E)
+        "success" -> "Passed" to PrintLeaf
+        "failure", "timed_out", "action_required", "startup_failure" -> "Failed" to PrintCoral
+        "cancelled" -> "Cancelled" to PrintPaper
+        "skipped" -> "Skipped" to PrintPaper
+        "neutral" -> "Neutral" to PrintPaper
+        else -> "Unknown" to PrintPaper
     }
 }
 
@@ -935,21 +934,21 @@ internal fun ActivityRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = url != null) { url?.let { openInBrowser(context, it) } }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 14.sp,
-                color = Color(0xFF2C2A28),
+                style = PrintType.Body.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                color = PrintInk,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                color = Color(0xFF9E8E89),
+                style = PrintType.Caption,
+                color = Muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -959,12 +958,7 @@ internal fun ActivityRow(
             Text(text = symbol, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
             Spacer(modifier = Modifier.width(6.dp))
         }
-        Text(
-            text = badge,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = badgeColor
-        )
+        PrintChip(text = badge, fill = badgeColor)
     }
 }
 
@@ -981,9 +975,9 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
             .padding(16.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Text(text = title, fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
+            Text(text = title.uppercase(), style = PrintType.Tiny, color = PrintInk)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = value, fontSize = 24.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text(text = value, style = PrintType.H2, color = PrintInk)
         }
     }
 }

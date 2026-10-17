@@ -119,20 +119,14 @@ fun RegistrationScreen(
     val formScroll = rememberScrollState()
     val formScrollEnabled = rememberKeyboardOnlyScroll(formScroll)
 
-    // ── Neumorphic Wave Shell ──
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(PrintPaper)
+            .paperGrain()
             .systemBarsPadding()
     ) {
-        // Inner wave shape
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 100.dp) // Leave space at bottom for social/footer
-                .skeuoWaveBackground()
-        )
+        AuthBackdrop()
 
         Column(
             modifier = Modifier
@@ -142,19 +136,16 @@ fun RegistrationScreen(
                 .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(8.dp))
 
             if (registrationSuccessEmail != null) {
-                // ── VERIFY EMAIL OTP FLOW ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.collabsphere),
-                        contentDescription = "CollabSphere Logo",
-                        modifier = Modifier.size(64.dp)
-                    )
+                    CollabSphereMark(size = 40.dp)
+                    Spacer(Modifier.width(4.dp))
+                    Text(text = "CollabSphere", style = PrintType.H3, color = PrintInk, modifier = Modifier.align(Alignment.CenterVertically))
                 }
                 Spacer(Modifier.height(24.dp))
 
@@ -162,16 +153,8 @@ fun RegistrationScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    Text(
-                        text = "Verify",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-                    Text(
-                        text = "Account.",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
+                    MisregisteredTitle(text = "Verify", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
+                    MisregisteredTitle(text = "your email.", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
                 }
 
                 Spacer(Modifier.height(48.dp))
@@ -185,7 +168,7 @@ fun RegistrationScreen(
                     imeAction = ImeAction.Done,
                     onImeAction = { handleVerify() },
                     leadingIcon = {
-                        Icon(Icons.Outlined.Lock, null, tint = MintGreen.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         AnimatedVisibility(otpCode.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -202,7 +185,7 @@ fun RegistrationScreen(
                     text = "Verify & Activate",
                     isLoading = isLoading,
                     enabled = !isLoading,
-                    accentColor = MintGreen,
+                    accentColor = PrintInk,
                     onClick = { handleVerify() }
                 )
 
@@ -223,15 +206,15 @@ fun RegistrationScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isLoadingEmail) {
-                        CollabSpinner(modifier = Modifier.size(16.dp), color = IndigoStart, strokeWidth = 2.dp)
+                        CollabSpinner(modifier = Modifier.size(16.dp), color = PrintInk, strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Outlined.Refresh, null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Refresh, null, tint = PrintInk, modifier = Modifier.size(16.dp))
                     }
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Resend Code",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = IndigoStart
+                        color = PrintInk
                     )
                 }
 
@@ -250,8 +233,8 @@ fun RegistrationScreen(
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Change details",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = CoralStart,
+                        style = PrintType.Label.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                        color = PrintInk,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable(
@@ -264,16 +247,13 @@ fun RegistrationScreen(
                     )
                 }
             } else {
-                // ── REGISTRATION FORM FLOW ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.collabsphere),
-                        contentDescription = "CollabSphere Logo",
-                        modifier = Modifier.size(64.dp)
-                    )
+                    CollabSphereMark(size = 40.dp)
+                    Spacer(Modifier.width(4.dp))
+                    Text(text = "CollabSphere", style = PrintType.H3, color = PrintInk, modifier = Modifier.align(Alignment.CenterVertically))
                 }
                 Spacer(Modifier.height(24.dp))
 
@@ -281,21 +261,12 @@ fun RegistrationScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    Text(
-                        text = "Create",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
-                    Text(
-                        text = "Account.",
-                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink
-                    )
+                    MisregisteredTitle(text = "Create", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
+                    MisregisteredTitle(text = "account.", style = PrintType.Hero.copy(fontSize = 44.sp, lineHeight = 48.sp))
                 }
 
                 Spacer(Modifier.height(20.dp))
 
-                // Username field
                 SkeuoTextField(
                     value = username,
                     onValueChange = { username = it },
@@ -307,7 +278,7 @@ fun RegistrationScreen(
                     isError = isUsernameError,
                     errorMessage = "Username cannot be empty",
                     leadingIcon = {
-                        Icon(Icons.Outlined.Person, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Person, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         AnimatedVisibility(username.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -320,7 +291,6 @@ fun RegistrationScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Email field
                 SkeuoTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -332,7 +302,7 @@ fun RegistrationScreen(
                     isError = isEmailError,
                     errorMessage = "Email cannot be empty",
                     leadingIcon = {
-                        Icon(Icons.Outlined.Email, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Email, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         AnimatedVisibility(email.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
@@ -345,7 +315,6 @@ fun RegistrationScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Password field
                 SkeuoTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -359,7 +328,7 @@ fun RegistrationScreen(
                     isError = isPasswordError,
                     errorMessage = "Password cannot be empty",
                     leadingIcon = {
-                        Icon(Icons.Outlined.Lock, null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Lock, null, tint = PrintInk, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -367,7 +336,7 @@ fun RegistrationScreen(
                                 imageVector = if (passwordVisible) Icons.Outlined.Visibility
                                 else Icons.Outlined.VisibilityOff,
                                 contentDescription = if (passwordVisible) "Hide" else "Show",
-                                tint = if (passwordVisible) CoralStart else Muted,
+                                tint = PrintInk,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -380,14 +349,13 @@ fun RegistrationScreen(
                     text = "Register",
                     isLoading = isLoading,
                     enabled = !isLoading,
-                    accentColor = IndigoStart,
+                    accentColor = PrintInk,
                     onClick = { handleRegister() }
                 )
 
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.height(32.dp))
                 
-                // ── Footer ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -412,8 +380,8 @@ fun RegistrationScreen(
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Log in",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = CoralStart,
+                        style = PrintType.Label.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+                        color = PrintInk,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable(

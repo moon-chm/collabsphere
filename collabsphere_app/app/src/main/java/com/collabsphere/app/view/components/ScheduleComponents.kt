@@ -116,7 +116,7 @@ fun ScheduleSendDialog(onPick: (Long) -> Unit, onDismiss: () -> Unit) {
         }
         1 -> DatePickerDialog(
             onDismissRequest = onDismiss,
-            confirmButton = { TextButton(onClick = { step = 2 }) { Text("Next", color = CoralStart) } },
+            confirmButton = { TextButton(onClick = { step = 2 }) { Text("Next", color = PrintInk) } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
         ) {
             DatePicker(state = dateState)
@@ -142,7 +142,7 @@ fun ScheduleSendDialog(onPick: (Long) -> Unit, onDismiss: () -> Unit) {
                             set(Calendar.MILLISECOND, 0)
                         }
                         onPick(local.timeInMillis)
-                    }) { Text("Schedule", color = CoralStart, fontWeight = FontWeight.Bold) }
+                    }) { Text("Schedule", color = PrintInk, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -158,7 +158,7 @@ private fun ScheduleOption(title: String, subtitle: String, onClick: () -> Unit)
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.Schedule, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp))
+        Icon(Icons.Outlined.Schedule, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
         Column {
             Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = Ink)
@@ -174,17 +174,17 @@ fun ScheduledMessagesChip(count: Int, onClick: () -> Unit, modifier: Modifier = 
         modifier = modifier
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(IndigoStart.copy(alpha = 0.10f))
+            .background(PrintSky.copy(alpha = 0.35f))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.Schedule, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+        Icon(Icons.Outlined.Schedule, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(
             text = if (count == 1) "1 scheduled message" else "$count scheduled messages",
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = IndigoStart
+            color = PrintInk
         )
     }
 }
@@ -222,7 +222,7 @@ fun ScheduledMessagesDialog(state: ScheduledMessagesState, onDismiss: () -> Unit
                             Text(
                                 text = scheduleLabel(item.sendAt),
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = IndigoStart
+                                color = PrintInk
                             )
                             Text(
                                 text = item.content,

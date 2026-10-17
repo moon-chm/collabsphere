@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,9 +46,9 @@ fun ReplyQuote(
     onDarkBubble: Boolean,
     onClick: (() -> Unit)?
 ) {
-    val accent = if (onDarkBubble) Color.White else IndigoStart
-    val background = if (onDarkBubble) Color.White.copy(alpha = 0.16f) else IndigoStart.copy(alpha = 0.08f)
-    val textColor = if (onDarkBubble) Color.White.copy(alpha = 0.9f) else Muted
+    val accent = if (onDarkBubble) PrintSky else PrintInk
+    val background = if (onDarkBubble) PrintPaper.copy(alpha = 0.16f) else PrintSky.copy(alpha = 0.30f)
+    val textColor = if (onDarkBubble) PrintPaper.copy(alpha = 0.9f) else PrintInk
 
     Row(
         modifier = Modifier
@@ -68,7 +69,7 @@ fun ReplyQuote(
             if (authorName != null) {
                 Text(
                     text = authorName,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
                     color = accent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -108,7 +109,7 @@ fun ReplyComposerBanner(
             modifier = Modifier
                 .width(4.dp)
                 .fillMaxHeight()
-                .background(IndigoStart)
+                .background(PrintInk)
         )
         Row(
             modifier = Modifier
@@ -117,12 +118,12 @@ fun ReplyComposerBanner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(16.dp))
+            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = PrintInk, modifier = Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Replying to $authorName",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = IndigoStart,
+                    color = PrintInk,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

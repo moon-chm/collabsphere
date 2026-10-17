@@ -1,53 +1,50 @@
 package com.collabsphere.app.view
 
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.collabsphere.app.view.components.AppToast
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,14 +55,35 @@ import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.collabsphere.app.model.workspace.WorkspaceEntity
 import com.collabsphere.app.ui.theme.*
-import com.collabsphere.app.view.components.WorkspaceSkeletonList
 import com.collabsphere.app.viewmodel.DashboardViewModel
+import java.util.Calendar
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 
-// Color palette for workspace initials (cycles through accent colors)
-private val workspaceAccents = listOf(CoralStart, IndigoStart, MintGreen, AmberWarn, Color(0xFF9B59B6))
+private val workspaceAccents = listOf(PrintLeaf, PrintCoral, PrintSky)
 
 internal fun workspaceAccentIndex(workspaceId: Int): Int =
     Math.floorMod(workspaceId, workspaceAccents.size)
+
+internal fun dashboardGreeting(name: String, hour: Int): String {
+    val part = when (hour) {
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        else -> "Good evening"
+    }
+    val first = name.trim().substringBefore(' ')
+    return if (first.isEmpty()) "$part." else "$part, $first."
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,16 +104,13 @@ fun DashboardScreen(
     onOpenWorkspaceTasks  : (WorkspaceEntity) -> Unit = {},
     onSavedMessagesClick  : () -> Unit = {}
 ) {
-    // ── All original state preserved ──
-
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
-    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
-    
-
-
     val myDayUserId by viewModel.userIdState.collectAsStateWithLifecycle()
     var showJoinByCodeDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    val shown = remember { mutableSetOf<String>() }
+    val greeting = remember(currentUserName) {
+        dashboardGreeting(currentUserName, Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+    }
 
     LaunchedEffect(joinByCodeStatus) {
         joinByCodeStatus?.let {
@@ -107,425 +122,85 @@ fun DashboardScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(PrintPaper)
+            .paperGrain()
             .systemBarsPadding()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-        ) {
-            Spacer(Modifier.height(16.dp))
-
-            // ── Top Bar ──
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text  = "CollabSphere",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = Ink
-                    )
-                    Text(
-                        text  = "Your workspaces",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Muted
-                    )
-                }
-
-                // Profile button — raised circle with spring bounce
-                val profileInteractionSource = remember { MutableInteractionSource() }
-                val isProfilePressed by profileInteractionSource.collectIsPressedAsState()
-                val profileScale by animateFloatAsState(
-                    targetValue = if (isProfilePressed) 0.92f else 1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "profileScale"
-                )
-
-                val context = LocalContext.current
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // ── Search icon button ──
-                    val searchInteractionSource = remember { MutableInteractionSource() }
-                    val isSearchPressed by searchInteractionSource.collectIsPressedAsState()
-                    val searchScale by animateFloatAsState(
-                        targetValue = if (isSearchPressed) 0.90f else 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "searchScale"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .graphicsLayer { scaleX = searchScale; scaleY = searchScale }
-                            .drawWithCache {
-                                val cr = CornerRadius(size.minDimension / 2f)
-                                onDrawBehind {
-                                    if (isSearchPressed) {
-                                        drawRoundRect(
-                                            color = Color(0xFF201612).copy(alpha = 0.15f),
-                                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                                            cornerRadius = cr
-                                        )
-                                        drawRoundRect(color = Background.copy(alpha = 0.8f), cornerRadius = cr)
-                                    } else {
-                                        // Ambient diffuse shadow
-                                        drawRoundRect(
-                                            color = Color(0xFF2C201A).copy(alpha = 0.05f),
-                                            topLeft = Offset(0f, 2.5.dp.toPx()),
-                                            size = size,
-                                            cornerRadius = cr
-                                        )
-                                        // Contact shadow
-                                        drawRoundRect(
-                                            color = Color(0xFF2C201A).copy(alpha = 0.14f),
-                                            topLeft = Offset(0f, 1.2.dp.toPx()),
-                                            size = size,
-                                            cornerRadius = cr
-                                        )
-                                        // Specular top highlight
-                                        drawRoundRect(
-                                            color = Color.White.copy(alpha = 0.85f),
-                                            topLeft = Offset(0f, -0.8.dp.toPx()),
-                                            size = size,
-                                            cornerRadius = cr
-                                        )
-                                        // Button body
-                                        drawRoundRect(color = Surface, cornerRadius = cr)
-                                        // 1px hairline border
-                                        drawRoundRect(
-                                            color = Color(0xFF2C2A28).copy(alpha = 0.08f),
-                                            cornerRadius = cr,
-                                            style = Stroke(width = 1.dp.toPx())
-                                        )
-                                    }
-                                }
-                            }
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = searchInteractionSource,
-                                indication = null,
-                                onClick = onSearchClick
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = CoralStart,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // ── Bell icon button — outer Box allows badge to overflow the circle clip ──
-                    val bellInteractionSource = remember { MutableInteractionSource() }
-                    val isBellPressed by bellInteractionSource.collectIsPressedAsState()
-                    val bellScale by animateFloatAsState(
-                        targetValue = if (isBellPressed) 0.90f else 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "bellScale"
-                    )
-                    Box(
-                        modifier = Modifier.size(44.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Raised skeuomorphic circle (clipped)
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .graphicsLayer { scaleX = bellScale; scaleY = bellScale }
-                                .drawWithCache {
-                                    val cr = CornerRadius(size.minDimension / 2f)
-                                    onDrawBehind {
-                                        if (isBellPressed) {
-                                            drawRoundRect(
-                                                color = Color(0xFF201612).copy(alpha = 0.15f),
-                                                topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                                size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                                                cornerRadius = cr
-                                            )
-                                            drawRoundRect(color = Background.copy(alpha = 0.8f), cornerRadius = cr)
-                                        } else {
-                                            // Ambient diffuse shadow
-                                            drawRoundRect(
-                                                color = Color(0xFF2C201A).copy(alpha = 0.05f),
-                                                topLeft = Offset(0f, 2.5.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = cr
-                                            )
-                                            // Contact shadow
-                                            drawRoundRect(
-                                                color = Color(0xFF2C201A).copy(alpha = 0.14f),
-                                                topLeft = Offset(0f, 1.2.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = cr
-                                            )
-                                            // Specular top highlight
-                                            drawRoundRect(
-                                                color = Color.White.copy(alpha = 0.85f),
-                                                topLeft = Offset(0f, -0.8.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = cr
-                                            )
-                                            // Button body
-                                            drawRoundRect(color = Surface, cornerRadius = cr)
-                                            // 1px hairline border
-                                            drawRoundRect(
-                                                color = Color(0xFF2C2A28).copy(alpha = 0.08f),
-                                                cornerRadius = cr,
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                        }
-                                    }
-                                }
-                                .clip(CircleShape)
-                                .clickable(
-                                    interactionSource = bellInteractionSource,
-                                    indication = null,
-                                    onClick = onNotificationsClick
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Notifications",
-                                tint = CoralStart,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        // Badge sits on top, outside the clip, anchored to top-end of the 44dp outer box
-                        if (unreadNotificationCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 2.dp, y = (-2).dp)
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(Destructive),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (unreadNotificationCount > 9) "9+" else unreadNotificationCount.toString(),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-
-                    // ── Profile avatar button ──
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .graphicsLayer { scaleX = profileScale; scaleY = profileScale }
-                            .drawWithCache {
-                                val r = size.minDimension / 2f
-                                onDrawBehind {
-                                    drawCircle(
-                                        color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.03f else 0.06f),
-                                        radius = r,
-                                        center = Offset(center.x, center.y + if (isProfilePressed) 2.dp.toPx() else 5.dp.toPx())
-                                    )
-                                    drawCircle(
-                                        color = Color(0xFF2C201A).copy(alpha = if (isProfilePressed) 0.10f else 0.16f),
-                                        radius = r,
-                                        center = Offset(center.x, center.y + if (isProfilePressed) 1.dp.toPx() else 1.8.dp.toPx())
-                                    )
-                                    drawCircle(
-                                        color = Color.White.copy(alpha = 0.90f),
-                                        radius = r,
-                                        center = Offset(center.x, center.y - 1.dp.toPx())
-                                    )
-                                    drawCircle(color = Surface)
-                                    drawCircle(
-                                        color = Color(0xFF2C2A28).copy(alpha = 0.06f),
-                                        radius = r - 0.5.dp.toPx(),
-                                        style = Stroke(width = 1.dp.toPx())
-                                    )
-                                }
-                            }
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = profileInteractionSource,
-                                indication        = null,
-                                onClick           = onProfileClick
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (avatarUrl.isNotEmpty()) {
-                            SubcomposeAsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(com.collabsphere.app.view.UserUI.resolveAvatarUrl(avatarUrl))
-                                    .crossfade(true)
-                                    // Explicit decode-size cap — this is a 46dp circle, never needs a
-                                    // full-resolution decode regardless of the source image's size.
-                                    .size(with(LocalDensity.current) { 46.dp.roundToPx() })
-                                    .build(),
-                                contentDescription = "Profile picture",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape),
-                                loading = {
-                                    val initial = currentUserName.trim().take(1).uppercase().ifEmpty { "U" }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(46.dp)
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(CoralLight, CoralStart)
-                                                ),
-                                                shape = CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = initial,
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = Color.White
-                                        )
-                                    }
-                                },
-                                error = {
-                                    Icon(
-                                        imageVector        = Icons.Outlined.AccountCircle,
-                                        contentDescription = "Profile",
-                                        tint               = CoralStart,
-                                        modifier           = Modifier.size(26.dp)
-                                    )
-                                }
-                            )
-                        } else if (currentUserName.isNotEmpty()) {
-                            val initial = currentUserName.trim().take(1).uppercase()
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .background(
-                                        brush = Brush.radialGradient(
-                                            colors = listOf(CoralLight, CoralStart)
-                                        ),
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = initial,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                            }
-                        } else {
-                            Icon(
-                                imageVector        = Icons.Outlined.AccountCircle,
-                                contentDescription = "Profile",
-                                tint               = CoralStart,
-                                modifier           = Modifier.size(26.dp)
-                            )
-                        }
-                    } // end profile Box
-                } // end icons Row
-            } // end top bar Row
-
-            Spacer(Modifier.height(20.dp))
-
-            // ── Summary banner ──
-            DashboardSummaryBanner(count = workspaces?.size ?: 0)
-
-            Spacer(Modifier.height(16.dp))
-
-            MyDayCard(
-                userId = myDayUserId,
-                workspaces = workspaces.orEmpty(),
-                unreadCount = unreadNotificationCount,
-                onOpenTasks = onOpenWorkspaceTasks,
-                onNotificationsClick = onNotificationsClick
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            SavedMessagesRow(onClick = onSavedMessagesClick)
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── List, Skeleton, or Empty state ──
-            androidx.compose.animation.Crossfade(
-                targetState = workspaces,
-                label = "workspacesCrossfade",
+        Column(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-            ) { state ->
-                when {
-                    state == null -> {
-                        WorkspaceSkeletonList(
-                            modifier = Modifier.fillMaxSize()
+                    .weight(1f),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item(key = "header") {
+                    DashboardHeader(
+                        greeting = greeting,
+                        currentUserName = currentUserName,
+                        avatarUrl = avatarUrl,
+                        unreadNotificationCount = unreadNotificationCount,
+                        onSearchClick = onSearchClick,
+                        onNotificationsClick = onNotificationsClick,
+                        onProfileClick = onProfileClick
+                    )
+                }
+                item(key = "banner") {
+                    DashboardSummaryBanner(
+                        count = workspaces?.size ?: 0,
+                        modifier = Modifier.printEntrance(0, "banner" in shown) { shown += "banner" }
+                    )
+                }
+                item(key = "myday") {
+                    Box(Modifier.printEntrance(1, "myday" in shown) { shown += "myday" }) {
+                        MyDayCard(
+                            userId = myDayUserId,
+                            workspaces = workspaces.orEmpty(),
+                            unreadCount = unreadNotificationCount,
+                            onOpenTasks = onOpenWorkspaceTasks,
+                            onNotificationsClick = onNotificationsClick
                         )
                     }
-                    state.isEmpty() -> {
-                        DashboardEmptyState(onNavigateToWorkspace = onNavigateToWorkspace)
-                    }
-                    else -> {
-                        val listState = rememberLazyListState()
-                        LazyColumn(
-                            state               = listState,
-                            modifier            = Modifier
-                                .fillMaxSize()
-                                .fadingScrollEdges(listState = listState, top = 28.dp, bottom = 64.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding      = PaddingValues(top = 4.dp, bottom = 100.dp)
-                        ) {
-                            items(
-                                items = state,
-                                key   = { ws -> "${ws.id}_${ws.workspaceName}" }
-                            ) { workspace ->
-                                val accentColor = workspaceAccents[workspaceAccentIndex(workspace.id)]
-                                WorkspaceItem(
-                                    workspace     = workspace,
-                                    modifier      = Modifier.animateItem(),
-                                    accentColor   = accentColor,
-                                    onItemClick   = { onWorkspaceClick(workspace) },
-                                    onDeleteClick = { onDeleteWorkspaceClick(workspace) }
-                                )
-                            }
-                        }
+                }
+                item(key = "saved") {
+                    SavedMessagesRow(
+                        onClick = onSavedMessagesClick,
+                        modifier = Modifier.printEntrance(2, "saved" in shown) { shown += "saved" }
+                    )
+                }
+                item(key = "section") {
+                    Text(
+                        text = "Your workspaces",
+                        style = PrintType.H2,
+                        color = PrintInk,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                val state = workspaces
+                when {
+                    state == null -> items(3, key = { "skeleton_$it" }) { PrintSkeletonCard() }
+                    state.isEmpty() -> item(key = "empty") { DashboardEmptyState() }
+                    else -> itemsIndexed(
+                        items = state,
+                        key = { _, ws -> "${ws.id}_${ws.workspaceName}" }
+                    ) { index, workspace ->
+                        val key = "ws_${workspace.id}"
+                        WorkspaceItem(
+                            workspace = workspace,
+                            modifier = Modifier
+                                .animateItem()
+                                .printEntrance(3 + index, key in shown) { shown += key },
+                            accentColor = workspaceAccents[workspaceAccentIndex(workspace.id)],
+                            onItemClick = { onWorkspaceClick(workspace) },
+                            onDeleteClick = { onDeleteWorkspaceClick(workspace) }
+                        )
                     }
                 }
             }
-        }
 
-        // ── Skeuomorphic Action Buttons ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SkeuoSecondaryFab(
-                modifier = Modifier.weight(1f),
-                text = "Join with Code",
-                icon = Icons.Outlined.GroupAdd,
-                onClick = { showJoinByCodeDialog = true }
-            )
-            SkeuoFab(
-                modifier = Modifier.weight(1f),
-                onClick = onNavigateToWorkspace
+            DashboardDock(
+                onJoinClick = { showJoinByCodeDialog = true },
+                onCreateClick = onNavigateToWorkspace
             )
         }
 
@@ -540,435 +215,446 @@ fun DashboardScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SUMMARY BANNER
-// ─────────────────────────────────────────────────────────────────
+@Composable
+private fun DashboardHeader(
+    greeting: String,
+    currentUserName: String,
+    avatarUrl: String,
+    unreadNotificationCount: Int,
+    onSearchClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    Column {
+        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                CollabSphereMark(size = if (compact) 26.dp else 30.dp)
+                Text(
+                    text = "CollabSphere",
+                    style = PrintType.H3.copy(fontFamily = FrauncesFamily, fontSize = if (compact) 15.sp else 17.sp),
+                    color = PrintInk,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PrintIconButton(
+                    icon = Icons.Outlined.Search,
+                    contentDescription = "Search",
+                    onClick = onSearchClick
+                )
+                val reduced = rememberPrintReducedMotion()
+                val bellSwing = remember { Animatable(0f) }
+                val badgeScale = remember { Animatable(1f) }
+                var lastUnread by remember { mutableIntStateOf(unreadNotificationCount) }
+                LaunchedEffect(unreadNotificationCount) {
+                    if (!reduced && unreadNotificationCount > lastUnread) {
+                        launch {
+                            badgeScale.snapTo(0.4f)
+                            badgeScale.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 600f))
+                        }
+                        bellSwing.animateTo(0f, keyframes {
+                            durationMillis = 650
+                            16f at 80
+                            -13f at 200
+                            9f at 320
+                            -5f at 440
+                            0f at 650
+                        })
+                    }
+                    lastUnread = unreadNotificationCount
+                }
+                Box(modifier = Modifier.size(48.dp)) {
+                    PrintIconButton(
+                        icon = Icons.Outlined.Notifications,
+                        contentDescription = if (unreadNotificationCount > 0) "Notifications, $unreadNotificationCount unread" else "Notifications",
+                        onClick = onNotificationsClick,
+                        modifier = Modifier.graphicsLayer {
+                            rotationZ = bellSwing.value
+                            transformOrigin = TransformOrigin(0.5f, 0.1f)
+                        }
+                    )
+                    if (unreadNotificationCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-6).dp)
+                                .graphicsLayer {
+                                    scaleX = badgeScale.value
+                                    scaleY = badgeScale.value
+                                }
+                                .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+                                .printSurface(shape = CircleShape, fill = PrintCoral, shadow = null)
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (unreadNotificationCount > 9) "9+" else unreadNotificationCount.toString(),
+                                style = PrintType.Tiny.copy(letterSpacing = 0.sp),
+                                color = PrintInk
+                            )
+                        }
+                    }
+                }
+                ProfileAvatarButton(
+                    currentUserName = currentUserName,
+                    avatarUrl = avatarUrl,
+                    onClick = onProfileClick
+                )
+            }
+        }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        MisregisteredTitle(text = greeting)
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Here's what's happening across your teams.",
+            style = PrintType.Body,
+            color = PrintInkSoft
+        )
+    }
+}
 
 @Composable
-private fun DashboardSummaryBanner(count: Int) {
+private fun ProfileAvatarButton(
+    currentUserName: String,
+    avatarUrl: String,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val press = rememberPrintPress(interaction)
+    val context = LocalContext.current
+    val initial = currentUserName.trim().take(1).uppercase()
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(84.dp)
-            .drawWithCache {
-                val cr = CornerRadius(20.dp.toPx())
-                onDrawBehind {
-                // 1. Ambient soft diffuse shadow
-                drawRoundRect(
-                    color        = CoralStart.copy(alpha = 0.14f),
-                    topLeft      = Offset(0f, 7.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = cr
-                )
-                // 2. Tight contact shadow (2.3x alpha)
-                drawRoundRect(
-                    color        = CoralStart.copy(alpha = 0.32f),
-                    topLeft      = Offset(0f, 2.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = cr
-                )
-                // 3. Coral gradient fill
-                drawRoundRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(CoralStart, CoralEnd),
-                        start  = Offset(0f, 0f),
-                        end    = Offset(size.width, size.height)
-                    ),
-                    cornerRadius = cr
-                )
-                // 4. Subtle 1px perimeter hairline border
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.20f),
-                    cornerRadius = cr,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                // 5. Specular hairline highlight along top rounded contour
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.55f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 22.dp.toPx()
-                    ),
-                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = cr,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                }
-            }
+            .size(48.dp)
+            .printSurface(shape = CircleShape, fill = PrintSky, shadowOffset = 3.dp, pressProgress = press)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .semantics { contentDescription = "Profile" },
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier          = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
+        val fallback: @Composable () -> Unit = {
+            if (initial.isNotEmpty()) {
                 Text(
-                    text  = "Your workspaces",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.75f)
+                    text = initial,
+                    style = PrintType.H3.copy(fontFamily = FrauncesFamily, fontSize = 20.sp),
+                    color = PrintInk
                 )
-                Text(
-                    text  = "$count active",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White
-                )
+            } else {
+                Icon(Icons.Outlined.AccountCircle, contentDescription = null, tint = PrintInk, modifier = Modifier.size(26.dp))
             }
-
-            // Count badge circle with debossed socket appearance
-            Box(
+        }
+        if (avatarUrl.isNotEmpty()) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(com.collabsphere.app.view.UserUI.resolveAvatarUrl(avatarUrl))
+                    .crossfade(true)
+                    .size(with(LocalDensity.current) { 48.dp.roundToPx() })
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(52.dp)
-                    .drawWithCache {
-                        val r = size.minDimension / 2f
-                        onDrawBehind {
-                        // Inset socket dark inner shadow top-left
-                        drawCircle(
-                            color  = Color(0xFF5A1D0B).copy(alpha = 0.25f),
-                            radius = r,
-                            center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx())
-                        )
-                        // Inset translucent fill
-                        drawCircle(
-                            color  = Color.White.copy(alpha = 0.18f),
-                            radius = r
-                        )
-                        // Specular bottom-right reflection
-                        drawCircle(
-                            color  = Color.White.copy(alpha = 0.40f),
-                            radius = r - 0.5.dp.toPx(),
-                            style  = Stroke(width = 1.dp.toPx())
-                        )
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text  = count.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White
-                )
-            }
+                    .fillMaxSize()
+                    .clip(CircleShape),
+                loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
+                error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } }
+            )
+        } else {
+            fallback()
         }
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// WORKSPACE ITEM CARD
-// ─────────────────────────────────────────────────────────────────
+@Composable
+private fun DashboardSummaryBanner(count: Int, modifier: Modifier = Modifier) {
+    val phase = rememberBlobPhase()
+    val reduced = rememberPrintReducedMotion()
+    val label = if (count == 1) "workspace" else "workspaces"
+    val shownCount = remember { Animatable(0f) }
+    LaunchedEffect(count) {
+        if (reduced) shownCount.snapTo(count.toFloat())
+        else shownCount.animateTo(count.toFloat(), tween(800, easing = FastOutSlowInEasing))
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(136.dp)
+            .clearAndSetSemantics { contentDescription = "$count active $label" }
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawBehind {
+                    val path = organicPath(size, seed = 11, phase = phase(), bow = 0.05f)
+                    val shadow = PrintTokens.ShadowOffset.toPx()
+                    translate(shadow, shadow) { drawPath(path, PrintInk) }
+                    drawPath(path, PrintLeaf)
+                    drawCircle(
+                        color = PrintCoral,
+                        radius = size.height * 0.40f,
+                        center = Offset(size.width - size.height * 0.58f, size.height * 0.50f),
+                        blendMode = BlendMode.Multiply
+                    )
+                    drawPath(path, PrintInk, style = Stroke(PrintTokens.Outline.toPx()))
+                }
+        )
+        HalftonePatch(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 14.dp, end = 18.dp)
+                .size(64.dp),
+            color = PrintInk.copy(alpha = 0.55f)
+        )
+        PrintStar(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 30.dp, bottom = 22.dp)
+                .size(20.dp),
+            color = PrintPaper,
+            twinkle = true
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 28.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = shownCount.value.roundToInt().toString(), style = PrintType.Hero, color = PrintInk)
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(text = "ACTIVE", style = PrintType.Tiny, color = PrintInk)
+                Text(text = label, style = PrintType.H3, color = PrintInk)
+            }
+        }
+    }
+}
 
 @Composable
 fun WorkspaceItem(
     workspace    : WorkspaceEntity,
     modifier     : Modifier = Modifier,
-    accentColor  : Color = CoralStart,
+    accentColor  : Color = PrintLeaf,
     onItemClick  : () -> Unit,
     onDeleteClick: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue   = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness    = Spring.StiffnessMediumLow
-        ),
-        label         = "wsScale"
-    )
+    val interaction = remember { MutableInteractionSource() }
+    val press = rememberPrintPress(interaction)
+    val tagShape = remember(workspace.id) { BlobShape(seed = workspace.id, wobble = 0.14f) }
 
-    Box(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoFloatingCard(cornerRadius = 18.dp, isPressed = isPressed)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication        = null,
-                onClick           = onItemClick
-            )
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), pressProgress = press)
+            .clickable(interactionSource = interaction, indication = null, onClick = onItemClick)
+            .padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .size(52.dp)
+                .printSurface(shape = tagShape, fill = accentColor, shadow = null),
+            contentAlignment = Alignment.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                // Initial in debossed squircle well
-                val initial = workspace.workspaceName.firstOrNull()?.uppercase() ?: "W"
-                SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
-                    Text(
-                        text = initial,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
-                        color = Color(0xFF2C221E)
-                    )
-                }
+            Text(
+                text = workspace.workspaceName.firstOrNull()?.uppercase() ?: "W",
+                style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 24.sp),
+                color = PrintInk
+            )
+        }
 
-                Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(14.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = workspace.workspaceName,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.5.sp
-                        ),
-                        color = Color(0xFF1F1A17),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Person,
-                            contentDescription = null,
-                            tint = Color(0xFF8C7E75),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = workspace.workspaceOwner,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp),
-                            color = Color(0xFF6E635C),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = workspace.workspaceName,
+                style = PrintType.H3,
+                color = PrintInk,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SkeuoActionIconButton(
-                    onClick = onDeleteClick,
-                    icon = Icons.Outlined.Delete,
-                    contentDescription = "Delete workspace",
-                    tint = DestructiveStart,
-                    size = 32.dp,
-                    iconSize = 16.dp
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = PrintInkSoft,
+                    modifier = Modifier.size(14.dp)
                 )
                 Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = Color(0xFFA89E97),
-                    modifier = Modifier.size(20.dp)
+                Text(
+                    text = workspace.workspaceOwner,
+                    style = PrintType.Caption,
+                    color = PrintInkSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+
+        PrintIconButton(
+            icon = Icons.Outlined.Delete,
+            contentDescription = "Delete ${workspace.workspaceName}",
+            onClick = onDeleteClick,
+            fill = PrintPaper,
+            tint = PrintRedDark,
+            iconSize = 20.dp,
+            shadow = false
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = PrintInk,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// EMPTY STATE
-// ─────────────────────────────────────────────────────────────────
+@Composable
+private fun PrintSkeletonCard() {
+    val reduced = rememberPrintReducedMotion()
+    val pulse = if (reduced) {
+        0.5f
+    } else {
+        val transition = rememberInfiniteTransition(label = "skeleton")
+        transition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 0.75f,
+            animationSpec = infiniteRepeatable(tween(700, easing = LinearEasing), RepeatMode.Reverse),
+            label = "skeletonPulse"
+        ).value
+    }
+    val bar = PrintInk.copy(alpha = 0.12f * pulse)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), shadow = PrintInk.copy(alpha = 0.2f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(48.dp).clip(CircleShape).background(bar))
+        Spacer(Modifier.width(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.fillMaxWidth(0.55f).height(14.dp).clip(RoundedCornerShape(7.dp)).background(bar))
+            Box(Modifier.fillMaxWidth(0.35f).height(10.dp).clip(RoundedCornerShape(5.dp)).background(bar))
+        }
+    }
+}
 
 @Composable
 fun EmptyState(onNavigateToWorkspace: () -> Unit) {
-    DashboardEmptyState(onNavigateToWorkspace)
+    DashboardEmptyState()
 }
 
 @Composable
-private fun DashboardEmptyState(onNavigateToWorkspace: () -> Unit) {
-    com.collabsphere.app.view.components.SkeuoEmptyState(
-        icon = androidx.compose.material.icons.Icons.Outlined.Folder,
-        title = "No workspaces yet",
-        description = "Tap the + button below or create your first workspace to start collaborating.",
-        actionLabel = null,
-        onAction = {},
-        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f)
-    )
-}
-
-// ─────────────────────────────────────────────────────────────────
-// SKEUOMORPHIC FAB
-// ─────────────────────────────────────────────────────────────────
-
-@Composable
-private fun SkeuoFab(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue   = if (pressed) 0.93f else 1f,
-        animationSpec = tween(80),
-        label         = "fabScale"
-    )
-
-    Box(
-        modifier = modifier
-            .height(52.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .drawWithCache {
-                val r = CornerRadius(16.dp.toPx())
-                onDrawBehind {
-                // 1. Ambient diffuse shadow
-                drawRoundRect(
-                    color        = CoralStart.copy(alpha = if (pressed) 0.08f else 0.16f),
-                    topLeft      = Offset(0f, if (pressed) 3.dp.toPx() else 8.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = r
-                )
-                // 2. Tight contact shadow (2.3x alpha)
-                drawRoundRect(
-                    color        = CoralStart.copy(alpha = if (pressed) 0.18f else 0.38f),
-                    topLeft      = Offset(0f, if (pressed) 1.5.dp.toPx() else 2.5.dp.toPx()),
-                    size         = Size(size.width, size.height),
-                    cornerRadius = r
-                )
-                // 3. Vibrant coral gradient fill
-                drawRoundRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(CoralStart, CoralEnd),
-                        start  = Offset(0f, 0f),
-                        end    = Offset(size.width, size.height)
-                    ),
-                    cornerRadius = r
-                )
-                // 4. Subtle 1px perimeter hairline border
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.20f),
-                    cornerRadius = r,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                // 5. Specular top rim highlight hugging rounded contour
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.50f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 16.dp.toPx()
-                    ),
-                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                    size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                    cornerRadius = r,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-                }
-            }
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication        = null
-            ) {
-                pressed = true
-                onClick()
-            },
-        contentAlignment = Alignment.Center
+private fun DashboardEmptyState() {
+    val blob = remember { BlobShape(seed = 5, wobble = 0.16f) }
+    val phase = rememberBlobPhase(durationMillis = 4000)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier          = Modifier.padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
-        ) {
-            Icon(Icons.Outlined.Add, null, tint = Color.White, modifier = Modifier.size(20.dp))
-            Text(
-                text  = "New workspace",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White
+        Box(modifier = Modifier.size(150.dp)) {
+            HalftonePatch(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .size(64.dp),
+                color = PrintCoral
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(120.dp)
+                    .graphicsLayer { translationY = sin(phase()) * 5.dp.toPx() }
+                    .printSurface(shape = blob, fill = PrintSky),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.Folder, contentDescription = null, tint = PrintInk, modifier = Modifier.size(48.dp))
+            }
+            PrintStar(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(24.dp),
+                color = PrintInk,
+                twinkle = true
             )
         }
-    }
-
-    LaunchedEffect(pressed) {
-        if (pressed) {
-            kotlinx.coroutines.delay(120)
-            pressed = false
-        }
+        Spacer(Modifier.height(24.dp))
+        Text(text = "No workspaces yet", style = PrintType.H2, color = PrintInk, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Start one below, or join your team with a code.",
+            style = PrintType.Body,
+            color = PrintInkSoft,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 @Composable
-private fun SkeuoSecondaryFab(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var pressed by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-
-    Box(
-        modifier = modifier
-            .height(52.dp)
-            .drawWithCache {
-                val cr = CornerRadius(16.dp.toPx())
-                onDrawBehind {
-                    if (pressed) {
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.25f),
-                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                            cornerRadius = cr
-                        )
-                        drawRoundRect(color = Background.copy(alpha = 0.8f), cornerRadius = cr)
-                    } else {
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.12f),
-                            topLeft = Offset(0f, 4.dp.toPx()),
-                            size = size,
-                            cornerRadius = cr
-                        )
-                        drawRoundRect(
-                            color = SurfaceRaised,
-                            cornerRadius = cr
-                        )
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.7f), Color.Transparent),
-                                startY = 0f,
-                                endY = 16.dp.toPx()
-                            ),
-                            cornerRadius = cr,
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                    }
-                }
-            }
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                pressed = true
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
-        ) {
-            Icon(icon, null, tint = IndigoStart, modifier = Modifier.size(18.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = Ink
-            )
+private fun DashboardDock(onJoinClick: () -> Unit, onCreateClick: () -> Unit) {
+    val reduced = rememberPrintReducedMotion()
+    var played by rememberSaveable { mutableStateOf(false) }
+    val rise = remember { Animatable(if (played) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!played) {
+            delay(250)
+            if (reduced) rise.animateTo(1f, tween(150)) else rise.animateTo(1f, tween(450, easing = PrintTokens.SpringEasing))
+            played = true
         }
     }
-
-    LaunchedEffect(pressed) {
-        if (pressed) {
-            kotlinx.coroutines.delay(120)
-            pressed = false
-        }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                val p = rise.value
+                if (reduced) alpha = p.coerceIn(0f, 1f) else translationY = (1f - p) * size.height
+            }
+            .drawBehind {
+                drawRect(PrintPaper)
+                drawLine(
+                    color = PrintInk,
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = PrintTokens.Outline.toPx()
+                )
+            }
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PrintButton(
+            text = "Join with code",
+            onClick = onJoinClick,
+            primary = false,
+            modifier = Modifier.weight(0.9f)
+        )
+        PrintButton(
+            text = "New workspace",
+            onClick = onCreateClick,
+            icon = Icons.Outlined.Add,
+            modifier = Modifier.weight(1.1f)
+        )
     }
 }
 
@@ -1027,14 +713,14 @@ private fun JoinWorkspaceByCodeDialog(
                         textAlign = TextAlign.Center,
                         letterSpacing = 6.sp
                     ),
-                    cursorBrush = SolidColor(IndigoStart),
+                    cursorBrush = SolidColor(PrintInk),
                     decorationBox = { innerTextField ->
                         Box(contentAlignment = Alignment.Center) {
                             if (codeInput.isEmpty()) {
                                 Text(
                                     text = "ABC123",
                                     style = MaterialTheme.typography.titleLarge.copy(
-                                        color = Ink.copy(alpha = 0.22f),
+                                        color = Muted.copy(alpha = 0.6f),
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Center,
                                         letterSpacing = 6.sp
@@ -1052,7 +738,7 @@ private fun JoinWorkspaceByCodeDialog(
             Text(
                 text = "${codeInput.length}/6",
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (canSubmit) IndigoStart else Muted
+                color = if (canSubmit) PrintInk else Muted
             )
 
             Spacer(Modifier.height(16.dp))
@@ -1068,43 +754,40 @@ private fun JoinWorkspaceByCodeDialog(
 }
 
 @Composable
-private fun SavedMessagesRow(onClick: () -> Unit) {
+private fun SavedMessagesRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val store = org.koin.compose.koinInject<com.collabsphere.app.model.message.SavedMessagesStore>()
     val items by store.items.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { store.refresh() }
+    val interaction = remember { MutableInteractionSource() }
+    val press = rememberPrintPress(interaction)
+    val tagShape = remember { BlobShape(seed = 23, wobble = 0.14f) }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .skeuoFloatingCard(cornerRadius = 18.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), pressProgress = press)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(CoralStart.copy(alpha = 0.12f)),
+                .size(40.dp)
+                .printSurface(shape = tagShape, fill = PrintSky, shadow = null),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Bookmark, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+            Icon(Icons.Outlined.BookmarkBorder, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Text(
             text = "Saved messages",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Ink,
+            style = PrintType.H3,
+            color = PrintInk,
             modifier = Modifier.weight(1f)
         )
         if (items.isNotEmpty()) {
-            Text(
-                text = items.size.toString(),
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = Muted
-            )
-            Spacer(Modifier.width(6.dp))
+            PrintChip(text = items.size.toString())
+            Spacer(Modifier.width(8.dp))
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp))
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = PrintInk, modifier = Modifier.size(24.dp))
     }
 }

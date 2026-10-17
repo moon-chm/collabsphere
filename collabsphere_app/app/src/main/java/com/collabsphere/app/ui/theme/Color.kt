@@ -7,9 +7,9 @@ import androidx.compose.ui.graphics.Color
 // ─────────────────────────────────────────────────────────────────
 
 // Base Surfaces — Light Mode
-val Background       = Color(0xFFE8E4DA)   // darker, more saturated warm grey (was EFEDE7)
-val Surface          = Color(0xFFFAF8F3)   // push lighter/whiter (was F6F4EF)
-val SurfaceRaised    = Color(0xFFFDFBF7)   // even lighter for modals
+val Background       = Color(0xFFFBF5EA)
+val Surface          = Color(0xFFFFFFFF)
+val SurfaceRaised    = Color(0xFFFFFFFF)
 
 // Base Surfaces — Dark Mode
 val BackgroundDark   = Color(0xFF1C1A17)
@@ -17,13 +17,13 @@ val SurfaceDark      = Color(0xFF242220)
 val SurfaceRaisedDark= Color(0xFF2A2825)
 
 // Ink / Text
-val Ink              = Color(0xFF2C2A28)   // Primary heading / body text
-val Muted            = Color(0xFF7A7570)   // Secondary / supporting text
+val Ink              = Color(0xFF1E2A5A)
+val Muted            = Color(0xFF5B6384)
 val InkDark          = Color(0xFFF2F0EA)   // Primary text on dark
 val MutedDark        = Color(0xFF9C968C)   // Secondary text on dark
 
 // Border
-val BorderHairline   = Color(0x14_2C2A28)  // rgba(44,42,40, 0.08)
+val BorderHairline   = Color(0x29_1E2A5A)
 
 // Accents — Coral (Primary CTA)
 val CoralStart       = Color(0xFFF0633D)

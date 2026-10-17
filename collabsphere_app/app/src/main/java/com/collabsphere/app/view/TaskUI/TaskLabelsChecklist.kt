@@ -2,6 +2,7 @@ package com.collabsphere.app.view.TaskUI
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.collabsphere.app.dto.task.ChecklistItem
 import com.collabsphere.app.model.task.TaskEntity
-import com.collabsphere.app.ui.theme.Amber
+import com.collabsphere.app.ui.theme.*
 import com.collabsphere.app.ui.theme.CoralStart
 import com.collabsphere.app.ui.theme.IndigoStart
 import com.collabsphere.app.ui.theme.Ink
@@ -70,7 +71,7 @@ fun addLabel(labels: List<String>, raw: String): List<String> {
     return labels + label
 }
 
-private val labelPalette = listOf(IndigoStart, Mint, Amber, CoralStart, Color(0xFF8E5BC4), Color(0xFF2E8FA8))
+private val labelPalette = listOf(PrintSky, PrintLeaf, PrintCoral, Color(0xFFF6D365), Color(0xFFC9B6F2), Color(0xFFFFC2D1))
 
 fun labelColor(label: String): Color =
     labelPalette[(label.lowercase().hashCode() and Int.MAX_VALUE) % labelPalette.size]
@@ -80,27 +81,34 @@ fun LabelPill(label: String, onRemove: (() -> Unit)? = null) {
     val color = labelColor(label)
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .clip(RoundedCornerShape(percent = 50))
+            .background(color)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(percent = 50))
+            .padding(start = 8.dp, end = if (onRemove != null) 4.dp else 8.dp, top = 3.dp, bottom = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-            color = color,
+            style = PrintType.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+            color = PrintInk,
             maxLines = 1
         )
         if (onRemove != null) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Remove label $label",
-                tint = color,
+            Box(
                 modifier = Modifier
-                    .size(12.dp)
-                    .clickable(onClick = onRemove)
-            )
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove label $label",
+                    tint = PrintInk,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
         }
     }
 }
@@ -120,7 +128,7 @@ fun TaskLabelsAndProgress(task: TaskEntity) {
             val done = task.checklist.count { it.done }
             PlanningPill(
                 text = "$done/$total",
-                color = if (done == total) Mint else Muted,
+                color = if (done == total) PrintLeaf else PrintPaper,
                 icon = { Icon(Icons.Default.Checklist, null, tint = it, modifier = Modifier.size(12.dp)) }
             )
         }
@@ -149,11 +157,11 @@ private fun AddItemField(
             .skeuoFocusRing(isFocused, cornerRadius = 24.dp)
             .skeuoInset(cornerRadius = 24.dp, depth = 3.dp, symmetric = true, shadowStrength = com.collabsphere.app.view.components.FieldInsetShadow)
             .clip(RoundedCornerShape(24.dp))
-            .padding(start = 18.dp, end = 16.dp),
+            .padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = CoralStart.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp))
         BasicTextField(
             value = input,
             onValueChange = { input = it.take(maxLength) },
@@ -161,25 +169,26 @@ private fun AddItemField(
             modifier = Modifier
                 .weight(1f)
                 .onFocusChanged { isFocused = it.isFocused },
-            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
-            cursorBrush = SolidColor(CoralStart),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = PrintInk),
+            cursorBrush = SolidColor(PrintInk),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (input.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = Ink.copy(alpha = 0.40f))
+                    if (input.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = Muted)
                     inner()
                 }
             }
         )
         if (input.isNotBlank()) {
-            Icon(
-                imageVector = Icons.Default.Add,
+            PrintIconButton(
+                icon = Icons.Default.Add,
                 contentDescription = placeholder,
-                tint = CoralStart,
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable { submit() }
+                onClick = { submit() },
+                fill = PrintLeaf,
+                size = 36.dp,
+                iconSize = 18.dp,
+                shadow = false
             )
         }
     }
@@ -222,8 +231,8 @@ fun ChecklistEditor(
         if (items.isNotEmpty()) {
             Text(
                 text = "Checklist · ${items.count { it.done }}/${items.size}",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = Muted
+                style = PrintType.Tiny,
+                color = PrintInk
             )
         }
         items.forEachIndexed { index, item ->
@@ -235,19 +244,21 @@ fun ChecklistEditor(
                 Icon(
                     imageVector = if (item.done) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
                     contentDescription = if (item.done) "Mark not done" else "Mark done",
-                    tint = if (item.done) Mint else Muted,
+                    tint = if (item.done) PrintLeafDark else PrintInk,
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
                         .clickable(enabled = enabled) {
                             onItemsChange(items.toMutableList().apply { this[index] = item.copy(done = !item.done) })
                         }
+                        .padding(9.dp)
                 )
                 Text(
                     text = item.text,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None
                     ),
-                    color = if (item.done) Muted else Ink,
+                    color = if (item.done) Muted else PrintInk,
                     modifier = Modifier.weight(1f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -256,10 +267,12 @@ fun ChecklistEditor(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Remove item",
-                        tint = Muted,
+                        tint = PrintInk,
                         modifier = Modifier
-                            .size(16.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
                             .clickable { onItemsChange(items.filterIndexed { i, _ -> i != index }) }
+                            .padding(9.dp)
                     )
                 }
             }
@@ -285,7 +298,7 @@ fun LabelFilterRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FilterPill("All labels", selected == null, Muted) { onSelect(null) }
+        FilterPill("All labels", selected == null, PrintInk.copy(alpha = 0.12f)) { onSelect(null) }
         labels.forEach { label ->
             val isSelected = selected.equals(label, ignoreCase = true)
             FilterPill(label, isSelected, labelColor(label)) { onSelect(if (isSelected) null else label) }
@@ -295,18 +308,5 @@ fun LabelFilterRow(
 
 @Composable
 private fun FilterPill(text: String, isSelected: Boolean, color: Color, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isSelected) color.copy(alpha = 0.18f) else Surface)
-            .border(1.dp, if (isSelected) color else Muted.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
-            color = if (isSelected) color else Ink
-        )
-    }
+    PrintChip(text = text, fill = if (isSelected) color else PrintWhite, onClick = onClick)
 }

@@ -41,7 +41,7 @@ fun PollCard(
 ) {
     val text = if (onDarkBubble) Color.White else Ink
     val sub = if (onDarkBubble) Color.White.copy(alpha = 0.8f) else Muted
-    val accent = if (onDarkBubble) Color.White else CoralStart
+    val accent = if (onDarkBubble) PrintLeaf else PrintInk
     val totalVotes = poll.options.sumOf { it.votes }.coerceAtLeast(1)
 
     Column(modifier = Modifier.widthIn(min = 220.dp, max = 280.dp)) {
@@ -186,9 +186,9 @@ fun CreatePollDialog(
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = CoralStart, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Add, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Add option", style = MaterialTheme.typography.labelLarge, color = CoralStart)
+                        Text("Add option", style = MaterialTheme.typography.labelLarge, color = PrintInk)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -201,7 +201,7 @@ fun CreatePollDialog(
                     Switch(
                         checked = allowsMultiple,
                         onCheckedChange = { allowsMultiple = it },
-                        colors = SwitchDefaults.colors(checkedTrackColor = CoralStart)
+                        colors = SwitchDefaults.colors(checkedTrackColor = PrintLeaf, checkedThumbColor = PrintInk)
                     )
                 }
             }
@@ -223,11 +223,11 @@ fun CreatePollDialog(
                         .weight(1.3f)
                         .height(48.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(if (canCreate) CoralStart else CoralStart.copy(alpha = 0.5f))
+                        .background(if (canCreate) PrintCoral else PrintPaper)
                         .clickable(enabled = canCreate) { onCreate(question, filled, allowsMultiple) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Create poll", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                    Text("Create poll", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = if (canCreate) PrintInk else Muted)
                 }
             }
         }

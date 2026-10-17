@@ -21,4 +21,14 @@ class PublicPagesTest {
         assertTrue(html.contains("href=\"/privacy\""))
         assertTrue(html.contains("CollabSphere"))
     }
+
+    @Test
+    fun `pages show the real logo and it is bundled`() {
+        listOf(PublicPages.home(), PublicPages.privacy()).forEach { html ->
+            assertTrue(html.contains("src=\"${PublicPages.LOGO_PATH}\""))
+            assertTrue(html.contains("rel=\"icon\""))
+        }
+        val png = PublicPages.logoPng
+        assertTrue(png != null && png.size > 8 && png[1] == 'P'.code.toByte() && png[2] == 'N'.code.toByte())
+    }
 }

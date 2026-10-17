@@ -1,5 +1,6 @@
 package com.collabsphere.app.view.components
 
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -102,7 +103,7 @@ fun CommitmentTaskDialog(
                 enabled = !saving,
                 imeAction = ImeAction.Done,
                 leadingIcon = {
-                    Icon(Icons.Outlined.Edit, contentDescription = null, tint = Mint, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Edit, contentDescription = null, tint = PrintLeafDark, modifier = Modifier.size(18.dp))
                 }
             )
 
@@ -168,7 +169,7 @@ private fun DueChip(label: String, selected: Boolean, enabled: Boolean, onClick:
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(if (selected) Mint.copy(alpha = 0.16f) else Color.Transparent)
+            .background(if (selected) PrintLeaf.copy(alpha = 0.35f) else Color.Transparent)
             .border(1.dp, if (selected) Mint else Muted.copy(alpha = 0.25f), shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),

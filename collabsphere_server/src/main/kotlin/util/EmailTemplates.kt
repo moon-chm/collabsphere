@@ -4,31 +4,23 @@ data class EmailContent(val subject: String, val html: String, val text: String)
 
 object EmailTemplates {
 
-    private const val CORAL = "#F0633D"
-    private const val INDIGO = "#4C55C4"
-    private const val MINT = "#4E9E78"
-    private const val INK = "#2C2A28"
-    private const val MUTED = "#6F6A64"
-    private const val PAGE = "#ECE6DA"
-    private const val CARD = "#FDFBF7"
-    private const val WELL_BASE = "#EFE9DF"
-    private const val CORAL_LIGHT = "#FF8A6B"
-    private const val CORAL_DARK = "#C24A26"
-    private const val MINT_LIGHT = "#6CC197"
-    private const val MINT_DARK = "#3A7C5D"
+    const val LOGO_CID = "cs-logo"
+
+    private const val INK = "#1E2A5A"
+    private const val MUTED = "#5B6384"
+    private const val PAGE = "#FBF5EA"
+    private const val CARD = "#FFFFFF"
+    private const val LEAF = "#8CC63F"
+    private const val CORAL = "#F28B6C"
+    private const val CORAL_TINT = "#FFE1D6"
+    private const val SKY_TINT = "#D6F0FB"
+    private const val LEAF_TINT = "#E4F3CF"
 
     private const val CARD_STYLE =
-        "background-color: #FDFBF7; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8F4EC 100%); " +
-            "border: 1px solid #DDD5C7; border-top-color: #FFFFFF; border-left-color: #F1ECE3; " +
-            "border-bottom-color: #C9BFAE; border-right-color: #D8CFC0; border-radius: 22px; " +
-            "box-shadow: 0 18px 36px -12px rgba(60,44,30,0.22), 0 4px 10px rgba(60,44,30,0.08), inset 0 1px 0 #FFFFFF;"
+        "background-color: $CARD; border: 2px solid $INK; border-right-width: 6px; border-bottom-width: 6px; border-radius: 24px;"
 
-    private const val WELL_STYLE =
-        "background-color: #EFE9DF; background-image: linear-gradient(180deg, #E7E0D3 0%, #F4EFE7 100%); " +
-            "border: 1px solid #D8CFC0; border-top-color: #C9BFAE; border-left-color: #D3C9B9; " +
-            "border-bottom-color: #FFFFFF; border-right-color: #FAF7F2; border-radius: 16px; " +
-            "box-shadow: inset 0 3px 6px rgba(60,44,30,0.16), inset 0 -1px 0 #FFFFFF;"
     private const val FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    private const val SERIF = "Georgia, 'Times New Roman', serif"
 
     fun escape(value: String): String = buildString(value.length) {
         value.forEach { ch ->
@@ -51,7 +43,7 @@ object EmailTemplates {
         heading = "Confirm your email",
         intro = "Welcome to CollabSphere! Enter this code in the app to finish setting up your account.",
         code = otp,
-        accent = CORAL,
+        accent = CORAL_TINT,
         minutes = minutes,
         ignoreNote = "Didn't sign up? You can safely ignore this email and no account will be created."
     )
@@ -63,7 +55,7 @@ object EmailTemplates {
         intro = "You asked to change your CollabSphere email to <strong>${escape(oneLine(newEmail))}</strong>. Enter this code in the app to confirm it.",
         textIntro = "You asked to change your CollabSphere email to ${oneLine(newEmail)}. Enter this code in the app to confirm it.",
         code = otp,
-        accent = INDIGO,
+        accent = SKY_TINT,
         minutes = minutes,
         ignoreNote = "Didn't ask for this? Ignore this email and your current address stays in place."
     )
@@ -74,7 +66,7 @@ object EmailTemplates {
         heading = "Reset your password",
         intro = "We got a request to reset your CollabSphere password. Enter this code in the app to choose a new one.",
         code = otp,
-        accent = INDIGO,
+        accent = SKY_TINT,
         minutes = minutes,
         ignoreNote = "Didn't request this? Your password hasn't changed, and you can ignore this email."
     )
@@ -90,7 +82,7 @@ object EmailTemplates {
         )
         val body = """
             ${paragraph("<strong>${escape(inviter)}</strong> wants you to collaborate in <strong>${escape(workspace)}</strong>: chat, share tasks and ship together.")}
-            ${codeBox("Your invite code", inviteCode, MINT)}
+            ${codeBox("Your invite code", inviteCode, LEAF_TINT)}
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 4px 0 8px 0;">
               ${steps.mapIndexed { i, step -> stepRow(i + 1, step) }.joinToString("\n")}
             </table>
@@ -152,19 +144,12 @@ object EmailTemplates {
     private fun note(html: String) =
         """<p style="margin: 0 0 12px 0; font-family: $FONT; font-size: 13px; line-height: 20px; color: $MUTED;">$html</p>"""
 
-    private fun raisedBadge(base: String, light: String, dark: String): String =
-        "background-color: $base; background-image: linear-gradient(180deg, $light 0%, $base 100%); " +
-            "border: 1px solid $dark; border-top-color: $light; border-bottom: 2px solid $dark; " +
-            "box-shadow: 0 3px 6px rgba(60,44,30,0.25), inset 0 1px 0 rgba(255,255,255,0.45); " +
-            "text-shadow: 0 -1px 0 rgba(0,0,0,0.18);"
-
-    private fun codeBox(label: String, code: String, accent: String) = """
+    private fun codeBox(label: String, code: String, fill: String) = """
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 4px 0 24px 0;">
           <tr>
-            <td align="center" bgcolor="$WELL_BASE" class="cs-well" style="$WELL_STYLE padding: 18px 12px 22px 12px;">
-              <div style="width: 36px; height: 4px; border-radius: 2px; background-color: $accent; margin: 0 auto 10px auto; font-size: 0; line-height: 0;">&nbsp;</div>
-              <div style="font-family: $FONT; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: $MUTED; margin-bottom: 8px; text-shadow: 0 1px 0 #FFFFFF;">${escape(label)}</div>
-              <div class="cs-code" style="font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 34px; line-height: 40px; font-weight: 800; letter-spacing: 8px; color: $INK; text-shadow: 0 1px 0 #FFFFFF;">${escape(code)}</div>
+            <td align="center" bgcolor="$fill" class="cs-well" style="background-color: $fill; border: 2px solid $INK; border-radius: 16px; padding: 18px 12px 20px 12px;">
+              <div style="font-family: $FONT; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: $INK; margin-bottom: 8px;">${escape(label)}</div>
+              <div class="cs-code" style="font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 34px; line-height: 40px; font-weight: 800; letter-spacing: 8px; color: $INK;">${escape(code)}</div>
             </td>
           </tr>
         </table>
@@ -172,10 +157,10 @@ object EmailTemplates {
 
     private fun stepRow(number: Int, html: String) = """
         <tr>
-          <td width="36" valign="top" style="padding: 0 0 14px 0;">
-            <div style="width: 26px; height: 26px; border-radius: 13px; ${raisedBadge(MINT, MINT_LIGHT, MINT_DARK)} color: #FFFFFF; font-family: $FONT; font-size: 13px; line-height: 24px; font-weight: 800; text-align: center;">$number</div>
+          <td width="40" valign="top" style="padding: 0 0 14px 0;">
+            <div style="width: 26px; height: 26px; border-radius: 15px; background-color: $LEAF; border: 2px solid $INK; color: $INK; font-family: $FONT; font-size: 13px; line-height: 26px; font-weight: 800; text-align: center;">$number</div>
           </td>
-          <td valign="top" style="padding: 3px 0 14px 0; font-family: $FONT; font-size: 15px; line-height: 22px; color: $INK;">$html</td>
+          <td valign="top" style="padding: 4px 0 14px 0; font-family: $FONT; font-size: 15px; line-height: 22px; color: $INK;">$html</td>
         </tr>
     """.trimIndent()
 
@@ -193,14 +178,14 @@ object EmailTemplates {
           <style>
             @media only screen and (max-width: 480px) {
               .cs-outer { padding: 20px 10px !important; }
-              .cs-card { padding: 28px 20px !important; border-radius: 18px !important; }
+              .cs-card { padding: 28px 20px !important; border-radius: 20px !important; }
               .cs-code { font-size: 28px !important; letter-spacing: 6px !important; }
             }
           </style>
         </head>
         <body style="margin: 0; padding: 0; background-color: $PAGE;">
           <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent;">${escape(oneLine(preheader))}</div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="$PAGE" style="background-color: $PAGE; background-image: linear-gradient(180deg, #F3EEE5 0%, $PAGE 100%);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="$PAGE" style="background-color: $PAGE;">
             <tr>
               <td align="center" class="cs-outer" style="padding: 36px 16px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px;">
@@ -208,20 +193,20 @@ object EmailTemplates {
                     <td align="center" style="padding: 0 0 22px 0;">
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                         <tr>
-                          <td width="38" height="38" align="center" bgcolor="$CORAL" style="border-radius: 11px; ${raisedBadge(CORAL, CORAL_LIGHT, CORAL_DARK)} font-family: $FONT; font-size: 20px; line-height: 36px; font-weight: 800; color: #FFFFFF;">C</td>
-                          <td style="padding-left: 10px; font-family: $FONT; font-size: 20px; font-weight: 800; color: $INK; text-shadow: 0 1px 0 #FFFFFF;">CollabSphere</td>
+                          <td valign="middle" style="padding: 5px; border: 3px dotted $CORAL; border-radius: 50%;"><img src="cid:$LOGO_CID" width="44" height="44" alt="CollabSphere" style="display: block; width: 44px; height: 44px; border: 0; outline: none; text-decoration: none;"></td>
+                          <td valign="middle" style="padding-left: 12px; font-family: $SERIF; font-size: 22px; line-height: 28px; font-weight: 700; color: $INK;">CollabSphere</td>
                         </tr>
                       </table>
                     </td>
                   </tr>
                   <tr>
                     <td bgcolor="$CARD" class="cs-card" style="$CARD_STYLE padding: 36px 32px;">
-                      <h1 style="margin: 0 0 16px 0; font-family: $FONT; font-size: 24px; line-height: 32px; font-weight: 800; color: $INK; text-shadow: 0 1px 0 #FFFFFF;">$headingHtml</h1>
+                      <h1 style="margin: 0 0 18px 0; font-family: $SERIF; font-size: 28px; line-height: 34px; font-weight: 700; color: $INK; text-shadow: 2px 2px 0 $CORAL;">$headingHtml</h1>
                       $bodyHtml
                     </td>
                   </tr>
                   <tr>
-                    <td align="center" style="padding: 22px 12px 0 12px; font-family: $FONT; font-size: 12px; line-height: 18px; color: $MUTED; text-shadow: 0 1px 0 rgba(255,255,255,0.8);">
+                    <td align="center" style="padding: 22px 12px 0 12px; font-family: $FONT; font-size: 12px; line-height: 18px; color: $MUTED;">
                       CollabSphere: your team's workspace for chat, tasks and code.<br>
                       This is an automated message, so replies aren't monitored.
                     </td>

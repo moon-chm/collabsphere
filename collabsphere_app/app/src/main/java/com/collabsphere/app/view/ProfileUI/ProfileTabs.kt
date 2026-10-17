@@ -1,5 +1,7 @@
 package com.collabsphere.app.view.ProfileUI
 
+import androidx.compose.foundation.border
+import com.collabsphere.app.ui.theme.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,7 +44,8 @@ fun ProfileTabRow(selected: ProfileTab, onSelect: (ProfileTab) -> Unit, modifier
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.Black.copy(alpha = 0.04f))
+            .background(PrintWhite)
+            .border(1.5.dp, PrintInk, RoundedCornerShape(16.dp))
             .padding(4.dp)
             .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -53,7 +56,7 @@ fun ProfileTabRow(selected: ProfileTab, onSelect: (ProfileTab) -> Unit, modifier
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (isSelected) CoralStart else Color.Transparent)
+                    .background(if (isSelected) PrintInk else Color.Transparent)
                     .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(tab) })
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -61,7 +64,7 @@ fun ProfileTabRow(selected: ProfileTab, onSelect: (ProfileTab) -> Unit, modifier
                 Text(
                     text = tab.label,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = if (isSelected) Color.White else Muted
+                    color = if (isSelected) PrintPaper else PrintInk
                 )
             }
         }

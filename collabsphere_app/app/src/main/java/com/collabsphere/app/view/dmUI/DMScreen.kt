@@ -62,6 +62,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -140,7 +141,11 @@ import com.collabsphere.app.view.components.ChatBubbleTail
 import com.collabsphere.app.view.components.ComposerAction
 import com.collabsphere.app.view.components.ComposerActionsButton
 import com.collabsphere.app.view.components.ComposerEmojiPanel
-import com.collabsphere.app.view.components.OwnBubbleColor
+import com.collabsphere.app.view.components.chatBubbleSurface
+import com.collabsphere.app.view.components.chatComposerDock
+import com.collabsphere.app.view.components.chatComposerField
+import com.collabsphere.app.view.components.chatHeaderBar
+import com.collabsphere.app.view.components.chatSendButton
 import com.collabsphere.app.view.components.insertAtCursor
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -163,27 +168,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.collabsphere.app.view.components.UserListSkeleton
 
 
-private fun formatDmDateHeader(timestamp: Long): String {
-    val messageCal = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
-    val todayCal = java.util.Calendar.getInstance()
-    val yesterdayCal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
-
-    return when {
-        messageCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
-        messageCal.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR) -> "Today"
-
-        messageCal.get(java.util.Calendar.YEAR) == yesterdayCal.get(java.util.Calendar.YEAR) &&
-        messageCal.get(java.util.Calendar.DAY_OF_YEAR) == yesterdayCal.get(java.util.Calendar.DAY_OF_YEAR) -> "Yesterday"
-
-        messageCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) -> {
-            java.text.SimpleDateFormat("MMMM d", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
-        }
-        else -> {
-            java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
-        }
-    }
-}
-
 private fun formatDmTime(timestamp: Long): String {
     return java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
 }
@@ -193,65 +177,6 @@ private fun isSameDay(t1: Long, t2: Long): Boolean {
     val cal2 = java.util.Calendar.getInstance().apply { timeInMillis = t2 }
     return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
            cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR)
-}
-
-private fun DrawScope.drawWhatsAppTexture(baseTint: Color) {
-    val stepX = 64.dp.toPx()
-    val stepY = 64.dp.toPx()
-    val motifColor = baseTint.copy(alpha = 0.042f)
-    val stroke = Stroke(width = 1.2.dp.toPx())
-
-    var row = 0
-    var y = 20.dp.toPx()
-    while (y < size.height) {
-        val offsetX = if (row % 2 == 1) stepX / 2f else 0f
-        var x = offsetX
-        var col = 0
-        while (x < size.width) {
-            when ((row + col) % 4) {
-                0 -> {
-                    drawRoundRect(
-                        color = motifColor,
-                        topLeft = Offset(x, y),
-                        size = Size(14.dp.toPx(), 10.dp.toPx()),
-                        cornerRadius = CornerRadius(3.dp.toPx()),
-                        style = stroke
-                    )
-                }
-                1 -> {
-                    val cx = x + 7.dp.toPx()
-                    val cy = y + 5.dp.toPx()
-                    val r = 4.dp.toPx()
-                    drawLine(motifColor, Offset(cx - r, cy), Offset(cx + r, cy), strokeWidth = 1.2.dp.toPx())
-                    drawLine(motifColor, Offset(cx, cy - r), Offset(cx, cy + r), strokeWidth = 1.2.dp.toPx())
-                }
-                2 -> {
-                    val cx = x + 7.dp.toPx()
-                    val cy = y + 5.dp.toPx()
-                    val path = Path().apply {
-                        moveTo(cx, cy - 4.dp.toPx())
-                        lineTo(cx + 4.dp.toPx(), cy)
-                        lineTo(cx, cy + 4.dp.toPx())
-                        lineTo(cx - 4.dp.toPx(), cy)
-                        close()
-                    }
-                    drawPath(path, motifColor, style = stroke)
-                }
-                3 -> {
-                    drawCircle(
-                        color = motifColor,
-                        radius = 3.5.dp.toPx(),
-                        center = Offset(x + 7.dp.toPx(), y + 5.dp.toPx()),
-                        style = stroke
-                    )
-                }
-            }
-            x += stepX
-            col++
-        }
-        y += stepY
-        row++
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -643,276 +568,151 @@ fun DMScreen(
         )
     }
 
-    // Partner Profile Card dialog
     if (showPartnerProfileDialog && activeChatPartner != null) {
         val partner = activeChatPartner!!
         val partnerInitialDialog = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
         val isOnlineDialog = partner.id in onlineUserIds
 
-        Dialog(onDismissRequest = { showPartnerProfileDialog = false }) {
+        Dialog(
+            onDismissRequest = { showPartnerProfileDialog = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .wrapContentHeight()
-                    .drawWithCache {
-                        onDrawBehind {
-                        // Outer drop shadow
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.28f),
-                            topLeft = Offset(4.dp.toPx(), 8.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(28.dp.toPx())
-                        )
-                        // Top-left highlight
-                        drawRoundRect(
-                            color = ShadowLight.copy(alpha = 0.90f),
-                            topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                            size = Size(size.width, size.height),
-                            cornerRadius = CornerRadius(28.dp.toPx())
-                        )
-                        // Base surface
-                        drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(28.dp.toPx()))
-                        // Top gloss shine
-                        drawRoundRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.72f), Color.Transparent),
-                                startY = 0f,
-                                endY = 56.dp.toPx()
-                            ),
-                            topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                            size = Size(size.width - 2.dp.toPx(), size.height - 2.dp.toPx()),
-                            cornerRadius = CornerRadius(27.dp.toPx()),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                        }
-                    }
-                    .padding(horizontal = 24.dp, vertical = 28.dp),
-                contentAlignment = Alignment.TopCenter
+                    .padding(horizontal = 20.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 420.dp)
+                        .fillMaxWidth()
+                        .printSurface(shape = RoundedCornerShape(28.dp))
                 ) {
-                    // Close button (top-right)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
-                                    drawCircle(color = SurfaceRaised, radius = size.minDimension / 2f)
-                                    }
-                                }
-                                .clip(CircleShape)
-                                .clickable { showPartnerProfileDialog = false },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close profile",
-                                tint = Muted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    // Avatar
-                    Box(
-                        modifier = Modifier
-                            .size(84.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 2.dp.toPx(), center.y + 3.dp.toPx()))
-                                drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 2.dp.toPx(), center.y - 2.dp.toPx()))
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(IndigoStart, IndigoEnd),
-                                        center = Offset(center.x - 8.dp.toPx(), center.y - 8.dp.toPx()),
-                                        radius = size.minDimension / 2f
-                                    )
-                                )
-                                }
-                            }
-                            .clip(CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!partner.avatarUrl.isNullOrEmpty()) {
-                            SubcomposeAsyncImage(
-                                model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
-                                    .size(with(LocalDensity.current) { 84.dp.roundToPx() }).build(),
-                                contentDescription = partner.userName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(84.dp).clip(CircleShape),
-                                error = {
-                                    Text(
-                                        text = partnerInitialDialog,
-                                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
-                                    )
-                                }
-                            )
-                        } else {
-                            Text(
-                                text = partnerInitialDialog,
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    // Online status pill
-                    Box(
-                        modifier = Modifier
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRoundRect(
-                                    color = if (isOnlineDialog) Mint.copy(alpha = 0.18f) else Muted.copy(alpha = 0.12f),
-                                    cornerRadius = CornerRadius(20.dp.toPx())
-                                )
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOnlineDialog) Mint else Muted.copy(alpha = 0.5f))
-                            )
-                            Text(
-                                text = if (isOnlineDialog) "Online" else "Offline",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 11.sp),
-                                color = if (isOnlineDialog) Mint else Muted
-                            )
-                        }
-                    }
-
-                    // Username
-                    Text(
-                        text = partner.userName,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Ink,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    // Email
-                    Text(
-                        text = partner.email,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                        color = Muted,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    // Divider
-                    Box(
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(1.dp)
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRect(color = ShadowDark.copy(alpha = 0.10f), topLeft = Offset(0f, 0f))
-                                drawRect(color = Color.White.copy(alpha = 0.60f), topLeft = Offset(0f, 0.5.dp.toPx()))
-                                }
+                            .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .printSurface(shape = CircleShape, fill = PrintSky, shadowOffset = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!partner.avatarUrl.isNullOrEmpty()) {
+                                SubcomposeAsyncImage(
+                                    model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
+                                        .size(with(LocalDensity.current) { 88.dp.roundToPx() }).build(),
+                                    contentDescription = partner.userName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(88.dp).clip(CircleShape),
+                                    error = {
+                                        Text(
+                                            text = partnerInitialDialog,
+                                            style = PrintType.H2,
+                                            color = PrintInk
+                                        )
+                                    }
+                                )
+                            } else {
+                                Text(
+                                    text = partnerInitialDialog,
+                                    style = PrintType.H2,
+                                    color = PrintInk
+                                )
                             }
-                    )
+                        }
 
-                    // Bio
-                    if (!partner.bio.isNullOrBlank()) {
+                        PrintChip(
+                            text = if (isOnlineDialog) "Online" else "Offline",
+                            fill = if (isOnlineDialog) PrintLeaf else PrintPaper
+                        )
+
                         Text(
-                            text = partner.bio,
-                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 14.sp),
-                            color = Ink.copy(alpha = 0.80f),
+                            text = partner.userName,
+                            style = PrintType.H2.copy(fontSize = 24.sp, lineHeight = 28.sp),
+                            color = PrintInk,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        Text(
-                            text = "No bio yet",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            color = Muted.copy(alpha = 0.6f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
 
-                    // Status message
-                    if (!partner.statusMessage.isNullOrBlank()) {
+                        Text(
+                            text = partner.email,
+                            style = PrintType.Caption.copy(fontSize = 14.sp),
+                            color = Muted,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.10f),
-                                        topLeft = Offset(1.dp.toPx(), 2.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(color = Surface, cornerRadius = CornerRadius(12.dp.toPx()))
-                                    }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp)
-                        ) {
+                                .height(1.5.dp)
+                                .background(PrintInk.copy(alpha = 0.15f))
+                        )
+
+                        if (!partner.bio.isNullOrBlank()) {
                             Text(
-                                text = "\"${partner.statusMessage}\"",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                color = Muted,
+                                text = partner.bio,
+                                style = PrintType.Body.copy(fontSize = 15.sp, lineHeight = 22.sp),
+                                color = PrintInk,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                        } else {
+                            Text(
+                                text = "No bio yet",
+                                style = PrintType.Caption.copy(fontSize = 14.sp),
+                                color = Muted,
+                                textAlign = TextAlign.Center
+                            )
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Message button
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRoundRect(
-                                    color = ShadowDark.copy(alpha = 0.22f),
-                                    topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
-                                    size = Size(size.width, size.height),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
+                        if (!partner.statusMessage.isNullOrBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(PrintTokens.RadiusSmall))
+                                    .background(PrintPaper)
+                                    .border(1.5.dp, PrintInk, RoundedCornerShape(PrintTokens.RadiusSmall))
+                                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = "“${partner.statusMessage}”",
+                                    style = PrintType.Caption.copy(fontSize = 14.sp),
+                                    color = PrintInk,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-                                drawRoundRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(CoralStart, CoralEnd),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    cornerRadius = CornerRadius(14.dp.toPx())
-                                )
-                                drawRoundRect(
-                                    color = Color.White.copy(alpha = 0.25f),
-                                    topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                    size = Size(size.width - 1.dp.toPx(), size.height / 2),
-                                    cornerRadius = CornerRadius(13.dp.toPx())
-                                )
-                                }
                             }
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { showPartnerProfileDialog = false }
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        PrintButton(
                             text = "Message ${partner.userName}",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
-                            color = Color.White
+                            onClick = { showPartnerProfileDialog = false },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
+
+                    PrintIconButton(
+                        icon = Icons.Default.Close,
+                        contentDescription = "Close profile",
+                        onClick = { showPartnerProfileDialog = false },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        fill = PrintPaper,
+                        size = 40.dp,
+                        iconSize = 18.dp,
+                        shadow = false
+                    )
                 }
             }
         }
@@ -974,11 +774,10 @@ fun DMScreen(
         label = "dmConversationTransition"
     ) { partner ->
         if (partner == null) {
-            // ──────────────────── Member Directory ────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(PrintPaper)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Row(
@@ -988,33 +787,10 @@ fun DMScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Direct messages",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
+                        MisregisteredTitle(text = "Messages", style = PrintType.H2, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(12.dp))
                         val otherMembersCount = workspaceMembers.filter { it.id != currentUserId.toInt() }.size
-                        Box(
-                            modifier = Modifier
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawRoundRect(
-                                        color = ShadowDark.copy(alpha = 0.12f),
-                                        topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
-                                        size = Size(size.width, size.height),
-                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                    )
-                                    drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(12.dp.toPx()))
-                                    }
-                                }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "$otherMembersCount members",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = Muted
-                            )
-                        }
+                        PrintChip(text = "$otherMembersCount members", fill = PrintSky)
                     }
 
                     val otherMembers = workspaceMembers.filter { it.id != currentUserId.toInt() }
@@ -1026,74 +802,27 @@ fun DMScreen(
                             trailing = false
                         )
                     } else if (otherMembers.isEmpty()) {
-                        Box(
-                            modifier = Modifier.weight(1f).fillMaxWidth().padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                        drawRoundRect(
-                                            color = ShadowDark.copy(alpha = 0.20f),
-                                            topLeft = Offset(4.dp.toPx(), 6.dp.toPx()),
-                                            size = Size(size.width, size.height),
-                                            cornerRadius = CornerRadius(24.dp.toPx())
-                                        )
-                                        drawRoundRect(
-                                            color = ShadowLight.copy(alpha = 0.85f),
-                                            topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                                            size = Size(size.width, size.height),
-                                            cornerRadius = CornerRadius(24.dp.toPx())
-                                        )
-                                        drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                                        }
-                                    }
-                                    .padding(28.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier.size(64.dp).clip(CircleShape).background(Surface),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Forum,
-                                            contentDescription = null,
-                                            tint = CoralStart,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-                                    Text(
-                                        text = "No team members yet",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Ink
-                                    )
-                                    Text(
-                                        text = "Invite members to this workspace using the '+' button in the top bar to begin chatting.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Muted,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
+                        com.collabsphere.app.view.components.SkeuoEmptyState(
+                            icon = Icons.Default.Forum,
+                            title = "No teammates yet",
+                            description = "Invite people to this workspace from the + button in the top bar, then start chatting.",
+                            actionLabel = null,
+                            onAction = {},
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        )
                     } else {
                         val membersListState = rememberLazyListState()
+                        val entranceRegistry = rememberEntranceRegistry()
                         LazyColumn(
                             state = membersListState,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
                                 .fadingScrollEdges(listState = membersListState, top = 20.dp, bottom = 48.dp),
-                            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 24.dp),
+                            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(otherMembers, key = { it.id }) { member ->
+                            itemsIndexed(otherMembers, key = { _, it -> it.id }) { index, member ->
                                 val isOnline = member.id in onlineUserIds
                                 val isTyping = member.id in typingPartnerIds
                                 SkeuoMemberRow(
@@ -1101,7 +830,9 @@ fun DMScreen(
                                     isOnline = isOnline,
                                     isTyping = isTyping,
                                     unreadCount = unreadByPartner[member.id] ?: 0,
-                                    modifier = Modifier.animateItem(),
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .printListEntrance(member.id, index, entranceRegistry),
                                     onClick = {
                                         activeChatPartner = member
                                         viewModel.loadChatHistory(workspaceId, currentUserId.toInt(), member.id, baseUrl)
@@ -1113,32 +844,16 @@ fun DMScreen(
                 }
             }
         } else {
-            // ──────────────────── Active Conversation ────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(PrintPaper)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Conversation Header
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRect(
-                                    color = ShadowDark.copy(alpha = 0.14f),
-                                    topLeft = Offset(0f, size.height),
-                                    size = Size(size.width, 3.dp.toPx())
-                                )
-                                drawRect(color = SurfaceRaised)
-                                drawRect(
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    topLeft = Offset(0f, 0f),
-                                    size = Size(size.width, 1.dp.toPx())
-                                )
-                                }
-                            }
+                            .chatHeaderBar()
                             .statusBarsPadding()
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                         contentAlignment = Alignment.CenterStart
@@ -1149,27 +864,22 @@ fun DMScreen(
                                 .height(52.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(
+                            PrintIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
                                 onClick = {
                                     activeChatPartner = null
                                     viewModel.closeChatSessionUi()
                                 },
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                        drawCircle(color = ShadowDark.copy(alpha = 0.22f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
-                                        drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
-                                        drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                        }
-                                    }
-                            ) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(20.dp))
-                            }
+                                size = 44.dp,
+                                iconSize = 20.dp,
+                                shadow = false
+                            )
 
                             Spacer(modifier = Modifier.width(8.dp))
 
-                            // Partner Info (clickable to view profile card)
+                            // Partner Info                            Spacer(modifier = Modifier.width(8.dp))
+
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
@@ -1181,32 +891,21 @@ fun DMScreen(
                                 val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                            drawCircle(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(IndigoStart, IndigoEnd),
-                                                    center = Offset(center.x - 4.dp.toPx(), center.y - 4.dp.toPx()),
-                                                    radius = size.minDimension / 2f
-                                                )
-                                            )
-                                            }
-                                        },
+                                        .size(40.dp)
+                                        .printSurface(shape = CircleShape, fill = PrintSky, shadow = null, outline = 1.5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (!partner.avatarUrl.isNullOrEmpty()) {
                                         SubcomposeAsyncImage(
                                             model = ImageRequest.Builder(context).data(partner.avatarUrl).crossfade(true)
-                                                .size(with(LocalDensity.current) { 38.dp.roundToPx() }).build(),
+                                                .size(with(LocalDensity.current) { 40.dp.roundToPx() }).build(),
                                             contentDescription = partner.userName,
                                             contentScale = ContentScale.Crop,
-                                            modifier = Modifier.size(38.dp).clip(CircleShape),
-                                            error = { Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White) }
+                                            modifier = Modifier.size(40.dp).clip(CircleShape),
+                                            error = { Text(text = partnerInitial, style = PrintType.H3, color = PrintInk) }
                                         )
                                     } else {
-                                        Text(text = partnerInitial, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
+                                        Text(text = partnerInitial, style = PrintType.H3, color = PrintInk)
                                     }
                                 }
 
@@ -1215,8 +914,8 @@ fun DMScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = partner.userName,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.5.sp),
-                                        color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        style = PrintType.H2.copy(fontSize = 19.sp, lineHeight = 23.sp),
+                                        color = PrintInk, maxLines = 1, overflow = TextOverflow.Ellipsis
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                         if (isPartnerTyping) {
@@ -1226,16 +925,16 @@ fun DMScreen(
                                                 animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
                                                 label = "pulseAlpha"
                                             )
-                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(CoralStart.copy(alpha = pulseAlpha)))
-                                            Text(text = "typing...", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold), color = CoralStart)
+                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(PrintCoral.copy(alpha = pulseAlpha)).border(1.dp, PrintInk, CircleShape))
+                                            Text(text = "typing…", style = PrintType.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = PrintInk)
                                         } else if (isPartnerOnline) {
-                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Mint))
-                                            Text(text = "Online", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp), color = Mint)
+                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(PrintLeaf).border(1.dp, PrintInk, CircleShape))
+                                            Text(text = "Online", style = PrintType.Caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold), color = PrintInk)
                                         } else {
-                                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Muted.copy(alpha = 0.5f)))
+                                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).border(1.dp, Muted, CircleShape))
                                             Text(
                                                 text = partnerLastSeen?.let { com.collabsphere.app.view.components.lastSeenLabel(it) } ?: "Offline",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                                style = PrintType.Caption.copy(fontSize = 12.sp),
                                                 color = Muted,
                                                 maxLines = 1
                                             )
@@ -1244,46 +943,27 @@ fun DMScreen(
                                 }
                             }
 
-                            // Info action button
                             IconButton(onClick = { if (search.isOpen) search.close() else search.isOpen = true }) {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = "Search in conversation",
-                                    tint = if (search.isOpen) CoralStart else Muted
+                                    tint = PrintInk
                                 )
                             }
-                            IconButton(
-                                onClick = { showPartnerProfileDialog = true },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                        drawCircle(color = ShadowDark.copy(alpha = 0.16f), radius = size.minDimension / 2f, center = Offset(center.x + 1.dp.toPx(), center.y + 1.5.dp.toPx()))
-                                        drawCircle(color = ShadowLight.copy(alpha = 0.90f), radius = size.minDimension / 2f, center = Offset(center.x - 1.dp.toPx(), center.y - 1.dp.toPx()))
-                                        drawCircle(color = Surface, radius = size.minDimension / 2f)
-                                        }
-                                    }
-                            ) {
-                                Icon(imageVector = Icons.Default.Info, contentDescription = "Profile info", tint = CoralStart, modifier = Modifier.size(18.dp))
+                            IconButton(onClick = { showPartnerProfileDialog = true }) {
+                                Icon(imageVector = Icons.Default.Info, contentDescription = "Profile info", tint = PrintInk, modifier = Modifier.size(22.dp))
                             }
                         }
                     }
 
-                    // Chat Area with WhatsApp-Style Background Texture
-                    val chatBgColor = MaterialTheme.colorScheme.background
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .drawWithCache {
-                                onDrawBehind {
-                                drawRect(color = chatBgColor)
-                                drawWhatsAppTexture(Ink)
-                                }
-                            }
+                            .background(PrintPaper)
+                            .paperGrain(alpha = 0.3f)
                     ) {
                         if (messages.isEmpty()) {
-                            // Friendly Empty State Hero Card
                             val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
                             Box(
                                 modifier = Modifier
@@ -1291,84 +971,47 @@ fun DMScreen(
                                     .padding(28.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Box(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .drawWithCache {
-                                            onDrawBehind {
-                                            drawRoundRect(
-                                                color = ShadowDark.copy(alpha = 0.18f),
-                                                topLeft = Offset(2.dp.toPx(), 4.dp.toPx()),
-                                                size = Size(size.width, size.height),
-                                                cornerRadius = CornerRadius(24.dp.toPx())
-                                            )
-                                            drawRoundRect(
-                                                color = ShadowLight.copy(alpha = 0.90f),
-                                                topLeft = Offset(-2.dp.toPx(), -2.dp.toPx()),
-                                                size = Size(size.width, size.height),
-                                                cornerRadius = CornerRadius(24.dp.toPx())
-                                            )
-                                            drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(24.dp.toPx()))
-                                            }
-                                        }
+                                        .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard))
                                         .padding(24.dp),
-                                    contentAlignment = Alignment.Center
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(64.dp)
+                                            .printSurface(shape = BlobShape(seed = partner.id, wobble = 0.14f), fill = PrintSky, shadow = null),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(60.dp)
-                                                .clip(CircleShape)
-                                                .drawWithCache {
-                                                    onDrawBehind {
-                                                    drawCircle(brush = Brush.radialGradient(listOf(IndigoStart, IndigoEnd)), radius = size.minDimension / 2f)
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(text = partnerInitial, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), color = Color.White)
-                                        }
-                                        Text(
-                                            text = "Start chatting with ${partner.userName}",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = Ink,
-                                            textAlign = TextAlign.Center
-                                        )
-                                        Text(
-                                            text = "Messages are delivered instantly and synced in real-time.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Muted,
-                                            textAlign = TextAlign.Center
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .drawWithCache {
-                                                    onDrawBehind {
-                                                    drawRoundRect(
-                                                        brush = Brush.linearGradient(listOf(CoralLight, CoralStart)),
-                                                        cornerRadius = CornerRadius(12.dp.toPx())
-                                                    )
-                                                    }
-                                                }
-                                                .clickable {
-                                                    viewModel.sendMessage(
-                                                        id = 0,
-                                                        workspaceId = workspaceId,
-                                                        senderId = currentUserId.toInt(),
-                                                        receiverId = partner.id,
-                                                        content = "Hi there!"
-                                                    )
-                                                }
-                                                .padding(horizontal = 20.dp, vertical = 8.dp)
-                                        ) {
-                                            Text("Say Hello", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        }
+                                        Text(text = partnerInitial, style = PrintType.H2, color = PrintInk)
                                     }
+                                    Text(
+                                        text = "Say hi to ${partner.userName}",
+                                        style = PrintType.H2.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                                        color = PrintInk,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Messages arrive instantly and stay in sync.",
+                                        style = PrintType.Body.copy(fontSize = 15.sp),
+                                        color = Muted,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    PrintButton(
+                                        text = "Say hello",
+                                        onClick = {
+                                            viewModel.sendMessage(
+                                                id = 0,
+                                                workspaceId = workspaceId,
+                                                senderId = currentUserId.toInt(),
+                                                receiverId = partner.id,
+                                                content = "Hi there!"
+                                            )
+                                        }
+                                    )
                                 }
                             }
                         } else {
@@ -1396,7 +1039,7 @@ fun DMScreen(
                                             CollabSpinner(
                                                 modifier = Modifier.size(20.dp),
                                                 strokeWidth = 2.dp,
-                                                color = CoralStart
+                                                color = PrintInk
                                             )
                                         }
                                     }
@@ -1407,51 +1050,12 @@ fun DMScreen(
                                     val isRead = message.isRead
                                     val hasMedia = !message.mediaUrl.isNullOrEmpty()
 
-                                    // Floating Date Header Chip
                                     val showDateHeader = index == 0 || !isSameDay(messages[index - 1].timestamp, message.timestamp)
                                     val showBubbleTail = showDateHeader || messages[index - 1].senderId != message.senderId || message.id == firstUnreadId
                                     val ownBubbleShape = ChatBubbleShape(isOwn = true, showTail = showBubbleTail)
                                     val incomingBubbleShape = ChatBubbleShape(isOwn = false, showTail = showBubbleTail)
                                     if (showDateHeader) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 10.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .drawWithCache {
-                                                        onDrawBehind {
-                                                        drawRoundRect(
-                                                            color = ShadowDark.copy(alpha = 0.12f),
-                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
-                                                            size = Size(size.width, size.height),
-                                                            cornerRadius = CornerRadius(12.dp.toPx())
-                                                        )
-                                                        drawRoundRect(
-                                                            color = SurfaceRaised.copy(alpha = 0.94f),
-                                                            cornerRadius = CornerRadius(12.dp.toPx())
-                                                        )
-                                                        drawRoundRect(
-                                                            color = Color.White.copy(alpha = 0.85f),
-                                                            cornerRadius = CornerRadius(12.dp.toPx()),
-                                                            style = Stroke(width = 1.dp.toPx())
-                                                        )
-                                                        }
-                                                    }
-                                                    .padding(horizontal = 14.dp, vertical = 4.dp)
-                                            ) {
-                                                Text(
-                                                    text = formatDmDateHeader(message.timestamp),
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 11.sp
-                                                    ),
-                                                    color = Muted
-                                                )
-                                            }
-                                        }
+                                        com.collabsphere.app.view.components.ChatDateSeparator(timestamp = message.timestamp)
                                     }
 
                                     if (message.id == firstUnreadId) {
@@ -1463,12 +1067,11 @@ fun DMScreen(
                                         modifier = Modifier
                                             .animateItem()
                                             .background(
-                                                if (search.highlightedId == message.id) CoralStart.copy(alpha = 0.12f) else Color.Transparent,
+                                                if (search.highlightedId == message.id) PrintSky.copy(alpha = 0.30f) else Color.Transparent,
                                                 RoundedCornerShape(12.dp)
                                             )
                                     ) {
                                     if (isOwnMessage) {
-                                        // Outgoing message (Aligned End)
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1482,7 +1085,7 @@ fun DMScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .widthIn(min = 52.dp, max = 280.dp + ChatBubbleTail)
-                                                        .background(OwnBubbleColor, ownBubbleShape)
+                                                        .chatBubbleSurface(true, ownBubbleShape)
                                                         .clip(ownBubbleShape)
                                                         .combinedClickable(
                                                             onClick = {},
@@ -1507,7 +1110,6 @@ fun DMScreen(
                                                                 onClick = target?.let { { scrollToMessage(targetId) } }
                                                             )
                                                         }
-                                                        // Media image
                                                         if (hasMedia && isVoiceMediaUrl(message.mediaUrl)) {
                                                             VoiceMessagePlayer(url = message.mediaUrl!!, onDarkBubble = isOwnMessage)
                                                         } else if (hasMedia) {
@@ -1529,7 +1131,7 @@ fun DMScreen(
                                                                         contentAlignment = Alignment.Center
                                                                     ) {
                                                                         CollabSpinner(
-                                                                            color = Color.White,
+                                                                            color = PrintPaper,
                                                                             modifier = Modifier.size(28.dp),
                                                                             strokeWidth = 2.5.dp
                                                                         )
@@ -1541,14 +1143,13 @@ fun DMScreen(
                                                             }
                                                         }
 
-                                                        // Text content
                                                         if (message.dm_content.isNotBlank()) {
                                                             val commitmentKey = com.collabsphere.app.model.commitment.CommitmentRepo.dmKey(message.id)
                                                             MarkdownText(
                                                                 text = message.dm_content,
                                                                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
-                                                                color = Color.White,
-                                                                linkColor = Color.White,
+                                                                color = PrintPaper,
+                                                                linkColor = PrintSky,
                                                                 commitmentTracked = commitmentKey in trackedCommitments,
                                                                 onCommitmentClick = if (message.id > 0) { commitment ->
                                                                     commitmentTarget = com.collabsphere.app.view.components.CommitmentTarget(
@@ -1597,7 +1198,6 @@ fun DMScreen(
                                                             }
                                                         }
 
-                                                        // Timestamp + Read receipt row
                                                         Row(
                                                             horizontalArrangement = Arrangement.End,
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -1605,8 +1205,8 @@ fun DMScreen(
                                                         ) {
                                                             Text(
                                                                 text = (if (message.editedAt != null) "edited · " else "") + formatDmTime(message.timestamp),
-                                                                fontSize = 10.sp,
-                                                                color = Color.White.copy(alpha = 0.75f)
+                                                                fontSize = 11.sp,
+                                                                color = PrintPaper.copy(alpha = 0.8f)
                                                             )
                                                             if (message.id > 0) {
                                                                 Spacer(modifier = Modifier.width(3.dp))
@@ -1615,7 +1215,6 @@ fun DMScreen(
                                                         }
                                                     }
 
-                                                    // Action menu for own messages
                                                     if (showActionMenu && selectedMessage?.id == message.id) {
                                                         DropdownMenu(
                                                             expanded = showActionMenu,
@@ -1623,63 +1222,63 @@ fun DMScreen(
                                                                 showActionMenu = false
                                                                 selectedMessage = null
                                                             },
-                                                            modifier = Modifier.background(SurfaceRaised)
+                                                            modifier = Modifier.background(PrintWhite)
                                                         ) {
                                                             if (message.id > 0) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Reply", color = Ink) },
+                                                                    text = { Text("Reply", color = PrintInk) },
                                                                     onClick = {
                                                                         replyingTo = message
                                                                         editingMessage = null
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = IndigoStart) }
+                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = PrintInk) }
                                                                 )
                                                             }
                                                             DropdownMenuItem(
-                                                                text = { Text("React", color = Ink) },
+                                                                text = { Text("React", color = PrintInk) },
                                                                 onClick = {
                                                                     showReactionPickerFor = message
                                                                     showActionMenu = false
                                                                     selectedMessage = null
                                                                 },
-                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                             )
                                                             if (message.dm_content.isNotBlank()) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Copy", color = Ink) },
+                                                                    text = { Text("Copy", color = PrintInk) },
                                                                     onClick = {
                                                                         clipboard.setText(AnnotatedString(message.dm_content))
                                                                         AppToast.show("Copied")
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                             }
                                                             if (message.id > 0) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Forward", color = Ink) },
+                                                                    text = { Text("Forward", color = PrintInk) },
                                                                     onClick = {
                                                                         forwardTarget = message.dm_content to message.mediaUrl
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                                 DropdownMenuItem(
-                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = Ink) },
+                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = PrintInk) },
                                                                     onClick = {
                                                                         viewModel.togglePin(message) { feedback -> feedback?.let { AppToast.show(it) } }
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                                 val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("DM", message.id) in savedKeys
                                                                 DropdownMenuItem(
-                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = PrintInk) },
                                                                     onClick = {
                                                                         showActionMenu = false
                                                                         selectedMessage = null
@@ -1693,7 +1292,7 @@ fun DMScreen(
                                                                         Icon(
                                                                             if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
                                                                             contentDescription = null,
-                                                                            tint = CoralStart,
+                                                                            tint = PrintInk,
                                                                             modifier = Modifier.size(20.dp)
                                                                         )
                                                                     }
@@ -1701,17 +1300,17 @@ fun DMScreen(
                                                             }
                                                             if (message.id > 0) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Info", color = Ink) },
+                                                                    text = { Text("Info", color = PrintInk) },
                                                                     onClick = {
                                                                         infoFor = message
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                             }
                                                             DropdownMenuItem(
-                                                                text = { Text("Edit message", color = Ink) },
+                                                                text = { Text("Edit message", color = PrintInk) },
                                                                 onClick = {
                                                                     if (editingMessage == null) {
                                                                         draftBeforeEdit = typedText
@@ -1721,10 +1320,10 @@ fun DMScreen(
                                                                     showActionMenu = false
                                                                     selectedMessage = null
                                                                 },
-                                                                leadingIcon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart) }
+                                                                leadingIcon = { Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = PrintInk) }
                                                             )
                                                             DropdownMenuItem(
-                                                                text = { Text("Delete message", color = Destructive) },
+                                                                text = { Text("Delete message", color = PrintRedDark) },
                                                                 onClick = {
                                                                     viewModel.deleteMessage(message.id, workspaceId, partner.id)
                                                                     showActionMenu = false
@@ -1735,13 +1334,12 @@ fun DMScreen(
                                                                         draftBeforeEdit = ""
                                                                     }
                                                                 },
-                                                                leadingIcon = { Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = Destructive) }
+                                                                leadingIcon = { Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, tint = PrintRedDark) }
                                                             )
                                                         }
                                                     }
                                                 }
 
-                                                // Docked Reaction badges
                                                 if (msgReactions.isNotEmpty()) {
                                                     Row(
                                                         modifier = Modifier
@@ -1751,26 +1349,9 @@ fun DMScreen(
                                                         msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .drawWithCache {
-                                                                        onDrawBehind {
-                                                                        drawRoundRect(
-                                                                            color = ShadowDark.copy(alpha = 0.18f),
-                                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
-                                                                            size = Size(size.width, size.height),
-                                                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                                                        )
-                                                                        drawRoundRect(
-                                                                            color = SurfaceRaised,
-                                                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                                                        )
-                                                                        drawRoundRect(
-                                                                            color = Color.White.copy(alpha = 0.85f),
-                                                                            cornerRadius = CornerRadius(14.dp.toPx()),
-                                                                            style = Stroke(width = 1.dp.toPx())
-                                                                        )
-                                                                        }
-                                                                    }
                                                                     .clip(RoundedCornerShape(14.dp))
+                                                                    .background(PrintWhite)
+                                                                    .border(1.5.dp, PrintInk, RoundedCornerShape(14.dp))
                                                                     .clickable {
                                                                         viewModel.toggleReaction(
                                                                             messageId = message.id,
@@ -1779,21 +1360,21 @@ fun DMScreen(
                                                                             receiverId = partner.id
                                                                         )
                                                                     }
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                                                             ) {
                                                                 Row(
                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                                 ) {
-                                                                    Text(text = emoji, fontSize = 12.sp)
+                                                                    Text(text = emoji, fontSize = 14.sp)
                                                                     if (count > 1) {
                                                                         Text(
                                                                             text = count.toString(),
-                                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                            style = PrintType.Caption.copy(
                                                                                 fontWeight = FontWeight.Bold,
-                                                                                fontSize = 10.sp
+                                                                                fontSize = 12.sp
                                                                             ),
-                                                                            color = Ink
+                                                                            color = PrintInk
                                                                         )
                                                                     }
                                                                 }
@@ -1804,7 +1385,6 @@ fun DMScreen(
                                             }
                                         }
                                     } else {
-                                        // Incoming message (Aligned Start with small partner avatar)
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1812,21 +1392,11 @@ fun DMScreen(
                                             horizontalArrangement = Arrangement.Start,
                                             verticalAlignment = Alignment.Bottom
                                         ) {
-                                            // 28dp partner avatar
                                             val partnerInitial = partner.userName.trim().take(1).uppercase().ifEmpty { "U" }
                                             Box(
                                                 modifier = Modifier
                                                     .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .drawWithCache {
-                                                        onDrawBehind {
-                                                        drawCircle(
-                                                            color = ShadowDark.copy(alpha = 0.14f),
-                                                            radius = size.minDimension / 2f,
-                                                            center = Offset(center.x, center.y + 1.dp.toPx())
-                                                        )
-                                                        }
-                                                    },
+                                                    .printSurface(shape = CircleShape, fill = PrintSky, shadow = null, outline = 1.5.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 if (!partner.avatarUrl.isNullOrEmpty()) {
@@ -1838,19 +1408,19 @@ fun DMScreen(
                                                         modifier = Modifier.size(28.dp).clip(CircleShape),
                                                         error = {
                                                             Box(
-                                                                modifier = Modifier.size(28.dp).background(IndigoStart),
+                                                                modifier = Modifier.size(28.dp),
                                                                 contentAlignment = Alignment.Center
                                                             ) {
-                                                                Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                                Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrintInk)
                                                             }
                                                         }
                                                     )
                                                 } else {
                                                     Box(
-                                                        modifier = Modifier.size(28.dp).background(IndigoStart),
+                                                        modifier = Modifier.size(28.dp),
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                        Text(text = partnerInitial, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrintInk)
                                                     }
                                                 }
                                             }
@@ -1864,7 +1434,7 @@ fun DMScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .widthIn(min = 52.dp, max = 280.dp + ChatBubbleTail)
-                                                        .background(SurfaceRaised, incomingBubbleShape)
+                                                        .chatBubbleSurface(false, incomingBubbleShape)
                                                         .clip(incomingBubbleShape)
                                                         .combinedClickable(
                                                             onClick = {},
@@ -1889,7 +1459,6 @@ fun DMScreen(
                                                                 onClick = target?.let { { scrollToMessage(targetId) } }
                                                             )
                                                         }
-                                                        // Media image
                                                         if (hasMedia && isVoiceMediaUrl(message.mediaUrl)) {
                                                             VoiceMessagePlayer(url = message.mediaUrl!!, onDarkBubble = isOwnMessage)
                                                         } else if (hasMedia) {
@@ -1911,7 +1480,7 @@ fun DMScreen(
                                                                         contentAlignment = Alignment.Center
                                                                     ) {
                                                                         CollabSpinner(
-                                                                            color = CoralStart,
+                                                                            color = PrintInk,
                                                                             modifier = Modifier.size(28.dp),
                                                                             strokeWidth = 2.5.dp
                                                                         )
@@ -1923,14 +1492,13 @@ fun DMScreen(
                                                             }
                                                         }
 
-                                                        // Text content
                                                         if (message.dm_content.isNotBlank()) {
                                                             val commitmentKey = com.collabsphere.app.model.commitment.CommitmentRepo.dmKey(message.id)
                                                             MarkdownText(
                                                                 text = message.dm_content,
                                                                 style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp, fontSize = 15.sp),
-                                                                color = Ink,
-                                                                linkColor = IndigoStart,
+                                                                color = PrintInk,
+                                                                linkColor = PrintInk,
                                                                 commitmentTracked = commitmentKey in trackedCommitments,
                                                                 onCommitmentClick = if (message.id > 0) { commitment ->
                                                                     commitmentTarget = com.collabsphere.app.view.components.CommitmentTarget(
@@ -1968,7 +1536,6 @@ fun DMScreen(
                                                             }
                                                         }
 
-                                                        // Timestamp row
                                                         Row(
                                                             horizontalArrangement = Arrangement.End,
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -1976,7 +1543,7 @@ fun DMScreen(
                                                         ) {
                                                             Text(
                                                                 text = (if (message.editedAt != null) "edited · " else "") + formatDmTime(message.timestamp),
-                                                                fontSize = 10.sp,
+                                                                fontSize = 11.sp,
                                                                 color = Muted
                                                             )
                                                         }
@@ -1989,63 +1556,63 @@ fun DMScreen(
                                                                 showActionMenu = false
                                                                 selectedMessage = null
                                                             },
-                                                            modifier = Modifier.background(SurfaceRaised)
+                                                            modifier = Modifier.background(PrintWhite)
                                                         ) {
                                                             if (message.id > 0) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Reply", color = Ink) },
+                                                                    text = { Text("Reply", color = PrintInk) },
                                                                     onClick = {
                                                                         replyingTo = message
                                                                         editingMessage = null
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = IndigoStart) }
+                                                                    leadingIcon = { Icon(imageVector = Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = PrintInk) }
                                                                 )
                                                             }
                                                             DropdownMenuItem(
-                                                                text = { Text("React", color = Ink) },
+                                                                text = { Text("React", color = PrintInk) },
                                                                 onClick = {
                                                                     showReactionPickerFor = message
                                                                     showActionMenu = false
                                                                     selectedMessage = null
                                                                 },
-                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                leadingIcon = { Icon(Icons.Default.EmojiEmotions, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                             )
                                                             if (message.dm_content.isNotBlank()) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Copy", color = Ink) },
+                                                                    text = { Text("Copy", color = PrintInk) },
                                                                     onClick = {
                                                                         clipboard.setText(AnnotatedString(message.dm_content))
                                                                         AppToast.show("Copied")
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                             }
                                                             if (message.id > 0) {
                                                                 DropdownMenuItem(
-                                                                    text = { Text("Forward", color = Ink) },
+                                                                    text = { Text("Forward", color = PrintInk) },
                                                                     onClick = {
                                                                         forwardTarget = message.dm_content to message.mediaUrl
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = IndigoStart, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                                 DropdownMenuItem(
-                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = Ink) },
+                                                                    text = { Text(if (message.pinnedAt != null) "Unpin" else "Pin", color = PrintInk) },
                                                                     onClick = {
                                                                         viewModel.togglePin(message) { feedback -> feedback?.let { AppToast.show(it) } }
                                                                         showActionMenu = false
                                                                         selectedMessage = null
                                                                     },
-                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = CoralStart, modifier = Modifier.size(20.dp)) }
+                                                                    leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, tint = PrintInk, modifier = Modifier.size(20.dp)) }
                                                                 )
                                                                 val isSaved = com.collabsphere.app.model.message.SavedMessagesStore.key("DM", message.id) in savedKeys
                                                                 DropdownMenuItem(
-                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = Ink) },
+                                                                    text = { Text(if (isSaved) "Unsave" else "Save", color = PrintInk) },
                                                                     onClick = {
                                                                         showActionMenu = false
                                                                         selectedMessage = null
@@ -2059,7 +1626,7 @@ fun DMScreen(
                                                                         Icon(
                                                                             if (isSaved) Icons.Default.BookmarkRemove else Icons.Default.BookmarkAdd,
                                                                             contentDescription = null,
-                                                                            tint = CoralStart,
+                                                                            tint = PrintInk,
                                                                             modifier = Modifier.size(20.dp)
                                                                         )
                                                                     }
@@ -2069,7 +1636,6 @@ fun DMScreen(
                                                     }
                                                 }
 
-                                                // Docked Reaction badges for incoming
                                                 if (msgReactions.isNotEmpty()) {
                                                     Row(
                                                         modifier = Modifier
@@ -2079,26 +1645,9 @@ fun DMScreen(
                                                         msgReactions.entries.sortedByDescending { it.value }.forEach { (emoji, count) ->
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .drawWithCache {
-                                                                        onDrawBehind {
-                                                                        drawRoundRect(
-                                                                            color = ShadowDark.copy(alpha = 0.18f),
-                                                                            topLeft = Offset(0f, 1.5.dp.toPx()),
-                                                                            size = Size(size.width, size.height),
-                                                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                                                        )
-                                                                        drawRoundRect(
-                                                                            color = SurfaceRaised,
-                                                                            cornerRadius = CornerRadius(14.dp.toPx())
-                                                                        )
-                                                                        drawRoundRect(
-                                                                            color = Color.White.copy(alpha = 0.85f),
-                                                                            cornerRadius = CornerRadius(14.dp.toPx()),
-                                                                            style = Stroke(width = 1.dp.toPx())
-                                                                        )
-                                                                        }
-                                                                    }
                                                                     .clip(RoundedCornerShape(14.dp))
+                                                                    .background(PrintWhite)
+                                                                    .border(1.5.dp, PrintInk, RoundedCornerShape(14.dp))
                                                                     .clickable {
                                                                         viewModel.toggleReaction(
                                                                             messageId = message.id,
@@ -2107,21 +1656,21 @@ fun DMScreen(
                                                                             receiverId = partner.id
                                                                         )
                                                                     }
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                                                             ) {
                                                                 Row(
                                                                     verticalAlignment = Alignment.CenterVertically,
                                                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                                 ) {
-                                                                    Text(text = emoji, fontSize = 12.sp)
+                                                                    Text(text = emoji, fontSize = 14.sp)
                                                                     if (count > 1) {
                                                                         Text(
                                                                             text = count.toString(),
-                                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                            style = PrintType.Caption.copy(
                                                                                 fontWeight = FontWeight.Bold,
-                                                                                fontSize = 10.sp
+                                                                                fontSize = 12.sp
                                                                             ),
-                                                                            color = Ink
+                                                                            color = PrintInk
                                                                         )
                                                                     }
                                                                 }
@@ -2177,36 +1726,20 @@ fun DMScreen(
                         )
                     }
 
-                    // ── Input Bar ───────────────────────────────────────────────────────
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
                             .imePadding()
                     ) {
-                        // Editing banner
                         if (editingMessage != null) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                        drawRoundRect(
-                                            color = ShadowDark.copy(alpha = 0.10f),
-                                            topLeft = Offset(0f, 2.dp.toPx()),
-                                            size = Size(size.width, size.height),
-                                            cornerRadius = CornerRadius(12.dp.toPx())
-                                        )
-                                        drawRoundRect(color = SurfaceRaised, cornerRadius = CornerRadius(12.dp.toPx()))
-                                        drawRoundRect(
-                                            color = CoralStart.copy(alpha = 0.5f),
-                                            topLeft = Offset(0f, 0f),
-                                            size = Size(4.dp.toPx(), size.height),
-                                            cornerRadius = CornerRadius(4.dp.toPx())
-                                        )
-                                        }
-                                    }
+                                    .clip(RoundedCornerShape(PrintTokens.RadiusSmall))
+                                    .background(PrintCoral.copy(alpha = 0.35f))
+                                    .border(1.5.dp, PrintInk, RoundedCornerShape(PrintTokens.RadiusSmall))
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -2216,18 +1749,18 @@ fun DMScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = CoralStart, modifier = Modifier.size(16.dp))
+                                    Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = PrintInk, modifier = Modifier.size(18.dp))
                                     Column {
-                                        Text(text = "Editing message", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = CoralStart)
+                                        Text(text = "Editing message", style = PrintType.Caption.copy(fontWeight = FontWeight.Bold), color = PrintInk)
                                         Text(
                                             text = editingMessage!!.dm_content,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                            style = PrintType.Caption,
+                                            color = PrintInk, maxLines = 1, overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
-                                IconButton(onClick = { editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = "" }, modifier = Modifier.size(28.dp)) {
-                                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel Edit", tint = Muted, modifier = Modifier.size(16.dp))
+                                IconButton(onClick = { editingMessage = null; typedText = draftBeforeEdit; draftBeforeEdit = "" }, modifier = Modifier.size(40.dp)) {
+                                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel edit", tint = PrintInk, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -2252,7 +1785,6 @@ fun DMScreen(
                             )
                         }
 
-                        // Media upload progress bar
                         ScheduledMessagesChip(count = scheduled.items.size, onClick = { showScheduledList = true })
 
                         if (isRecordingVoice) {
@@ -2297,68 +1829,13 @@ fun DMScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
-                                            MaterialTheme.colorScheme.background
-                                        )
-                                    )
-                                )
-                                .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                                .background(PrintPaper)
+                                .padding(start = 12.dp, end = 15.dp, top = 6.dp, bottom = 13.dp)
                         ) {
-                            // Floating Tactile Pill Dock
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .drawWithCache {
-                                        onDrawBehind {
-                                            val cr = 28.dp.toPx()
-                                            // 1. Ambient soft diffuse shadow
-                                            drawRoundRect(
-                                                color = Color(0xFF2C201A).copy(alpha = 0.12f),
-                                                topLeft = Offset(0f, 4.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = CornerRadius(cr)
-                                            )
-                                            // 2. Crisp contact shadow
-                                            drawRoundRect(
-                                                color = Color(0xFF2C201A).copy(alpha = 0.04f),
-                                                topLeft = Offset(0f, 1.dp.toPx()),
-                                                size = size,
-                                                cornerRadius = CornerRadius(cr)
-                                            )
-                                            // 3. Crisp white dock plate
-                                            drawRoundRect(
-                                                color = SurfaceRaised,
-                                                cornerRadius = CornerRadius(cr)
-                                            )
-                                            // 4. Specular gloss top rim highlight
-                                            drawRoundRect(
-                                                brush = Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color.White.copy(alpha = 0.95f),
-                                                        Color.White.copy(alpha = 0.20f),
-                                                        Color.Transparent
-                                                    ),
-                                                    startY = 0f,
-                                                    endY = 16.dp.toPx()
-                                                ),
-                                                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
-                                                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
-                                                cornerRadius = CornerRadius(cr),
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                            // 5. Hairline contour border
-                                            drawRoundRect(
-                                                color = Color(0xFF2C2A28).copy(alpha = 0.07f),
-                                                cornerRadius = CornerRadius(cr),
-                                                style = Stroke(width = 1.dp.toPx())
-                                            )
-                                        }
-                                    }
-                                    .clip(RoundedCornerShape(28.dp))
+                                    .chatComposerDock()
                                     .padding(start = 4.dp, end = 5.dp, top = 5.dp, bottom = 5.dp)
                             ) {
                                 Row(
@@ -2375,7 +1852,7 @@ fun DMScreen(
                                             ComposerAction(
                                                 label = if (showEmojiPanel) "Keyboard" else "Emoji",
                                                 icon = if (showEmojiPanel) Icons.Default.Keyboard else Icons.Default.EmojiEmotions,
-                                                tint = Color(0xFFF2A93B)
+                                                tint = AmberWarn
                                             ) {
                                                 if (showEmojiPanel) openKeyboard() else openEmojiPanel()
                                             },
@@ -2393,31 +1870,7 @@ fun DMScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .heightIn(min = 46.dp, max = 140.dp)
-                                            .drawWithCache {
-                                                onDrawBehind {
-                                                    val cr = 23.dp.toPx()
-                                                    // Recessed well surface
-                                                    drawRoundRect(
-                                                        color = Color(0xFFF3ECE6),
-                                                        cornerRadius = CornerRadius(cr)
-                                                    )
-                                                    // Top inner shadow
-                                                    drawRoundRect(
-                                                        color = Color(0xFF2C201A).copy(alpha = 0.06f),
-                                                        topLeft = Offset(0f, 0.5.dp.toPx()),
-                                                        size = size,
-                                                        cornerRadius = CornerRadius(cr),
-                                                        style = Stroke(width = 1.dp.toPx())
-                                                    )
-                                                    // Outline hairline
-                                                    drawRoundRect(
-                                                        color = if (isComposerFocused) CoralStart.copy(alpha = 0.5f) else Color(0xFFE2DDD7),
-                                                        cornerRadius = CornerRadius(cr),
-                                                        style = Stroke(width = 1.dp.toPx())
-                                                    )
-                                                }
-                                            }
-                                            .clip(RoundedCornerShape(23.dp))
+                                            .chatComposerField(isComposerFocused)
                                             .padding(horizontal = 16.dp, vertical = 12.dp),
                                         contentAlignment = Alignment.CenterStart
                                     ) {
@@ -2441,8 +1894,8 @@ fun DMScreen(
                                                     isComposerFocused = it.isFocused
                                                     if (it.isFocused) showEmojiPanel = false
                                                 },
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, fontSize = 15.5.sp, lineHeight = 21.sp),
-                                            cursorBrush = SolidColor(CoralStart),
+                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = PrintInk, fontSize = 16.sp, lineHeight = 22.sp),
+                                            cursorBrush = SolidColor(PrintInk),
                                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                             keyboardActions = KeyboardActions(
                                                 onSend = {
@@ -2465,9 +1918,9 @@ fun DMScreen(
                                                 Box(contentAlignment = Alignment.CenterStart) {
                                                     if (typedText.isEmpty()) {
                                                         Text(
-                                                            text = if (editingMessage != null) "Edit message..." else "Write a message...",
-                                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                                                            color = Muted.copy(alpha = 0.65f),
+                                                            text = if (editingMessage != null) "Edit message" else "Write a message",
+                                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp),
+                                                            color = Muted,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
@@ -2478,9 +1931,8 @@ fun DMScreen(
                                         )
                                     }
 
-                                    // ── Vibrant Coral Send Button CTA ──
                                     val sendInteractionSource = remember { MutableInteractionSource() }
-                                    val isSendPressed by sendInteractionSource.collectIsPressedAsState()
+                                    val sendPress = rememberPrintPress(sendInteractionSource)
                                     val showMic = typedText.isBlank() && editingMessage == null && !isUploadingMedia && !isRecordingVoice
                                     val willHold = editingMessage == null && replyingTo == null &&
                                         focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.HOLD &&
@@ -2489,39 +1941,11 @@ fun DMScreen(
                                         focusSendMode == com.collabsphere.app.model.focus.FocusSendMode.URGENT &&
                                         (partnerFocusUntil ?: 0L) > System.currentTimeMillis()
                                     val canSend = (typedText.trim().isNotEmpty() && !isUploadingMedia && !isSendingMessage) || editingMessage != null || showMic
-                                    val sendScale by animateFloatAsState(
-                                        targetValue = if (isSendPressed) 0.90f else 1f,
-                                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-                                        label = "dmSendScale"
-                                    )
 
                                     Box(
                                         modifier = Modifier
                                             .size(46.dp)
-                                            .graphicsLayer { scaleX = sendScale; scaleY = sendScale }
-                                            .drawWithCache {
-                                                onDrawBehind {
-                                                    val shadowOffset = if (isSendPressed) 1.dp else 2.5.dp
-                                                    val shadowAlpha = if (isSendPressed) 0.15f else 0.35f
-                                                    drawCircle(
-                                                        color = CoralStart.copy(alpha = shadowAlpha),
-                                                        radius = size.minDimension / 2f,
-                                                        center = Offset(center.x, center.y + shadowOffset.toPx())
-                                                    )
-                                                    drawCircle(
-                                                        brush = Brush.radialGradient(
-                                                            colors = listOf(Color(0xFFFC6955), CoralStart),
-                                                            center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx()),
-                                                            radius = size.minDimension / 2f
-                                                        )
-                                                    )
-                                                    drawCircle(
-                                                        color = Color.White.copy(alpha = 0.30f),
-                                                        style = Stroke(width = 1.dp.toPx())
-                                                    )
-                                                }
-                                            }
-                                            .clip(CircleShape)
+                                            .chatSendButton(enabled = canSend, pressProgress = sendPress)
                                             .combinedClickable(
                                                 enabled = canSend,
                                                 interactionSource = sendInteractionSource,
@@ -2574,7 +1998,7 @@ fun DMScreen(
                                                 willUrgent -> "Send as urgent"
                                                 else -> "Send message"
                                             },
-                                            tint = Color.White,
+                                            tint = if (canSend) PrintInk else Muted,
                                             modifier = Modifier.size(20.dp).offset(x = if (editingMessage == null && !showMic) 1.dp else 0.dp)
                                         )
                                     }
@@ -2608,19 +2032,13 @@ fun SkeuoMemberRow(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "memberScale"
-    )
+    val press = rememberPrintPress(interactionSource)
+    val avatarFill = listOf(PrintSky, PrintLeaf, PrintCoral)[Math.floorMod(member.id, 3)]
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .skeuoFloatingCard(cornerRadius = 18.dp, isPressed = isPressed)
-            .clip(RoundedCornerShape(18.dp))
+            .printSurface(shape = RoundedCornerShape(PrintTokens.RadiusCard), pressProgress = press)
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
@@ -2641,29 +2059,29 @@ fun SkeuoMemberRow(
                     if (!member.avatarUrl.isNullOrEmpty()) {
                         Box(
                             modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .drawWithCache {
-                                    onDrawBehind {
-                                    drawCircle(brush = Brush.radialGradient(colors = listOf(CoralLight, CoralStart)))
-                                    }
-                                },
+                                .size(48.dp)
+                                .printSurface(shape = CircleShape, fill = avatarFill, shadow = null, outline = 1.5.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             SubcomposeAsyncImage(
                                 model = ImageRequest.Builder(context).data(member.avatarUrl).crossfade(true)
-                                    .size(with(LocalDensity.current) { 46.dp.roundToPx() }).build(),
+                                    .size(with(LocalDensity.current) { 48.dp.roundToPx() }).build(),
                                 contentDescription = member.userName,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(46.dp).clip(CircleShape),
+                                modifier = Modifier.size(48.dp).clip(CircleShape),
                                 error = {
-                                    Text(text = initial, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp), color = Color.White)
+                                    Text(text = initial, style = PrintType.H3.copy(fontSize = 20.sp), color = PrintInk)
                                 }
                             )
                         }
                     } else {
-                        SkeuoDebossedIconWell(wellSize = 46.dp, cornerRadius = 14.dp) {
-                            Text(text = initial, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp), color = Color(0xFF2C221E))
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .printSurface(shape = BlobShape(seed = member.id, wobble = 0.14f), fill = avatarFill, shadow = null),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = initial, style = PrintType.H3.copy(fontSize = 20.sp), color = PrintInk)
                         }
                     }
 
@@ -2683,20 +2101,16 @@ fun SkeuoMemberRow(
                                 .size(14.dp)
                                 .graphicsLayer { scaleX = pulseScale; scaleY = pulseScale }
                                 .clip(CircleShape)
-                                .background(Color.White)
-                                .padding(2.dp)
-                                .clip(CircleShape)
-                                .background(CoralStart)
+                                .background(PrintCoral)
+                                .border(1.5.dp, PrintInk, CircleShape)
                         )
                     } else if (isOnline) {
                         Box(
                             modifier = Modifier
                                 .size(14.dp)
                                 .clip(CircleShape)
-                                .background(Color.White)
-                                .padding(2.dp)
-                                .clip(CircleShape)
-                                .background(Mint)
+                                .background(PrintLeaf)
+                                .border(1.5.dp, PrintInk, CircleShape)
                         )
                     }
                 }
@@ -2704,34 +2118,32 @@ fun SkeuoMemberRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = member.userName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.5.sp),
-                        color = Ink,
+                        style = PrintType.H3,
+                        color = PrintInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     if (isTyping) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(CoralStart))
                             Text(
-                                text = "typing...",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp),
-                                color = CoralStart
+                                text = "typing…",
+                                style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                                color = PrintInk
                             )
                         }
                     } else if (isOnline) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Mint))
                             Text(
                                 text = "Online",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                                color = Mint
+                                style = PrintType.Caption.copy(fontWeight = FontWeight.Bold),
+                                color = PrintLeafDark
                             )
                         }
                     } else {
                         Text(
                             text = member.statusMessage?.takeIf { it.isNotBlank() } ?: "Tap to message",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            style = PrintType.Caption,
                             color = Muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -2742,12 +2154,11 @@ fun SkeuoMemberRow(
             if (unreadCount > 0) {
                 UnreadCountBadge(count = unreadCount, modifier = Modifier.padding(end = 6.dp))
             }
-            Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Muted.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+            Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = PrintInk, modifier = Modifier.size(22.dp))
         }
     }
 }
 
-/** Skeuomorphic animated typing bubble with partner avatar and bouncing dots matching Stitch spec */
 @Composable
 fun SkeuoTypingBubble(
     partnerName: String,
@@ -2781,22 +2192,10 @@ fun SkeuoTypingBubble(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.Start
     ) {
-        // 28dp partner avatar circle matching Stitch spec
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .clip(CircleShape)
-                .drawWithCache {
-                    onDrawBehind {
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(IndigoStart, IndigoEnd),
-                                center = Offset(center.x - 3.dp.toPx(), center.y - 3.dp.toPx()),
-                                radius = size.minDimension / 2f
-                            )
-                        )
-                    }
-                },
+                .printSurface(shape = CircleShape, fill = PrintSky, shadow = null, outline = 1.5.dp),
             contentAlignment = Alignment.Center
         ) {
             if (!avatarUrl.isNullOrEmpty()) {
@@ -2810,7 +2209,7 @@ fun SkeuoTypingBubble(
                         Text(
                             text = initial,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
-                            color = Color.White
+                            color = PrintInk
                         )
                     }
                 )
@@ -2818,40 +2217,18 @@ fun SkeuoTypingBubble(
                 Text(
                     text = initial,
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp),
-                    color = Color.White
+                    color = PrintInk
                 )
             }
         }
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Tactile white rounded pill with 3 coral pulsing dots
         Box(
             modifier = Modifier
-                .drawWithCache {
-                    onDrawBehind {
-                        val cr = 16.dp.toPx()
-                        // 1. Soft contact shadow
-                        drawRoundRect(
-                            color = ShadowDark.copy(alpha = 0.08f),
-                            topLeft = Offset(0f, 2.dp.toPx()),
-                            size = size,
-                            cornerRadius = CornerRadius(cr)
-                        )
-                        // 2. White pill plate
-                        drawRoundRect(
-                            color = Color.White,
-                            cornerRadius = CornerRadius(cr)
-                        )
-                        // 3. Hairline border
-                        drawRoundRect(
-                            color = Color(0xFF2C2A28).copy(alpha = 0.07f),
-                            cornerRadius = CornerRadius(cr),
-                            style = Stroke(width = 1.dp.toPx())
-                        )
-                    }
-                }
                 .clip(RoundedCornerShape(16.dp))
+                .background(PrintWhite)
+                .border(1.5.dp, PrintInk, RoundedCornerShape(16.dp))
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -2862,23 +2239,23 @@ fun SkeuoTypingBubble(
                 Box(
                     modifier = Modifier
                         .offset(y = dot1Offset.dp)
-                        .size(6.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
-                        .background(CoralStart)
+                        .background(PrintInk)
                 )
                 Box(
                     modifier = Modifier
                         .offset(y = dot2Offset.dp)
-                        .size(6.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
-                        .background(CoralStart)
+                        .background(PrintInk)
                 )
                 Box(
                     modifier = Modifier
                         .offset(y = dot3Offset.dp)
-                        .size(6.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
-                        .background(CoralStart)
+                        .background(PrintInk)
                 )
             }
         }

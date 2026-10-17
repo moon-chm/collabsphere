@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.collabsphere.app.R
 
@@ -41,61 +42,62 @@ val CollabSphereTypography = Typography(
         fontFamily   = FrauncesFamily,
         fontWeight   = FontWeight.Bold,
         fontSize     = 40.sp,
-        lineHeight   = 48.sp,
-        letterSpacing = (-0.02).sp
+        lineHeight   = 42.sp,
+        letterSpacing = (-0.02).em
     ),
     displayMedium = TextStyle(
         fontFamily   = FrauncesFamily,
-        fontWeight   = FontWeight.SemiBold,
+        fontWeight   = FontWeight.Bold,
         fontSize     = 32.sp,
-        lineHeight   = 40.sp,
-        letterSpacing = (-0.01).sp
+        lineHeight   = 36.sp,
+        letterSpacing = (-0.02).em
     ),
     displaySmall = TextStyle(
         fontFamily   = FrauncesFamily,
-        fontWeight   = FontWeight.Medium,
+        fontWeight   = FontWeight.Bold,
         fontSize     = 28.sp,
-        lineHeight   = 36.sp,
-        letterSpacing = (-0.01).sp
+        lineHeight   = 32.sp,
+        letterSpacing = (-0.01).em
     ),
 
     // ── Headline ── Screen titles, card headings, workspace names
     headlineLarge = TextStyle(
         fontFamily   = FrauncesFamily,
-        fontWeight   = FontWeight.SemiBold,
-        fontSize     = 24.sp,
-        lineHeight   = 32.sp
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 26.sp,
+        lineHeight   = 30.sp,
+        letterSpacing = (-0.01).em
     ),
     headlineMedium = TextStyle(
         fontFamily   = FrauncesFamily,
-        fontWeight   = FontWeight.Medium,
-        fontSize     = 20.sp,
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 22.sp,
         lineHeight   = 28.sp
     ),
     headlineSmall = TextStyle(
         fontFamily   = FrauncesFamily,
-        fontWeight   = FontWeight.Medium,
-        fontSize     = 18.sp,
-        lineHeight   = 24.sp
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 20.sp,
+        lineHeight   = 26.sp
     ),
 
     // ── Title ── Section headings, tab labels
     titleLarge = TextStyle(
         fontFamily   = ManropeFamily,
-        fontWeight   = FontWeight.SemiBold,
+        fontWeight   = FontWeight.Bold,
         fontSize     = 18.sp,
         lineHeight   = 24.sp
     ),
     titleMedium = TextStyle(
         fontFamily   = ManropeFamily,
-        fontWeight   = FontWeight.SemiBold,
+        fontWeight   = FontWeight.Bold,
         fontSize     = 16.sp,
         lineHeight   = 22.sp
     ),
     titleSmall = TextStyle(
         fontFamily   = ManropeFamily,
-        fontWeight   = FontWeight.Medium,
-        fontSize     = 14.sp,
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 15.sp,
         lineHeight   = 20.sp
     ),
 
@@ -109,37 +111,37 @@ val CollabSphereTypography = Typography(
     bodyMedium = TextStyle(
         fontFamily   = ManropeFamily,
         fontWeight   = FontWeight.Normal,
-        fontSize     = 14.sp,
-        lineHeight   = 20.sp
+        fontSize     = 15.sp,
+        lineHeight   = 22.sp
     ),
     bodySmall = TextStyle(
         fontFamily   = ManropeFamily,
         fontWeight   = FontWeight.Medium,
-        fontSize     = 12.sp,
-        lineHeight   = 16.sp
+        fontSize     = 13.sp,
+        lineHeight   = 18.sp
     ),
 
     // ── Label ── Buttons, tags, badges, timestamps
     labelLarge = TextStyle(
         fontFamily   = ManropeFamily,
-        fontWeight   = FontWeight.SemiBold,
-        fontSize     = 14.sp,
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 15.sp,
         lineHeight   = 20.sp,
-        letterSpacing = 0.01.sp
+        letterSpacing = 0.01.em
     ),
     labelMedium = TextStyle(
         fontFamily   = ManropeFamily,
-        fontWeight   = FontWeight.SemiBold,
-        fontSize     = 12.sp,
-        lineHeight   = 16.sp,
-        letterSpacing = 0.02.sp
+        fontWeight   = FontWeight.Bold,
+        fontSize     = 13.sp,
+        lineHeight   = 18.sp,
+        letterSpacing = 0.01.em
     ),
     labelSmall = TextStyle(
         fontFamily   = ManropeFamily,
         fontWeight   = FontWeight.Bold,
-        fontSize     = 11.sp,
-        lineHeight   = 14.sp,
-        letterSpacing = 0.04.sp
+        fontSize     = 12.sp,
+        lineHeight   = 16.sp,
+        letterSpacing = 0.04.em
     )
 )
 
